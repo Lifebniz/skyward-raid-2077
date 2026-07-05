@@ -45,6 +45,11 @@ class Player {
       const pattern = CONFIG.weapon[clamp(this.power, 1, c.maxPower)];
       for (const s of pattern) { const rad = s.deg * DEG; game.spawnPlayerBullet(this.x + s.ox, this.y - this.radius, Math.sin(rad) * c.bulletSpeed, -Math.cos(rad) * c.bulletSpeed); }
       for (let i = 0; i < this.wings; i++) game.spawnPlayerBullet(this.x + wingOffsetX(i), this.y + 4, 0, -c.bulletSpeed);   // 僚机直射(任意数量排布)
+      if (game.chipActive("sideGuns")) {
+        const a = CONFIG.chips.sideGuns.angle * DEG;
+        game.spawnPlayerBullet(this.x - 18, this.y, -Math.sin(a) * c.bulletSpeed, -Math.cos(a) * c.bulletSpeed);
+        game.spawnPlayerBullet(this.x + 18, this.y, Math.sin(a) * c.bulletSpeed, -Math.cos(a) * c.bulletSpeed);
+      }
       Sound.shoot();
     }
     this.updateSecondaries(dt);
@@ -77,13 +82,21 @@ class Player {
   // X4:护盾(防御型必杀)优先吸收伤害——盾量池打光了溢出部分才真正扣血;隐身(侦查型必杀)期间和普通受击无敌一样完全免伤
   takeDamage(d) {
     if (this.invulnTimer > 0 || this.stealthTimer > 0) return;
-    let dmg = d * (this.ship.dmgTakenMult || 1);
+    let dmg = d * (this.ship.dmgTakenMult || 1), blocked = false;
     if (this.shieldHp > 0) {
       game.spawnShieldHitSpark(this.x, this.y);
+      blocked = true;
       if (dmg <= this.shieldHp) { this.shieldHp -= dmg; dmg = 0; }
       else { dmg -= this.shieldHp; this.shieldHp = 0; this.shieldTimer = 0; }
     }
+    if (dmg > 0 && game.chipActive("capacitor") && this.overcharge > 0) {
+      const block = Math.min(dmg, CONFIG.chips.capacitor.block);
+      dmg -= block; this.overcharge--; blocked = true;
+      game.spawnShieldHitSpark(this.x, this.y);
+      game.floats.push(new FloatText(this.x, this.y - 46, "电容格挡 -" + Math.round(block), CONFIG.chips.capacitor.color));
+    }
     if (dmg > 0) this.hp -= dmg;
+    game.onPlayerHit(blocked);
     this.invulnTimer = this.invulnAmount; Sound.hit(); Haptics.hit(); game.addShake(4, 0.12); if (CONFIG.combo.resetOnHit) game.breakCombo();
   }
   addPower() {
@@ -94,6 +107,12 @@ class Player {
   addWing()    { this.wings = clamp(this.wings + 1, 0, CONFIG.wingMax); }
   addEnergy(n) { this.energy = clamp(this.energy + n * (this.ship.energyMult || 1), 0, 100); }
   heal(n)      { this.hp = clamp(this.hp + n, 0, this.maxHp); }
+  grantShield(n, dur) {
+    this.shieldHp = Math.max(this.shieldHp, n);
+    this.shieldMax = Math.max(this.shieldMax, n);
+    this.shieldTimer = Math.max(this.shieldTimer, dur);
+    game.spawnShockwave(this.x, this.y, this.radius * 2.2, "#74c0fc");
+  }
   // X4:原来的机身绘制拆成 _drawBody,供隐身态(稳定半透明)和正常态共用,避免复制一遍
   _drawBody(ctx) {
     const x = this.x, y = this.y;
@@ -275,7 +294,12 @@ class PlayerLaser {
   init(x, y, overcharge = 0) {
     const s = CONFIG.secondary;
     this.x = x; this.y = y; this.overcharge = overcharge; this.width = s.laserWidth + overcharge * 3;
-    this.damage = s.laserDamage + Math.floor(overcharge / 2); this.life = s.laserDuration + overcharge * 0.01; this.maxLife = this.life; this.dead = false; this.hitEnemies = new Set();
+    this.damage = s.laserDamage + Math.floor(overcharge / 2); this.life = s.laserDuration + overcharge * 0.01;
+    if (game.chipActive("laserFocus")) {
+      const c = CONFIG.chips.laserFocus;
+      this.width *= c.laserWidthMult; this.damage += c.laserDamageBonus; this.life += c.laserDurationBonus;
+    }
+    this.maxLife = this.life; this.dead = false; this.hitEnemies = new Set();
   }
   update(dt) { this.life -= dt; if (this.life <= 0) this.dead = true; }
   draw(ctx) {

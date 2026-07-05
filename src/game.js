@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 
 /* =====================================================================
  * 7) 游戏主体(状态:title | playing | gameover | win)
@@ -7,6 +7,7 @@ const game = {
   state: "title", diff: CONFIG.difficulties.normal, ship: CONFIG.ships.balanced, currentLevel: 0, world: 1, player: null, boss: null,
   playerBullets: [], homingShots: [], missiles: [], playerLasers: [], enemyBullets: [], enemies: [], powerups: [], particles: [], floats: [], lasers: [], shockwaves: [], specialWaves: [],
   score: 0, combo: 0, comboTimer: 0, maxCombo: 0,
+  threat: 0, chips: {}, _chipCursor: 0, _noHitT: 0,
   flashTimer: 0, bannerText: "", bannerSub: "", bannerTimer: 0, warningTimer: 0, titleT: 0, _sliderDrag: false,
   dlgName: "", dlgText: "", dlgTimer: 0,   // P:BOSS 台词
   topScores: [], _recorded: false,
@@ -130,6 +131,7 @@ const game = {
     this.player = new Player(); this.boss = null;
     this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.floats = []; this.lasers = []; this.shockwaves = []; this.specialWaves = [];
     this.score = 0; this.combo = 0; this.comboTimer = 0; this.maxCombo = 0;
+    this.resetDepthSystems();
     this.flashTimer = 0; this.warningTimer = 0; this._recorded = false;
     this.farming = false; this._reached = false; this._farmTimer = 0; this._farmWaveN = 0; this.settleResult = null;
     this._itemSpawnTimer = this.itemAutoInterval(); this._hpTrailRatio = 1; this._bombsUsedThisLevel = 0;
@@ -155,6 +157,7 @@ const game = {
     this.player = new Player(); this.boss = null;
     this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.floats = []; this.lasers = []; this.shockwaves = []; this.specialWaves = [];
     this.score = 0; this.combo = 0; this.comboTimer = 0; this.maxCombo = 0;
+    this.resetDepthSystems();
     this.flashTimer = 0; this.warningTimer = 0; this._hpTrailRatio = 1;
     this._endlessT = 0; this._endlessSpawnT = 1.0; this._endlessBossT = 30; this._endlessBossN = 0;
     director.begin(null);
@@ -223,6 +226,41 @@ const game = {
   showDialogue(name, text, dur) { this.dlgName = name; this.dlgText = text || ""; this.dlgTimer = dur || 3.5; },   // P
   addShake(mag, t) { this._shake = Math.max(this._shake, mag); this._shakeT = Math.max(this._shakeT, t); },   // N
   hitStop(t) { this._hitStopT = Math.max(this._hitStopT, t); },
+  resetDepthSystems() { this.threat = 0; this.chips = {}; this._chipCursor = 0; this._noHitT = 0; },
+  maxThreat() { return CONFIG.threat.maxLevel * CONFIG.threat.perLevel; },
+  threatLevel() { return clamp(Math.floor(this.threat / CONFIG.threat.perLevel), 0, CONFIG.threat.maxLevel); },
+  threatScoreMult() { return 1 + this.threatLevel() * CONFIG.threat.scoreStep; },
+  threatDamageMult() { return 1 + this.threatLevel() * (CONFIG.threat.damageStep || 0); },
+  addThreat(n) { this.threat = clamp(this.threat + n, 0, this.maxThreat()); },
+  dropThreat(n) { this.threat = clamp(this.threat - n, 0, this.maxThreat()); },
+  chipActive(key) { return (this.chips[key] || 0) > 0; },
+  chipValue(key, prop, fallback) { const c = CONFIG.chips[key]; return this.chipActive(key) && c && c[prop] != null ? c[prop] : fallback; },
+  activateChip(key, msg) {
+    const c = CONFIG.chips[key]; if (!c) return;
+    this.chips[key] = Math.max(this.chips[key] || 0, c.duration);
+    this.floats.push(new FloatText(this.player.x, this.player.y - 48, msg || c.name, c.color));
+    this.addThreat(CONFIG.threat.overflowGain);
+  },
+  activateNextChip() {
+    const order = CONFIG.chipOrder, key = order[this._chipCursor++ % order.length];
+    this.activateChip(key, "芯片 " + CONFIG.chips[key].name);
+  },
+  updateDepthSystems(dt) {
+    for (const key of Object.keys(this.chips)) {
+      this.chips[key] -= dt;
+      if (this.chips[key] <= 0) delete this.chips[key];
+    }
+    if (!this.player) return;
+    this._noHitT += dt;
+    const t = CONFIG.threat;
+    if (this.player.power >= CONFIG.player.maxPower && this.player.overcharge >= CONFIG.player.maxOvercharge) this.addThreat(t.fullPowerPerSec * dt);
+    if (this.combo >= t.comboTrigger) this.addThreat(t.comboPerSec * dt);
+    if (this._noHitT >= t.noHitDelay) this.addThreat(t.noHitPerSec * dt);
+  },
+  onPlayerHit(blocked = false) {
+    this._noHitT = 0;
+    this.dropThreat(blocked ? CONFIG.threat.blockedHitLoss : CONFIG.threat.hitLoss);
+  },
 
   spawnPlayerBullet(x, y, vx, vy) { this.playerBullets.push(pools.playerBullet.get(x, y, vx, vy)); },
   spawnHomingShot(x, y, overcharge) { this.homingShots.push(pools.homingShot.get(x, y, overcharge)); },
@@ -281,7 +319,7 @@ const game = {
     const e = CONFIG.endless;
     return 1 + Math.min(this._endlessT / e.dmgRampTime, 1) * (e.dmgRampMult - 1);
   },
-  spawnEnemyBullet(x, y, vx, vy, baseDamage) { this.enemyBullets.push(pools.enemyBullet.get(x, y, vx, vy, baseDamage * this.activeDiff.dmgMult * this.endlessBulletDmgMult())); },
+  spawnEnemyBullet(x, y, vx, vy, baseDamage) { this.enemyBullets.push(pools.enemyBullet.get(x, y, vx, vy, baseDamage * this.activeDiff.dmgMult * this.endlessBulletDmgMult() * this.threatDamageMult())); },
   fireFan(x, y, baseAngle, spread, count, speed, damage) { for (let i = 0; i < count; i++) { const a = count === 1 ? baseAngle : baseAngle - spread / 2 + spread * (i / (count - 1)); this.spawnEnemyBullet(x, y, Math.cos(a) * speed, Math.sin(a) * speed, damage); } },
   fireRing(x, y, count, speed, damage) { for (let i = 0; i < count; i++) { const a = (i / count) * Math.PI * 2; this.spawnEnemyBullet(x, y, Math.cos(a) * speed, Math.sin(a) * speed, damage); } },
   burst(x, y, color, count, speed) { for (let i = 0; i < count; i++) { const a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random() * 0.7); this.particles.push(pools.particle.get(x, y, Math.cos(a) * s, Math.sin(a) * s, color)); } },
@@ -298,12 +336,13 @@ const game = {
   },
 
   comboMult() { return clamp(1 + this.combo * CONFIG.combo.scoreStep, 1, CONFIG.combo.maxMult); },
-  breakCombo() { this.combo = 0; this.comboTimer = 0; },
+  breakCombo() { if (this.combo >= CONFIG.threat.comboTrigger) this.dropThreat(CONFIG.threat.comboBreakLoss); this.combo = 0; this.comboTimer = 0; },
 
   bombButtonHit(x, y) { const b = this.bombBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
   useBomb() {
     if (!this.player || this.player.bombs <= 0) return;
     this.player.bombs--; this._bombsUsedThisLevel++; Sound.bomb(); Haptics.bomb(); this.addShake(6, 0.2); this.hitStop(0.04);
+    this.dropThreat(CONFIG.threat.bombLoss);
     this.flashTimer = CONFIG.bomb.flash;
     this.player.invulnTimer = Math.max(this.player.invulnTimer, CONFIG.player.bombInvuln);
     for (const b of this.enemyBullets) { this.burst(b.x, b.y, "#ff8787", 3, 120); b.dead = true; }
@@ -360,7 +399,7 @@ const game = {
   onEnemyKilled(e, allowDrop = true, byBomb = false) {
     let gained;
     if (byBomb) { gained = Math.round(e.score * CONFIG.scoring.bombKillMult); }              // 炸弹/必杀清兵:不涨连击、分数打折
-    else { this.combo++; this.comboTimer = CONFIG.combo.timeout * (this.player ? this.player.ship.comboTimeoutMult : 1); this.maxCombo = Math.max(this.maxCombo, this.combo); gained = Math.round(e.score * this.comboMult()); }
+    else { this.combo++; this.comboTimer = CONFIG.combo.timeout * (this.player ? this.player.ship.comboTimeoutMult : 1); this.maxCombo = Math.max(this.maxCombo, this.combo); gained = Math.round(e.score * this.comboMult() * this.threatScoreMult()); this.addThreat(e.isBoss ? CONFIG.threat.bossKillGain : CONFIG.threat.killGain); }
     this.score += gained;
     if (this.player && !byBomb) this.player.addEnergy(e.isBoss ? CONFIG.special.gainBossKill : CONFIG.special.gainPerKill);   // B:攒必杀能量(炸弹/必杀击杀不攒,防循环)
     this.floats.push(new FloatText(e.x, e.y - e.radius, "+" + gained, byBomb ? "#868e96" : (this.combo >= 5 ? "#ffd43b" : "#fff")));
@@ -388,12 +427,7 @@ const game = {
     Sound.powerup();
   },
   maybeDrop(type, x, y) { if (type === "small") return; if (Math.random() < CONFIG.powerup.dropChance) this.powerups.push(new PowerUp(x, y, this.chooseDrop())); },
-  // V:火力(power)/僚机(wing)已到上限时不再掉落这两种,权重让给其余种类
-  canDrop(kind) {
-    if (kind === "power") return !this.player || this.player.power < CONFIG.player.maxPower || this.player.overcharge < CONFIG.player.maxOvercharge;
-    if (kind === "wing") return !this.player || this.player.wings < CONFIG.wingMax;
-    return true;
-  },
+  canDrop(kind) { return !!kind; },
   chooseDrop() {
     const w = this.endless ? CONFIG.powerup.endlessWeights : CONFIG.powerup.weights;
     const kinds = ["power", "heal", "bomb", "wing"].filter(k => this.canDrop(k));
@@ -402,6 +436,26 @@ const game = {
     let r = Math.random() * total;
     for (const k of kinds) { if (r < w[k]) return k; r -= w[k]; }
     return kinds[kinds.length - 1];
+  },
+  collectPowerup(kind) {
+    const p = this.player, o = CONFIG.overflow;
+    if (kind === "power") {
+      if (p.power >= CONFIG.player.maxPower && p.overcharge >= CONFIG.player.maxOvercharge) this.activateNextChip();
+      else {
+        const wasMax = p.power >= CONFIG.player.maxPower;
+        p.addPower();
+        this.floats.push(new FloatText(p.x, p.y - 34, wasMax ? "过载 +" + p.overcharge : "火力 +1", wasMax ? "#74c0fc" : "#38d9a9"));
+      }
+    } else if (kind === "bomb") {
+      if (p.bombs >= CONFIG.player.maxBombs) { p.addEnergy(o.bombEnergy); this.floats.push(new FloatText(p.x, p.y - 34, "能量 +" + o.bombEnergy, "#ffd43b")); this.addThreat(o.threatGain); }
+      else { p.addBomb(); this.floats.push(new FloatText(p.x, p.y - 34, "炸弹 +1", "#cc5de8")); }
+    } else if (kind === "wing") {
+      if (p.wings >= CONFIG.wingMax) this.activateChip(o.wingChip, "侧翼炮组");
+      else { p.addWing(); this.floats.push(new FloatText(p.x, p.y - 34, "僚机 +1", "#dee2e6")); }
+    } else {
+      if (p.hp >= p.maxHp) { p.grantShield(o.healShield, o.healShieldDur); this.floats.push(new FloatText(p.x, p.y - 34, "临时护盾 +" + o.healShield, "#74c0fc")); this.addThreat(o.threatGain); }
+      else { p.heal(CONFIG.powerup.healAmount); this.floats.push(new FloatText(p.x, p.y - 34, "HP +" + CONFIG.powerup.healAmount, "#ff8787")); }
+    }
   },
 
   update(dt) {
@@ -428,6 +482,7 @@ const game = {
     }
 
     if (this.combo > 0) { this.comboTimer -= dt; if (this.comboTimer <= 0) this.breakCombo(); }
+    this.updateDepthSystems(dt);
 
     director.update(dt);
     if (this.endless) this.updateEndless(dt);
@@ -505,20 +560,13 @@ const game = {
         }
       }
     }
-    for (const e of this.enemies) { if (e.dead) continue; if (hit(e, this.player)) { if (!e.isBoss) { e.dead = true; this.burst(e.x, e.y, e.color, 10, 160); } this.player.takeDamage(CONFIG.crashDamage * this.activeDiff.dmgMult); } }
+    for (const e of this.enemies) { if (e.dead) continue; if (hit(e, this.player)) { if (!e.isBoss) { e.dead = true; this.burst(e.x, e.y, e.color, 10, 160); } this.player.takeDamage(CONFIG.crashDamage * this.activeDiff.dmgMult * this.threatDamageMult()); } }
     for (const b of this.enemyBullets) { if (b.dead) continue; if (hit(b, this.player)) { b.dead = true; this.player.takeDamage(b.damage); } }
     for (const p of this.powerups) {
       if (p.dead) continue;
       if (hit(p, this.player)) {
         p.dead = true; Sound.powerup(); Haptics.powerup();
-        if (p.kind === "power") {
-          const wasMax = this.player.power >= CONFIG.player.maxPower;
-          this.player.addPower();
-          if (wasMax) this.floats.push(new FloatText(this.player.x, this.player.y - 34, "过载 +" + this.player.overcharge, "#74c0fc"));
-          else this.floats.push(new FloatText(this.player.x, this.player.y - 34, "火力 +1", "#38d9a9"));
-        } else if (p.kind === "bomb") { this.player.addBomb(); this.floats.push(new FloatText(this.player.x, this.player.y - 34, "炸弹 +1", "#cc5de8")); }
-        else if (p.kind === "wing") { this.player.addWing(); this.floats.push(new FloatText(this.player.x, this.player.y - 34, "僚机 +1", "#dee2e6")); }
-        else { this.player.heal(CONFIG.powerup.healAmount); this.floats.push(new FloatText(this.player.x, this.player.y - 34, "HP +" + CONFIG.powerup.healAmount, "#ff8787")); }
+        this.collectPowerup(p.kind);
       }
     }
   },
@@ -1095,7 +1143,7 @@ const game = {
       music:    { x: W / 2 - 60, y: 420, w: 120, h: 44 },
       haptics:  { x: W / 2 - 60, y: 478, w: 120, h: 44 },
       hidewings:{ x: W / 2 - 60, y: 536, w: 120, h: 44 },
-      controlMode: { x: W / 2 - 80, y: 594, w: 160, h: 44 },   // KK:操作方式(拖动跟随/虚拟摇杆)二选一
+      controlMode: { x: W / 2 - 80, y: 594, w: 160, h: 44 },   // KK:操作方式(相对拖动/虚拟摇杆)二选一
       exportSave: { x: W / 2 - 130, y: 668, w: 124, h: 44 },   // PP:存档导入导出
       importSave: { x: W / 2 + 6, y: 668, w: 124, h: 44 },
       reset:    { x: W / 2 - 130, y: 728, w: 260, h: 48 },
@@ -1159,7 +1207,7 @@ const game = {
     // KK:操作方式(拖动跟随/虚拟摇杆二选一,不是简单开关,复用 UI.button 但自定义文案/配色)
     { const isJoy = Settings.data.controlMode === "joystick", r = R.controlMode;
       ctx.textAlign = "left"; ctx.fillStyle = "#adb5bd"; ctx.font = "19px 'Segoe UI', sans-serif"; ctx.fillText("操作方式", cx - 200, r.y + r.h / 2 + 6);
-      UI.button(ctx, r, { label: isJoy ? "虚拟摇杆" : "拖动跟随", color: isJoy ? "#ff922b" : "#4dabf7", active: true, font: 16, radius: 11 }); }
+      UI.button(ctx, r, { label: isJoy ? "虚拟摇杆" : "相对拖动", color: isJoy ? "#ff922b" : "#4dabf7", active: true, font: 16, radius: 11 }); }
     ctx.textAlign = "center"; ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("上次难度会被记住 · 当前:" + CONFIG.difficulties[Settings.data.diff].name, cx, 654);
     // PP:导出/导入存档(弹窗展示/粘贴 JSON 文本,零依赖不用文件下载)
     UI.button(ctx, R.exportSave, { label: "导出存档", color: "#4dabf7", font: 15, radius: 11 });
@@ -1346,6 +1394,34 @@ const game = {
     }
     ctx.restore();
   },
+  drawThreatHUD(ctx) {
+    const t = CONFIG.threat, lvl = this.threatLevel(), maxed = lvl >= t.maxLevel;
+    const x = 200, y = 42, w = 150, h = 8;
+    const ratio = maxed ? 1 : clamp((this.threat - lvl * t.perLevel) / t.perLevel, 0, 1);
+    const color = lvl >= 4 ? "#ff6b6b" : lvl >= 2 ? "#ffd43b" : "#74c0fc";
+    ctx.save();
+    ctx.textAlign = "left";
+    ctx.fillStyle = color; ctx.font = "bold 12px 'Segoe UI', sans-serif";
+    ctx.fillText("威胁 Lv." + lvl + "  ×" + this.threatScoreMult().toFixed(2), x, y - 5);
+    UI.bar(ctx, x, y, w, h, ratio, color, color, { glow: lvl >= 3, glowColor: color, glowBlur: 8 });
+    ctx.restore();
+  },
+  drawChipHUD(ctx) {
+    const active = CONFIG.chipOrder.filter(k => this.chips[k] > 0);
+    if (!active.length) return;
+    let x = 16, y = 202;
+    ctx.save(); ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.font = "bold 12px 'Segoe UI', sans-serif";
+    for (const key of active) {
+      const c = CONFIG.chips[key], text = c.name + " " + Math.ceil(this.chips[key]) + "s";
+      const w = Math.max(82, ctx.measureText(text).width + 18);
+      ctx.fillStyle = "rgba(8, 16, 28, .68)"; UI.roundRect(ctx, x, y - 12, w, 24, 8); ctx.fill();
+      ctx.strokeStyle = UI.rgba(c.color, .75); ctx.lineWidth = 1.2; UI.roundRect(ctx, x, y - 12, w, 24, 8); ctx.stroke();
+      ctx.fillStyle = c.color; ctx.fillText(text, x + 9, y + 1);
+      x += w + 8;
+      if (x > CONFIG.WIDTH - 120) { x = 16; y += 28; }
+    }
+    ctx.restore();
+  },
   drawHUD(ctx) {
     ctx.fillStyle = "#e9ecef"; ctx.font = "20px 'Segoe UI', sans-serif"; ctx.textAlign = "left";
     ctx.fillText("得分 " + this.score, 16, 30);
@@ -1353,6 +1429,7 @@ const game = {
     this.drawPowerIcon(ctx, 24, 55, 30);
     this.drawCountBadge(ctx, 40, 40, this.player.overcharge > 0 ? this.player.power + "+" + this.player.overcharge : this.player.power, this.player.overcharge > 0 ? "#74c0fc" : "#38d9a9");
     ctx.fillStyle = "#adb5bd"; ctx.font = "16px 'Segoe UI', sans-serif"; ctx.fillText(this.endless ? "无尽 " + Math.floor(this._endlessT) + "s" : "关卡 " + this.levelDef().id, 200, 28);
+    this.drawThreatHUD(ctx);
 
     // AA:HP 血条 —— 更大更醒目:渐变(绿→黄→红)+ 底槽玻璃质感 + 掉血残影 + 危险脉动发光 + 图标
     const hpW = 190, hpH = 18, hpX = CONFIG.WIDTH - hpW - 16, hpY = 14;
@@ -1406,6 +1483,7 @@ const game = {
     const specName = this.player.ship.specialName || "机型技能";
     ctx.fillStyle = enFull ? "#ffd43b" : "#adb5bd"; ctx.font = "bold 12px 'Segoe UI', sans-serif"; ctx.fillText(enFull ? specName + " · 就绪" : "机型技能", enX, enY + enH + 14);
     this.drawSecondaryHUD(ctx);
+    this.drawChipHUD(ctx);
 
     // BOSS 血条 —— 渐变发光 + 阶段分隔刻度 + 狂暴提示
     if (this.boss) {

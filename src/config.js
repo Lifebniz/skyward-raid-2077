@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 
 /* =====================================================================
  *  Skyward Raid 2077 —— 原创未来空战原型  v0.5
@@ -28,7 +28,7 @@ const CONFIG = {
     laserPower: 5, laserInterval: 1.05, laserDuration: 0.18, laserWidth: 16, laserDamage: 3,
     missilePower: 6, missileInterval: 1.25, missileSpeed: 360, missileTurn: 3.8, missileDamage: 6, missileSplash: 48,
   },
-  // KK:虚拟摇杆操作模式(和默认的"拖动跟随"二选一,设置页可切换)。baseX/baseY 固定底座位置(避开底部按钮行),
+  // KK:虚拟摇杆操作模式(和默认的"相对拖动"二选一,设置页可切换)。baseX/baseY 固定底座位置(避开底部按钮行),
   // radius 摇杆最大可推距离,deadzone 死区比例(小于这个比例视为无输入),maxSpeed 推到底时的移动速度(px/s)。
   joystick: { baseX: 110, baseY: 770, radius: 70, deadzone: 0.15, maxSpeed: 480 },
 
@@ -75,6 +75,19 @@ const CONFIG = {
   powerup: { radius: 14, speed: 130, dropChance: 0.14, healAmount: 12, autoInterval: 5, magnetRadius: 40, magnetSpeed: 640,
     weights:        { power: 0.5,  heal: 0.22, bomb: 0.13, wing: 0.15 },
     endlessWeights: { power: 0.55, heal: 0.26, bomb: 0.04, wing: 0.15 } },
+  overflow: { healShield: 30, healShieldDur: 8, bombEnergy: 26, wingChip: "sideGuns", threatGain: 18 },
+  threat: {
+    maxLevel: 5, perLevel: 80, scoreStep: 0.08, damageStep: 0.04,
+    fullPowerPerSec: 2.4, comboPerSec: 2.0, noHitPerSec: 1.5, noHitDelay: 14,
+    killGain: 1.8, bossKillGain: 24, overflowGain: 16, comboTrigger: 12,
+    hitLoss: 70, blockedHitLoss: 28, bombLoss: 46, comboBreakLoss: 34,
+  },
+  chipOrder: ["laserFocus", "capacitor", "sideGuns"],
+  chips: {
+    laserFocus: { name: "聚焦激光", color: "#cc5de8", duration: 12, laserWidthMult: 0.72, laserDamageBonus: 2, laserDurationBonus: 0.06 },
+    capacitor: { name: "电容护盾", color: "#74c0fc", duration: 14, block: 22 },
+    sideGuns: { name: "侧翼炮组", color: "#ffd43b", duration: 10, angle: 22 },
+  },
   bomb: { bossDamage: 70, flash: 0.35 },
 
   // 每关一个独立 BOSS:各有移动方式(sweep 横扫 / figure8 八字 / dart 瞬移)
