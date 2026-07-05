@@ -62,8 +62,8 @@ class Player {
     if (this.power >= s.homingPower) {
       this._homingTimer -= dt;
       if (this._homingTimer <= 0) {
-        this._homingTimer = Math.max(0.24, (s.homingInterval - oc * 0.05) * game.chipValue("homingSwarm", "intervalMult", 1) * game.shipWeaponValue("homingIntervalMult", 1) * allCd * game.weaponCooldownMult());
-        const count = 1 + (oc >= 3 ? 1 : 0) + game.chipValue("homingSwarm", "extraCount", 0) + game.bonusValue("swarmCore", "extraCount");
+        this._homingTimer = Math.max(0.24, (s.homingInterval - oc * 0.05) * game.chipValue("homingSwarm", "intervalMult", 1) * game.shipWeaponValue("homingIntervalMult", 1) * allCd * game.weaponCooldownMult() * (1 - game.routeBonus("追踪", 0.10)));
+        const count = 1 + (oc >= 3 ? 1 : 0) + game.chipValue("homingSwarm", "extraCount", 0) + game.bonusValue("swarmCore", "extraCount") + (game.routeReady("追踪") ? 1 : 0);
         for (let i = 0; i < count; i++) game.spawnHomingShot(this.x + (i - (count - 1) / 2) * 18, this.y - this.radius, oc);
         Sound.homing();
       }
@@ -274,8 +274,8 @@ class Missile {
   init(x, y, overcharge = 0) {
     const s = CONFIG.secondary;
     this.x = x; this.y = y; this.overcharge = overcharge; this.radius = 8;
-    this.speed = s.missileSpeed + overcharge * 18; this.turn = s.missileTurn + overcharge * 0.25; this.damage = s.missileDamage + overcharge + game.chipValue("missileBarrage", "damageBonus", 0) + game.shipWeaponValue("missileDamageBonus", 0) + game.bonusValue("explosivePayload", "missileDamage");
-    this.splash = (s.missileSplash + overcharge * 5) * game.chipValue("missileBarrage", "splashMult", 1) * game.shipWeaponValue("missileSplashMult", 1) * (1 + game.bonusValue("explosivePayload", "splashMult")); this.vx = 0; this.vy = -this.speed; this.dead = false; this.life = 3.5 * game.rangeMult();
+    this.speed = s.missileSpeed + overcharge * 18; this.turn = s.missileTurn + overcharge * 0.25; this.damage = s.missileDamage + overcharge + game.chipValue("missileBarrage", "damageBonus", 0) + game.shipWeaponValue("missileDamageBonus", 0) + game.bonusValue("explosivePayload", "missileDamage") + game.routeBonus("导弹", 3);
+    this.splash = (s.missileSplash + overcharge * 5) * game.chipValue("missileBarrage", "splashMult", 1) * game.shipWeaponValue("missileSplashMult", 1) * (1 + game.bonusValue("explosivePayload", "splashMult") + game.routeBonus("导弹", 0.18)); this.vx = 0; this.vy = -this.speed; this.dead = false; this.life = 3.5 * game.rangeMult();
   }
   update(dt) {
     const jam = game.jamFactor(this.x, this.y);
@@ -306,7 +306,7 @@ class PlayerLaser {
   init(x, y, overcharge = 0) {
     const s = CONFIG.secondary;
     this.x = x; this.y = y; this.overcharge = overcharge; this.width = s.laserWidth + overcharge * 3;
-    this.damage = s.laserDamage + Math.floor(overcharge / 2) + game.shipWeaponValue("laserDamageBonus", 0) + game.bonusValue("laserLens", "laserDamage"); this.life = (s.laserDuration + overcharge * 0.01 + game.bonusValue("laserLens", "laserDuration")) * game.rangeMult();
+    this.damage = s.laserDamage + Math.floor(overcharge / 2) + game.shipWeaponValue("laserDamageBonus", 0) + game.bonusValue("laserLens", "laserDamage") + game.routeBonus("激光", 2); this.life = (s.laserDuration + overcharge * 0.01 + game.bonusValue("laserLens", "laserDuration")) * game.rangeMult() * (1 + game.routeBonus("激光", 0.12));
     this.width *= Math.max(0.52, 1 - game.bonusValue("laserLens", "laserWidthShrink"));
     if (game.chipActive("laserFocus")) {
       const c = CONFIG.chips.laserFocus;

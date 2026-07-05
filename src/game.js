@@ -471,6 +471,7 @@ const game = {
     let m = 1 + this.threatLevel() * CONFIG.threat.scoreStep;
     m *= 1 + this.chipValue("volatileCore", "scoreBonus", 0);
     m *= 1 + this.endlessEventValue("scoreBonus", 0);
+    m *= 1 + this.routeBonus("风险", 0.12);
     return m;
   },
   threatDamageMult() { return 1 + this.threatLevel() * (CONFIG.threat.damageStep || 0); },
@@ -488,7 +489,7 @@ const game = {
     const b = CONFIG.bonuses.adrenaline, p = this.player;
     return b && p && p.maxHp && p.hp / p.maxHp <= b.threshold ? this.bonusStacks("adrenaline") * (b[prop] || 0) : 0;
   },
-  mainBulletDamage() { return CONFIG.bullet.damage + this.bonusValue("kineticAmmo", "bulletDamage"); },
+  mainBulletDamage() { return CONFIG.bullet.damage + this.bonusValue("kineticAmmo", "bulletDamage") + this.routeBonus("主炮", 1); },
   playerDamage(d, target = null) {
     let m = 1 + this.bonusValue("damage", "damageMult") + this.bonusValue("glassCannon", "damageMult") + this.adrenalineValue("damageMult");
     if (target && target.isBoss) m += this.bonusValue("bossHunter", "bossDamageMult");
@@ -496,8 +497,8 @@ const game = {
     return d * m;
   },
   weaponCooldownMult() { return Math.max(0.45, 1 - this.bonusValue("fireRate", "cooldownMult") - this.bonusValue("overdrive", "cooldownMult") - this.adrenalineValue("cooldownMult")); },
-  damageTakenMult() { return 1 + this.bonusValue("glassCannon", "damageTakenMult") + this.bonusValue("overdrive", "damageTakenMult"); },
-  rangeMult() { return 1 + this.bonusValue("range", "rangeMult"); },
+  damageTakenMult() { return 1 + this.bonusValue("glassCannon", "damageTakenMult") + this.bonusValue("overdrive", "damageTakenMult") - this.routeBonus("生存", 0.10); },
+  rangeMult() { return 1 + this.bonusValue("range", "rangeMult") + this.routeBonus("追踪", 0.10); },
   pickupRangeMult() { return this.rangeMult() * (1 + this.bonusValue("magnetCore", "magnetMult")); },
   endlessEnemyHpMult() {
     if (!this.endless) return 1;
@@ -550,6 +551,17 @@ const game = {
     const routes = this.buildRouteSummary(source).routes.slice(0, limit);
     return routes.length ? routes.map(r => r.name + r.stage).join(" / ") : "未成型";
   },
+  routeEffectText(source = this.bonuses, limit = 2) {
+    const effects = { "主炮": "主炮+1", "激光": "激光+2", "追踪": "追踪+1", "导弹": "导弹强化", "生存": "承伤-10%", "风险": "分数+12%" };
+    const ready = this.buildRouteSummary(source).routes.filter(r => r.score >= 7).slice(0, limit).map(r => effects[r.name]);
+    return ready.length ? ready.join(" / ") : "";
+  },
+  routeScore(name) {
+    const r = this.buildRouteSummary().routes.find(x => x.name === name);
+    return r ? r.score : 0;
+  },
+  routeReady(name) { return this.routeScore(name) >= 7; },
+  routeBonus(name, amount) { return this.routeReady(name) ? amount : 0; },
   chipChoiceRect(i) { return { x: 40, y: 238 + i * 104, w: CONFIG.WIDTH - 80, h: 92 }; },
   chipChoiceHit(px, py) {
     for (let i = 0; i < 3; i++) { const r = this.chipChoiceRect(i); if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return i; }
@@ -1220,6 +1232,8 @@ const game = {
     ctx.fillStyle = "#fff"; ctx.font = "bold 16px 'Segoe UI', sans-serif"; ctx.fillText("当前构筑", x + 16, y + 23);
     const route = this.buildRouteSummary();
     ctx.fillStyle = route.top.color; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.fillText("路线 " + this.buildRouteText(), x + 94, y + 23);
+    const effectText = this.routeEffectText();
+    if (effectText) { ctx.fillStyle = "#adb5bd"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText("共鸣 " + effectText, x + 16, y + 45); }
     ctx.fillStyle = "#adb5bd"; ctx.font = "13px 'Segoe UI', sans-serif";
     if (!keys.length && !active.length) ctx.fillText("暂无永久 BONUS", x + 16, y + 62);
     let bx = x + 16, by = y + 62, shown = 0;
@@ -1315,10 +1329,11 @@ const game = {
     const bonusKeys = Object.keys(r.bonuses || {}).filter(k => r.bonuses[k] > 0);
     const bonusText = bonusKeys.length ? bonusKeys.map(k => (CONFIG.bonuses[k] ? CONFIG.bonuses[k].name : k) + "×" + r.bonuses[k]).slice(0, 3).join(" / ") : "无";
     const routeText = this.buildRouteText(r.bonuses || {}, 2);
+    const routeEffect = this.routeEffectText(r.bonuses || {}, 2);
     ctx.fillStyle = "#adb5bd"; ctx.font = "13px 'Segoe UI', sans-serif";
-    if (compactResult) { ctx.fillText(fitLine("威胁 Lv." + (r.maxThreat || 0) + " · 路线 " + routeText + " · 事件 " + eventText + " · BONUS " + bonusText, 356), cx, infoY); infoY += 18; }
+    if (compactResult) { ctx.fillText(fitLine("威胁 Lv." + (r.maxThreat || 0) + " · 路线 " + routeText + (routeEffect ? " · 共鸣 " + routeEffect : "") + " · 事件 " + eventText + " · BONUS " + bonusText, 356), cx, infoY); infoY += 18; }
     else {
-      ctx.fillText(fitLine("最高威胁 Lv." + (r.maxThreat || 0) + " · 路线 " + routeText + " · 事件 " + eventText, 356), cx, infoY); infoY += 18;
+      ctx.fillText(fitLine("最高威胁 Lv." + (r.maxThreat || 0) + " · 路线 " + routeText + (routeEffect ? " · 共鸣 " + routeEffect : "") + " · 事件 " + eventText, 356), cx, infoY); infoY += 18;
       ctx.fillText("芯片 " + chipText, cx, infoY); infoY += 22;
       ctx.fillText("BONUS " + bonusText, cx, infoY); infoY += 22;
     }
