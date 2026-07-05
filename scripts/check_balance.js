@@ -59,6 +59,7 @@ for (const [i, pool] of CONFIG.endless.pools.entries()) {
 
 const eventKeys = CONFIG.endless.events.map(e => e.key);
 unique(eventKeys, "endless events");
+assert(eventKeys.includes("repairConvoy"), "endless events should include repair convoy pressure");
 const routeNames = new Set(["主炮", "激光", "追踪", "导弹", "生存", "风险"]);
 const drops = new Set(["power", "heal", "bomb", "wing", "chip"]);
 for (const e of CONFIG.endless.events) {
@@ -79,6 +80,9 @@ for (const e of CONFIG.endless.events) {
     between(e.width || 0, 20, 70, `event ${e.key} laser width`);
   }
 }
+const repairConvoy = CONFIG.endless.events.find(e => e.key === "repairConvoy");
+assert.strictEqual(repairConvoy.enemyType, "support", "repair convoy should force support enemies");
+assert(repairConvoy.minTime >= 90, "repair convoy should be a mid/late endless event");
 game.score = 0; game.threat = 0; game.bonuses = {}; game.chips = {}; game.floats = []; game._endlessEventTimer = 0; game._endlessStats = { hits: 2 }; game._endlessEventStartHits = 1;
 game.player = { x: 100, y: 100, shieldHp: 0, grantShield(n, dur) { this.shieldHp = n; this.shieldTimer = dur; } };
 const eventHitGain = game.finishEndlessEvent(CONFIG.endless.events[0]);
