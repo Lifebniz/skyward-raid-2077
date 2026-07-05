@@ -527,7 +527,7 @@ const game = {
   endlessEnemyHpMult() {
     if (!this.endless) return 1;
     const e = CONFIG.endless;
-    return 1 + Math.min(this._endlessT / e.enemyHpRampTime, 1) * (e.enemyHpRampMult - 1);
+    return (1 + Math.min(this._endlessT / e.enemyHpRampTime, 1) * (e.enemyHpRampMult - 1)) * (1 + this.endlessEventValue("enemyHpMult", 0));
   },
   shipWeaponValue(prop, fallback) {
     const b = ((this.player && this.player.ship) || this.ship).weaponBias || {};
