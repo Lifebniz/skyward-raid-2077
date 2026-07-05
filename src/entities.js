@@ -44,7 +44,7 @@ class Player {
     if (this._flameTimer <= 0) { this._flameTimer = 0.03; game.spawnEngineFlame(this.x, this.y + 11); }
     this._fireTimer -= dt;
     if (this._fireTimer <= 0) {
-      this._fireTimer = this.fireInterval * game.weaponCooldownMult();
+      this._fireTimer = this.fireInterval * game.mainGunCooldownMult();
       const pattern = CONFIG.weapon[clamp(this.power, 1, c.maxPower)];
       for (const s of pattern) { const rad = s.deg * DEG; game.spawnPlayerBullet(this.x + s.ox, this.y - this.radius, Math.sin(rad) * c.bulletSpeed, -Math.cos(rad) * c.bulletSpeed); }
       for (let i = 0; i < this.wings; i++) game.spawnPlayerBullet(this.x + wingOffsetX(i), this.y + 4, 0, -c.bulletSpeed);   // 僚机直射(任意数量排布)
