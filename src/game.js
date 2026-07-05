@@ -512,7 +512,10 @@ const game = {
     if (target && target.maxHp && target.hp / target.maxHp <= (CONFIG.bonuses.executioner.threshold || 0)) m += this.bonusValue("executioner", "damageMult");
     return d * m;
   },
-  weaponCooldownMult() { return Math.max(0.45, 1 - this.bonusValue("fireRate", "cooldownMult") - this.bonusValue("overdrive", "cooldownMult") - this.adrenalineValue("cooldownMult")); },
+  weaponCooldownMult() {
+    const p = this.player, jam = p ? this.jamFactor(p.x, p.y) : 1;
+    return Math.max(0.45, 1 - this.bonusValue("fireRate", "cooldownMult") - this.bonusValue("overdrive", "cooldownMult") - this.adrenalineValue("cooldownMult")) * jam;
+  },
   damageTakenMult() { return 1 + this.bonusValue("glassCannon", "damageTakenMult") + this.bonusValue("overdrive", "damageTakenMult") - this.routeBonus("生存", 0.10); },
   rangeMult() { return 1 + this.bonusValue("range", "rangeMult") + this.routeBonus("追踪", 0.10); },
   pickupRangeMult() { return this.rangeMult() * (1 + this.bonusValue("magnetCore", "magnetMult")); },
@@ -2228,6 +2231,15 @@ const game = {
   },
   drawSecondaryHUD(ctx) {
     const p = this.player, s = CONFIG.secondary, oc = p.overcharge || 0, allCd = this.shipWeaponValue("cooldownMult", 1);
+    const jam = this.jamFactor(p.x, p.y);
+    if (jam > 1) {
+      const text = "干扰 ×" + jam.toFixed(2);
+      ctx.save(); ctx.font = "bold 12px 'Segoe UI', sans-serif"; ctx.textAlign = "left";
+      const w = ctx.measureText(text).width + 18;
+      ctx.fillStyle = "rgba(8, 16, 28, .72)"; UI.roundRect(ctx, 16, 136, w, 22, 8); ctx.fill();
+      ctx.strokeStyle = "rgba(21,170,191,.78)"; UI.roundRect(ctx, 16, 136, w, 22, 8); ctx.stroke();
+      ctx.fillStyle = "#66d9e8"; ctx.fillText(text, 25, 151); ctx.restore();
+    }
     const items = [
       { type: "homing", need: s.homingPower, timer: p._homingTimer, interval: Math.max(0.24, (s.homingInterval - oc * 0.05) * this.chipValue("homingSwarm", "intervalMult", 1) * this.shipWeaponValue("homingIntervalMult", 1) * allCd * this.weaponCooldownMult()), color: "#74c0fc" },
       { type: "laser", need: s.laserPower, timer: p._laserTimer, interval: Math.max(0.55, (s.laserInterval - oc * 0.06) * this.shipWeaponValue("laserIntervalMult", 1) * allCd * this.weaponCooldownMult()), color: "#cc5de8" },
