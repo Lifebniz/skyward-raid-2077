@@ -531,6 +531,7 @@ const game = {
     this.bonuses[key] = (this.bonuses[key] || 0) + 1;
     this._bonusStats[key] = (this._bonusStats[key] || 0) + 1;
     if (key === "maxHp" && this.player) { this.player.maxHp += b.hp; this.player.hp = clamp(this.player.hp + b.hp, 0, this.player.maxHp); }
+    if (b.hpPct && this.player) { const gain = Math.max(1, Math.round(this.player.maxHp * b.hpPct)); this.player.maxHp += gain; this.player.hp = clamp(this.player.hp + gain, 0, this.player.maxHp); }
     if (this.player) this.floats.push(new FloatText(this.player.x, this.player.y - 50, "BONUS " + b.name, b.color));
   },
   cardInfo(id) {
@@ -543,7 +544,7 @@ const game = {
       { name: "激光", color: "#cc5de8", weights: { damage: 1, range: 1, laserLens: 3, chargeAmp: 1, bossHunter: 1, glassCannon: 1 } },
       { name: "追踪", color: "#4dabf7", weights: { range: 1, fireRate: 1, swarmCore: 3, homingShards: 3, magnetCore: 1, comboBattery: 1, comboSurge: 1 } },
       { name: "导弹", color: "#ff922b", weights: { missileRack: 3, explosivePayload: 3, missileInterceptor: 2, fireRate: 1, range: 1, bossHunter: 1 } },
-      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, leech: 2, salvage: 2, reactiveArmor: 2, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1 } },
+      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, leech: 2, salvage: 2, reactiveArmor: 2, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1 } },
       { name: "风险", color: "#ff6b6b", weights: { glassCannon: 3, overdrive: 3, adrenaline: 3, comboSurge: 2, executioner: 1, bossHunter: 1 } },
     ].map(r => {
       const score = Object.keys(r.weights).reduce((sum, key) => sum + (source[key] || 0) * r.weights[key], 0);
@@ -672,7 +673,11 @@ const game = {
     return true;
   },
   canClaimChipReward() {
-    return !this.endless || (this._endlessT >= CONFIG.powerup.chipMinEndlessTime && this._endlessT >= this._nextChipDraftAt);
+    return !this.endless || this.chipRewardWait() <= 0;
+  },
+  chipRewardWait() {
+    if (!this.endless) return 0;
+    return Math.max(0, Math.max(CONFIG.powerup.chipMinEndlessTime || 0, this._nextChipDraftAt || 0) - this._endlessT);
   },
   claimChipReward() {
     if (this.endless) {
@@ -1334,7 +1339,7 @@ const game = {
     if (key.includes("missile") || key.includes("Payload")) this.drawSecondaryWeaponIcon(ctx, x, y, r * .9, "missile", "#fff");
     else if (key.includes("laser") || key.includes("Lens")) this.drawSecondaryWeaponIcon(ctx, x, y, r * .9, "laser", "#fff");
     else if (key.includes("homing") || key.includes("swarm")) this.drawSecondaryWeaponIcon(ctx, x, y, r * .9, "homing", "#fff");
-    else if (key.includes("shield") || key.includes("Armor") || key.includes("Defense") || key.includes("salvage") || key.includes("Barrier") || key === "capacitor") this.drawSpecialIcon(ctx, x, y, r * .86, "shield", "#fff");
+    else if (key.includes("shield") || key.includes("Armor") || key.includes("Defense") || key.includes("salvage") || key.includes("Barrier") || key.includes("Hull") || key.includes("Hp") || key === "capacitor") this.drawSpecialIcon(ctx, x, y, r * .86, "shield", "#fff");
     else if (key.includes("charge") || key.includes("overdrive") || key.includes("Battery") || key.includes("Surge") || key.includes("fireRate")) this.drawChargeIcon(ctx, x, y, r * .9, "#fff");
     else if (key.includes("range") || key.includes("magnet")) {
       ctx.save(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; for (let i = 1; i <= 3; i++) { ctx.globalAlpha = 1 - i * .18; ctx.beginPath(); ctx.arc(x, y, r * (.22 + i * .18), 0, Math.PI * 2); ctx.stroke(); } ctx.restore();
@@ -2264,6 +2269,19 @@ const game = {
     ctx.textAlign = "center"; ctx.fillStyle = e.color || "#ffd43b"; ctx.fillText(text, x, y - 4);
     ctx.restore();
   },
+  drawDraftCooldownHUD(ctx) {
+    if (!this.endless) return;
+    const wait = this.chipRewardWait(), ready = wait <= 0;
+    const text = ready ? "强化就绪" : "强化 " + Math.ceil(wait) + "s";
+    ctx.save();
+    ctx.font = "bold 12px 'Segoe UI', sans-serif";
+    const w = Math.max(86, ctx.measureText(text).width + 18), h = 22;
+    const x = CONFIG.WIDTH - w - 16, y = 39, color = ready ? "#38d9a9" : "#4dabf7";
+    ctx.fillStyle = "rgba(8, 16, 28, .72)"; UI.roundRect(ctx, x, y, w, h, 8); ctx.fill();
+    ctx.strokeStyle = UI.rgba(color, .78); ctx.lineWidth = 1.2; UI.roundRect(ctx, x, y, w, h, 8); ctx.stroke();
+    ctx.textAlign = "center"; ctx.fillStyle = color; ctx.fillText(text, x + w / 2, y + 15);
+    ctx.restore();
+  },
   drawChargeIcon(ctx, x, y, r, color = "#2b1d00") {
     const s = r * 0.5, pulse = 1 + Math.sin(this.titleT * 7) * 0.06;
     ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round";
@@ -2314,6 +2332,7 @@ const game = {
     ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
     // 危险时屏幕边缘轻微红色脉动警示,配合血条一起提醒
     if (danger) { ctx.save(); ctx.globalAlpha = 0.35 * hpPulse; const vg = ctx.createRadialGradient(CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2, CONFIG.HEIGHT * 0.35, CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2, CONFIG.HEIGHT * 0.72); vg.addColorStop(0, "rgba(255,0,0,0)"); vg.addColorStop(1, "rgba(255,0,0,.5)"); ctx.fillStyle = vg; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT); ctx.restore(); }
+    this.drawDraftCooldownHUD(ctx);
 
     // ①通关进度(右侧竖条,自下而上;刷分/无尽不显示)
     if (!this.farming && !this.endless && director.script) {

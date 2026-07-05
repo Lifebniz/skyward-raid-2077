@@ -95,12 +95,13 @@ const CONFIG = {
     sideGuns: { name: "侧翼炮组", desc: "主炮附加斜向火力", color: "#ffd43b", duration: 10, angle: 22 },
     volatileCore: { name: "危险过载", desc: "分数更高,承伤也更高", color: "#ff6b6b", duration: 9, scoreBonus: 0.35, threatGainMult: 1.35, damageTakenMult: 1.18 },
   },
-  bonusOrder: ["damage", "fireRate", "range", "maxHp", "leech", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "kineticAmmo", "laserLens", "swarmCore", "homingShards", "explosivePayload", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "glassCannon", "bossHunter", "adrenaline", "emergencyBarrier", "overdrive"],
+  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "leech", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "kineticAmmo", "laserLens", "swarmCore", "homingShards", "explosivePayload", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "glassCannon", "bossHunter", "adrenaline", "emergencyBarrier", "overdrive"],
   bonuses: {
     damage: { name: "火力校准", desc: "全武器伤害 +15%", color: "#ff6b6b", damageMult: 0.15 },
     fireRate: { name: "加速扳机", desc: "主炮/副武器射速 +10%", color: "#4dabf7", cooldownMult: 0.10 },
     range: { name: "远程弹道", desc: "锁定距离和激光持续 +20%", color: "#51cf66", rangeMult: 0.20 },
     maxHp: { name: "装甲扩容", desc: "最大生命 +12 并治疗", color: "#38d9a9", hp: 12 },
+    reinforcedHull: { name: "复合装甲", desc: "最大生命 +10% 并治疗", color: "#20c997", rarity: "稀有", weight: 42, hpPct: 0.10 },
     leech: { name: "吸能核心", desc: "击杀回复 1 生命", color: "#e64980", heal: 1 },
     missileRack: { name: "备用弹仓", desc: "导弹 +1 且装填更快", color: "#ff922b", missileCount: 1, missileCooldownMult: 0.08 },
     pierce: { name: "穿甲弹链", desc: "主炮可额外穿透 1 个目标", color: "#ffd43b", pierce: 1 },
@@ -257,7 +258,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 6, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 7, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
