@@ -314,16 +314,27 @@ class PlayerLaser {
 }
 
 class Enemy {
-  constructor(type, x, yOffset = 0, move = "straight") { this.init(type, x, yOffset, move); }
-  init(type, x, yOffset = 0, move = "straight") {
+  constructor(type, x, yOffset = 0, move = "straight", elite = null) { this.init(type, x, yOffset, move, elite); }
+  init(type, x, yOffset = 0, move = "straight", elite = null) {
     const t = CONFIG.enemy[type];
     this.type = type; this.isBoss = false; this.x = x; this.y = -t.radius - yOffset;
     this.baseX = x; this.baseY = this.y; this.radius = t.radius; this.hp = t.hp; this.speed = t.speed; this.score = t.score; this.color = t.color; this.cfg = t;
     this._fireTimer = 0.6 + Math.random() * 0.6; this.dead = false;
+    this.elite = elite || this.rollElite(); this.eliteCfg = this.elite ? CONFIG.elite[this.elite] : null;
+    this.eliteShield = this.eliteCfg && this.eliteCfg.shield ? this.eliteCfg.shield : 0; this._eliteCd = 1.2 + Math.random(); this._eliteWarn = 0;
+    if (this.eliteCfg) { this.hp = Math.round(this.hp * (this.eliteCfg.hpMult || 1)); this.score = Math.round(this.score * (this.eliteCfg.scoreMult || 1)); }
     // 运动状态
     this.move = move; this.mp = CONFIG.moves[move] || {}; this._mt = 0;
     this.phase = "in"; this._ht = 0; this._aimed = false; this.vx = 0; this.vy = 0; this._flash = 0;
     this._carrierSpawn = 0;   // W2:carrier 裂解出的僚机短暂带一圈紫色识别环,归零后就是普通敌机(池复用要清零,不然会带着上一轮的状态)
+  }
+  rollElite() {
+    if (this.type === "small" || !game.player) return null;
+    const e = CONFIG.elite;
+    let chance = game.currentLevel >= e.minLevel ? e.baseChance + game.currentLevel * e.levelChance : 0;
+    if (game.endless) chance = e.endlessChance + game.threatLevel() * e.threatChance + Math.min(game._endlessT / 900, 0.08);
+    if (Math.random() > Math.min(chance, e.maxChance)) return null;
+    return Math.random() < 0.55 ? "shield" : "charger";
   }
   applyMove(dt) {
     const W = CONFIG.WIDTH, m = this.mp;
@@ -354,18 +365,42 @@ class Enemy {
     if (this._flash > 0) this._flash -= dt;
     if (this._carrierSpawn > 0) this._carrierSpawn -= dt;
     this.applyMove(dt);
+    this.updateElite(dt);
     if (this.y > CONFIG.HEIGHT + this.radius || this.x < -70 || this.x > CONFIG.WIDTH + 70) this.dead = true;
     if (this.cfg.fireInterval > 0 && this.y > 0 && this.y < CONFIG.HEIGHT * 0.7 && game.player) {
       this._fireTimer -= dt;
       if (this._fireTimer <= 0) { this._fireTimer = this.cfg.fireInterval * game.activeDiff.fireMult; const aim = Math.atan2(game.player.y - this.y, game.player.x - this.x); game.fireFan(this.x, this.y, aim, 22 * DEG, this.cfg.shots, this.cfg.bulletSpeed, this.cfg.damage); }
     }
   }
-  damage(d) { this.hp -= d; this._flash = 0.06; if (this.hp <= 0) { this.dead = true; return true; } return false; }
+  updateElite(dt) {
+    if (this.elite !== "charger" || this.y <= 0 || this.y >= CONFIG.HEIGHT * 0.76 || !game.player) return;
+    if (this._eliteWarn > 0) {
+      this._eliteWarn -= dt;
+      if (this._eliteWarn <= 0) {
+        const c = this.eliteCfg, a = Math.atan2(game.player.y - this.y, game.player.x - this.x);
+        game.fireFan(this.x, this.y, a, c.spread * DEG, c.count, c.speed, this.cfg.damage * c.damageMult);
+        Sound.tone(860, 0.08, "sawtooth", 0.12, 220);
+        this._eliteCd = c.cd;
+      }
+      return;
+    }
+    this._eliteCd -= dt;
+    if (this._eliteCd <= 0) this._eliteWarn = this.eliteCfg.warn;
+  }
+  damage(d) {
+    if (this.eliteShield > 0) {
+      const used = Math.min(this.eliteShield, d);
+      this.eliteShield -= used; d -= used; this._flash = 0.06;
+      if (this.eliteShield > 0) return false;
+    }
+    this.hp -= d; this._flash = 0.06; if (this.hp <= 0) { this.dead = true; return true; } return false;
+  }
   // QQ:主体色改渐变(受光面亮/边缘暗)+ 整体加柔和投影,取代纯色平涂,读起来更有质感
   draw(ctx) {
     const x = this.x, y = this.y, r = this.radius, t = this.type;
     if (this._flash <= 0 && ImageAssets.draw(ctx, ImageAssets.enemy(t), x, y, r * 2.8)) {
       this.drawCarrierSpawnRing(ctx);
+      this.drawEliteMark(ctx);
       return;
     }
     let c;
@@ -420,6 +455,7 @@ class Enemy {
     ctx.restore();
     // W2:carrier 裂解出的僚机短暂带一圈脉动紫环,提示玩家"这是母舰刚炸出来的",1秒后自然消失,不需要额外状态清理
     this.drawCarrierSpawnRing(ctx);
+    this.drawEliteMark(ctx);
   }
   drawCarrierSpawnRing(ctx) {
     if (this._carrierSpawn <= 0) return;
@@ -427,6 +463,25 @@ class Enemy {
     ctx.save(); ctx.globalAlpha = clamp(this._carrierSpawn, 0, 1) * 0.8;
     ctx.strokeStyle = "#9775fa"; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(x, y, r + 5 + Math.sin(this._mt * 14) * 2, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  drawEliteMark(ctx) {
+    if (!this.eliteCfg) return;
+    const x = this.x, y = this.y, r = this.radius, c = this.eliteCfg.color;
+    ctx.save();
+    ctx.globalAlpha = 0.78 + Math.sin(this._mt * 8) * 0.12;
+    ctx.strokeStyle = c; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = c; ctx.font = "bold 10px 'Segoe UI', sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(this.eliteCfg.name, x, y - r - 10);
+    if (this.eliteShield > 0) {
+      UI.bar(ctx, x - r, y + r + 7, r * 2, 4, clamp(this.eliteShield / this.eliteCfg.shield, 0, 1), c, c, {});
+    }
+    if (this._eliteWarn > 0 && game.player) {
+      ctx.globalAlpha = 0.35 + 0.35 * Math.sin(this._mt * 26) ** 2;
+      ctx.strokeStyle = c; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(game.player.x, game.player.y); ctx.stroke();
+    }
     ctx.restore();
   }
 }

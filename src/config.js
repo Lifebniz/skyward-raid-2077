@@ -88,6 +88,11 @@ const CONFIG = {
     capacitor: { name: "电容护盾", color: "#74c0fc", duration: 14, block: 22 },
     sideGuns: { name: "侧翼炮组", color: "#ffd43b", duration: 10, angle: 22 },
   },
+  elite: {
+    minLevel: 3, baseChance: 0.035, levelChance: 0.012, endlessChance: 0.04, threatChance: 0.02, maxChance: 0.18,
+    shield: { name: "护盾", color: "#74c0fc", hpMult: 1.15, shield: 12, scoreMult: 1.35 },
+    charger: { name: "充能", color: "#ffd43b", hpMult: 1.08, scoreMult: 1.45, cd: 2.4, warn: 0.65, count: 3, spread: 18, speed: 340, damageMult: 1.15 },
+  },
   bomb: { bossDamage: 70, flash: 0.35 },
 
   // 每关一个独立 BOSS:各有移动方式(sweep 横扫 / figure8 八字 / dart 瞬移)
