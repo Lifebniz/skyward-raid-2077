@@ -213,20 +213,45 @@ const Challenge = {
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   },
+  rulesVersion() {
+    return (CONFIG.challenge && CONFIG.challenge.rulesVersion) || 1;
+  },
+  routeSignature(seed, rulesVersion) {
+    const e = CONFIG.endless || {}, spawn = e.spawn || {}, boss = e.boss || {};
+    const splits = CONFIG.challenge && CONFIG.challenge.splits ? CONFIG.challenge.splits : [30, 60, 120];
+    const parts = [
+      "route-v1", seed || "", rulesVersion || this.rulesVersion(), e.diffKey || "", e.maxEnemies || 0,
+      e.worldInterval || 40, e.powerupChance || 0,
+      [spawn.initialDelay, spawn.intervalBase, spawn.intervalDecay, spawn.intervalMin, spawn.countBase, spawn.countStepSec, spawn.countStepMax].join(","),
+      [boss.firstDelay, boss.interval, boss.hpStep, boss.hpStepMax].join(","),
+      splits.join(","),
+    ];
+    const r = this.rng(parts.join("|")), probes = [];
+    for (let i = 0; i < 12; i++) probes.push(Math.floor(r() * 65536).toString(36));
+    return this.hash(parts.join("|") + "|" + probes.join(",")).toString(36).toUpperCase().padStart(6, "0").slice(-6);
+  },
+  routeStatus(payload) {
+    const local = this.routeSignature(payload && payload.seed, payload && payload.rules);
+    const code = String((payload && payload.sig) || local).toUpperCase().slice(0, 8);
+    return { code, local, ok: code === local };
+  },
   cleanSplits(splits) {
     if (!Array.isArray(splits)) return [];
     return splits.map(s => ({ t: Math.floor(Number(s.t) || 0), score: Math.max(0, Math.round(Number(s.score) || 0)) })).filter(s => s.t > 0).slice(0, 3);
   },
   encode(run) {
     const splits = this.cleanSplits(run.splits);
+    const seed = String(run.seed || this.randomSeed()), rules = run.rulesVersion || run.rules || this.rulesVersion();
     const payload = {
       v: 1,
       mode: "endless",
-      seed: String(run.seed || this.randomSeed()),
+      seed,
       ship: run.ship || "balanced",
       score: run.score || 0,
       time: run.time || 0,
       combo: run.combo || 0,
+      rules,
+      sig: run.sig || this.routeSignature(seed, rules),
     };
     if (splits.length) payload.splits = splits;
     const raw = btoa(JSON.stringify(payload)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -241,7 +266,10 @@ const Challenge = {
       while (raw.length % 4) raw += "=";
       const payload = JSON.parse(atob(raw));
       if (!payload || payload.v !== 1 || payload.mode !== "endless" || !payload.seed) return null;
+      payload.rules = payload.rules || 1;
       payload.splits = this.cleanSplits(payload.splits);
+      const route = this.routeStatus(payload);
+      payload.sig = route.code; payload.localSig = route.local; payload.sigOk = route.ok;
       return payload;
     } catch (e) {
       return null;

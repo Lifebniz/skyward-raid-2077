@@ -269,13 +269,19 @@ const game = {
         msg.style.color = "#ff8787"; msg.textContent = "请手动复制文本";
       }
     };
+    const routeText = (payload) => {
+      if (!payload || !Challenge.routeStatus) return "";
+      const route = Challenge.routeStatus(payload);
+      return "航线 " + route.code + (route.ok ? " · 已校验" : " · 规则可能变化");
+    };
     const startCode = (raw) => {
       const payload = Challenge.decode(raw);
       if (!payload) { msg.style.color = "#ff8787"; msg.textContent = "挑战码无效"; return; }
       close(); this.startEndless({ seed: payload.seed, ship: payload.ship, challenge: true, target: payload });
     };
+    const readonlyRoute = opts.code ? routeText(Challenge.decode(opts.code)) : "";
     title.textContent = opts.readonly ? "复制挑战码" : "挑战码 RIVAL";
-    hint.textContent = opts.readonly ? "复制后发给朋友，对方会进入同一种子、同机型的无尽局。" : "粘贴朋友发来的挑战码，或直接开始每日/新挑战。";
+    hint.textContent = (opts.readonly ? "复制后发给朋友，对方会进入同一种子、同机型的无尽局。" : "粘贴朋友发来的挑战码，或直接开始每日/新挑战。") + (readonlyRoute ? "\n" + readonlyRoute : "");
     input.value = opts.code || "";
     input.readOnly = !!opts.readonly;
     overlay.id = "challenge-modal";
@@ -307,8 +313,9 @@ const game = {
           const row = document.createElement("div"), meta = document.createElement("div"), sub = document.createElement("div");
           const ship = CONFIG.ships[r.ship] ? CONFIG.ships[r.ship].name : r.ship;
           const code = r.code || r.lastCode, splits = Challenge.cleanSplits(r.splits || r.lastSplits);
+          const route = routeText(Challenge.decode(code));
           meta.textContent = "最佳 " + (r.score || 0) + " · " + (r.time || 0) + "s · " + ship;
-          sub.textContent = (r.daily ? "每日" : r.seed) + " · 尝试 " + (r.attempts || 1) + (splits.length ? " · 节点 " + splits.map(s => s.t + "s " + s.score).join(" / ") : "");
+          sub.textContent = (r.daily ? "每日" : r.seed) + " · 尝试 " + (r.attempts || 1) + (splits.length ? " · 节点 " + splits.map(s => s.t + "s " + s.score).join(" / ") : "") + (route ? " · " + route : "");
           style(row, { display: "grid", gridTemplateColumns: "1fr 58px 58px", gap: "8px", alignItems: "center", padding: "8px 0", borderTop: "1px solid rgba(255,255,255,.1)" });
           style(meta, { color: "#e9ecef", fontSize: "13px", lineHeight: "1.35" });
           style(sub, { color: "#868e96", fontSize: "12px", lineHeight: "1.35", marginTop: "2px" });
@@ -814,17 +821,20 @@ const game = {
     ctx.fillStyle = "#fff"; ctx.font = "bold 30px 'Segoe UI', sans-serif"; ctx.fillText("最终得分  " + this.easedCount(r.final, 1.3), cx, 384);
     if (target) {
       const ship = CONFIG.ships[target.ship] ? CONFIG.ships[target.ship].name : (target.ship || "未知机型");
+      const route = Challenge.routeStatus ? Challenge.routeStatus(target) : null;
       const splitText = targetSplits.map(s => {
         const own = ownSplits.find(o => o.t === s.t);
         return s.t + "s " + (own ? signed(own.score - s.score) : "未到");
       }).join(" / ");
-      const boxH = targetSplits.length ? 70 : 50;
+      const boxH = 50 + (splitText ? 20 : 0) + (route ? 20 : 0);
       ctx.fillStyle = "rgba(8,16,28,.72)"; UI.roundRect(ctx, cx - 178, infoY - 20, 356, boxH, 10); ctx.fill();
       ctx.strokeStyle = r.final >= targetScore ? "rgba(56,217,169,.72)" : "rgba(255,212,59,.72)"; ctx.lineWidth = 1.2; UI.roundRect(ctx, cx - 178, infoY - 20, 356, boxH, 10); ctx.stroke();
       ctx.fillStyle = r.final >= targetScore ? "#38d9a9" : "#ffd43b"; ctx.font = "bold 16px 'Segoe UI', sans-serif";
-      ctx.fillText("对手 " + targetScore + " · " + (target.time || 0) + "s · 连击 " + (target.combo || 0), cx, infoY);
+      ctx.fillText("对手 " + targetScore + " · " + (target.time || 0) + "s" + " · 连击 " + (target.combo || 0), cx, infoY);
       ctx.fillStyle = "#adb5bd"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText(ship + " · 最终差 " + signed(r.final - targetScore), cx, infoY + 20);
-      if (splitText) ctx.fillText("分段差 " + splitText, cx, infoY + 40);
+      let lineY = infoY + 40;
+      if (splitText) { ctx.fillText("分段差 " + splitText, cx, lineY); lineY += 20; }
+      if (route) ctx.fillText("航线 " + route.code + (route.ok ? " · 已校验" : " · 规则可能变化"), cx, lineY);
       infoY += boxH + 10;
     }
     if (r.best && r.best.score) { ctx.fillStyle = r.newBest ? "#38d9a9" : "#74c0fc"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("个人最佳 " + r.best.score + "  ·  " + (r.newBest ? "新纪录" : "差 " + Math.max(0, r.best.score - r.final)), cx, infoY); infoY += 24; }
