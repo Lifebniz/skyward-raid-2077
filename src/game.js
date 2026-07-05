@@ -734,6 +734,12 @@ const game = {
       for (const id of biased) { r -= this.draftCardWeight(id); if (r <= 0) { pick = id; break; } }
       this._chipChoices.push(pick); pool.splice(pool.indexOf(pick), 1);
     }
+    const bonusPool = pool.filter(id => id.startsWith("bonus:"));
+    if (!this._chipChoices.some(id => id.startsWith("bonus:")) && bonusPool.length) {
+      let r = this.rng() * bonusPool.reduce((s, id) => s + this.draftCardWeight(id), 0), pick = bonusPool[0];
+      for (const id of bonusPool) { r -= this.draftCardWeight(id); if (r <= 0) { pick = id; break; } }
+      this._chipChoices.push(pick); pool.splice(pool.indexOf(pick), 1);
+    }
     while (this._chipChoices.length < 3 && pool.length) {
       const total = pool.reduce((s, id) => s + this.draftCardWeight(id), 0);
       if (total <= 0) break;
