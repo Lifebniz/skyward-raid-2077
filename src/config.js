@@ -95,7 +95,7 @@ const CONFIG = {
     sideGuns: { name: "侧翼炮组", desc: "主炮附加斜向火力", color: "#ffd43b", duration: 10, angle: 22 },
     volatileCore: { name: "危险过载", desc: "分数更高,承伤也更高", color: "#ff6b6b", duration: 9, scoreBonus: 0.35, threatGainMult: 1.35, damageTakenMult: 1.18 },
   },
-  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "leech", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "kineticAmmo", "heavyRounds", "armorPiercer", "armorCaliber", "sideCannons", "laserLens", "laserSplitter", "swarmCore", "homingShards", "explosivePayload", "clusterWarheads", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "adrenaline", "emergencyBarrier", "overdrive"],
+  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "leech", "painConverter", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "kineticAmmo", "heavyRounds", "armorPiercer", "armorCaliber", "sideCannons", "laserLens", "laserSplitter", "swarmCore", "homingShards", "explosivePayload", "clusterWarheads", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "adrenaline", "emergencyBarrier", "overdrive"],
   bonuses: {
     damage: { name: "火力校准", desc: "全武器伤害 +15%", color: "#ff6b6b", damageMult: 0.15 },
     fireRate: { name: "加速扳机", desc: "主炮/副武器射速 +10%", color: "#4dabf7", cooldownMult: 0.10 },
@@ -105,6 +105,7 @@ const CONFIG = {
     armorPlating: { name: "钛合装甲", desc: "承受伤害 -8%", color: "#74c0fc", rarity: "稀有", weight: 50, damageReductionMult: 0.08 },
     fieldRepair: { name: "纳米修复", desc: "4秒未受击后每秒回复2%最大生命", color: "#69db7c", rarity: "稀有", weight: 42, healPct: 0.02, delay: 4, tick: 1 },
     leech: { name: "吸能核心", desc: "击杀回复 1 生命", color: "#e64980", heal: 1 },
+    painConverter: { name: "痛觉转换", desc: "受伤时将损失生命转为必杀能量", color: "#f06595", rarity: "稀有", weight: 28, energyPerHp: 1.1, maxEnergy: 35 },
     missileRack: { name: "备用弹仓", desc: "导弹 +1 且装填更快", color: "#ff922b", missileCount: 1, missileCooldownMult: 0.08 },
     pierce: { name: "穿甲弹链", desc: "主炮可额外穿透 1 个目标", color: "#ffd43b", pierce: 1 },
     chainSpark: { name: "连锁电弧", desc: "击杀会电击附近敌人", color: "#74c0fc", damage: 4, range: 230 },
@@ -274,7 +275,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 23, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 24, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

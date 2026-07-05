@@ -62,10 +62,12 @@ for (const a of affixes) {
 
 const bonusKeys = new Set(Object.keys(CONFIG.bonuses));
 for (const key of CONFIG.bonusOrder) assert(bonusKeys.has(key), `bonusOrder references missing bonus ${key}`);
-for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "leech", "armorCaliber"]) {
+for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "leech", "painConverter", "armorCaliber"]) {
   assert(bonusKeys.has(key), `missing survival/build bonus ${key}`);
 }
 assert(CONFIG.bonuses.armorCaliber.hpPerDamage > 0, "armorCaliber hpPerDamage must be positive");
 between(CONFIG.bonuses.armorCaliber.maxDamage, 2, 8, "armorCaliber maxDamage");
+between(CONFIG.bonuses.painConverter.energyPerHp, 0.5, 2, "painConverter energyPerHp");
+between(CONFIG.bonuses.painConverter.maxEnergy, 15, 60, "painConverter maxEnergy");
 
 console.log(`balance check passed: ${CONFIG.endless.events.length} events, ${affixes.length} boss affixes, ${CONFIG.bonusOrder.length} bonuses`);

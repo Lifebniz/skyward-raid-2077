@@ -578,8 +578,8 @@ const game = {
       { name: "激光", color: "#cc5de8", weights: { damage: 1, range: 1, laserLens: 3, laserSplitter: 3, chargeAmp: 1, bossHunter: 1, glassCannon: 1 } },
       { name: "追踪", color: "#4dabf7", weights: { range: 1, fireRate: 1, swarmCore: 3, homingShards: 3, magnetCore: 1, comboBattery: 1, comboSurge: 1 } },
       { name: "导弹", color: "#ff922b", weights: { missileRack: 3, explosivePayload: 3, clusterWarheads: 3, missileInterceptor: 2, fireRate: 1, range: 1, bossHunter: 1 } },
-      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, armorPlating: 3, fieldRepair: 3, leech: 2, salvage: 2, armorCaliber: 2, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1 } },
-      { name: "风险", color: "#ff6b6b", weights: { glassCannon: 3, overdrive: 3, adrenaline: 3, comboSurge: 2, executioner: 1, bossHunter: 1 } },
+      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, armorPlating: 3, fieldRepair: 3, leech: 2, painConverter: 1, salvage: 2, armorCaliber: 2, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1 } },
+      { name: "风险", color: "#ff6b6b", weights: { glassCannon: 3, overdrive: 3, adrenaline: 3, painConverter: 2, comboSurge: 2, executioner: 1, bossHunter: 1 } },
     ].map(r => {
       const score = Object.keys(r.weights).reduce((sum, key) => sum + (source[key] || 0) * r.weights[key], 0);
       const stage = score >= 7 ? "成型" : score >= 3 ? "偏向" : "起步";
@@ -655,6 +655,7 @@ const game = {
     if (["armorPlating"].includes(key)) return "承伤 " + pct(this.damageTakenMult()) + "→" + pct(this.withDraftBonus(key, () => this.damageTakenMult()));
     if (key === "range") return "射程 " + pct(this.rangeMult()) + "→" + pct(this.withDraftBonus(key, () => this.rangeMult()));
     if (key === "magnetCore") return "吸附 " + pct(this.pickupRangeMult()) + "→" + pct(this.withDraftBonus(key, () => this.pickupRangeMult()));
+    if (key === "painConverter") return "每HP能量 +" + num(this.bonusValue(key, "energyPerHp")) + "→+" + num(this.withDraftBonus(key, () => this.bonusValue(key, "energyPerHp")));
     if (key === "sideCannons") return "侧炮对 " + Math.min(this.bonusStacks(key), b.maxPairs) + "→" + Math.min(this.bonusStacks(key) + 1, b.maxPairs);
     if (key === "laserSplitter") return "激光副束 " + Math.min(this.bonusStacks(key), b.maxPairs) + "→" + Math.min(this.bonusStacks(key) + 1, b.maxPairs);
     if (key === "missileRack") return "导弹 +" + this.bonusValue(key, "missileCount") + "→+" + this.withDraftBonus(key, () => this.bonusValue(key, "missileCount"));
@@ -830,6 +831,15 @@ const game = {
       const dx = e.x - src.x, dy = e.y - src.y, rr = range + e.radius;
       if (dx * dx + dy * dy <= rr * rr && e.damage(this.playerDamage(cfg.damage * stacks, e))) this.onEnemyKilled(e);
     }
+  },
+  triggerPainConverter(src, hpLoss) {
+    const stacks = this.bonusStacks("painConverter"), cfg = CONFIG.bonuses.painConverter;
+    if (!stacks || !cfg || !src || hpLoss <= 0) return 0;
+    const gain = Math.min((cfg.maxEnergy || 35) * stacks, Math.round(hpLoss * (cfg.energyPerHp || 1) * stacks));
+    if (gain <= 0) return 0;
+    src.addEnergy(gain);
+    this.floats.push(new FloatText(src.x, src.y - 68, "痛觉 +" + gain + "能量", cfg.color));
+    return gain;
   },
   tryEmergencyBarrier(p) {
     const stacks = this.bonusStacks("emergencyBarrier"), cfg = CONFIG.bonuses.emergencyBarrier;

@@ -118,7 +118,9 @@ class Player {
     const hpBefore = this.hp;
     if (dmg > 0) this.hp -= dmg;
     if (dmg > 0) game.tryLastStand(this);
-    game.recordEndlessDamage(Math.max(0, Math.min(hpBefore, hpBefore - this.hp)), blocked);
+    const hpLoss = Math.max(0, Math.min(hpBefore, hpBefore - this.hp));
+    game.recordEndlessDamage(hpLoss, blocked);
+    if (hpLoss > 0) game.triggerPainConverter(this, hpLoss);
     if (blocked) game.triggerReactiveArmor(this);
     if (dmg > 0) game.tryEmergencyBarrier(this);
     game.onPlayerHit(blocked);
