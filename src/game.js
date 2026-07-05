@@ -812,6 +812,12 @@ const game = {
     this.enemies.push(b); this.boss = b; this.warningTimer = 2.2; this.showDialogue(this.bossDisplayName(b), b.def.taunt, 3.8); return b;
   },
   bossDisplayName(b) { return b && b.affix ? b.affix.name + "·" + b.def.name : b.def.name; },
+  bossAffixHUDText(b) {
+    const a = b && b.affix;
+    if (!a) return "";
+    const cd = a.attack ? " · " + Math.max(0, b._affixTimer || 0).toFixed(1) + "s" : "";
+    return a.name + " · " + (a.desc || "词缀") + cd;
+  },
   applyEndlessBossAffix(b, affix) {
     if (!b || !affix) return;
     b.affix = affix; b._affixTimer = affix.every || 0;
@@ -2341,7 +2347,10 @@ const game = {
       UI.bar(ctx, bx, by, bw, bh, br, bcol, UI.rgba(bcol, .7), { glow: true, glowColor: bcol, glowBlur: 10, pulse: this.boss._enraged ? (0.6 + Math.abs(Math.sin(this.titleT * 8)) * 0.4) : 1 });
       this.boss.def.phases.forEach(p => { if (p.until > 0) { const tx = bx + bw * p.until; ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(tx - 1, by + 2, 2, bh - 4); } });
       ctx.fillStyle = this.boss._enraged ? "#ff3b3b" : "#ff8787"; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.textAlign = "right";
-      ctx.fillText((this.boss._enraged ? "⚠ 狂暴 · " : "") + "BOSS  " + this.boss.def.name, CONFIG.WIDTH - 20, by - 5); ctx.textAlign = "left";
+      ctx.fillText((this.boss._enraged ? "⚠ 狂暴 · " : "") + "BOSS  " + this.bossDisplayName(this.boss), CONFIG.WIDTH - 20, by - 5);
+      const affixText = this.bossAffixHUDText(this.boss);
+      if (affixText) { ctx.fillStyle = this.boss.affix.color || "#adb5bd"; ctx.font = "bold 12px 'Segoe UI', sans-serif"; ctx.fillText(affixText, CONFIG.WIDTH - 20, by + bh + 15); }
+      ctx.textAlign = "left";
     }
 
     // AA:HUD 圆形按钮统一走玻璃质感 roundButton

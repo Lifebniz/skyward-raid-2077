@@ -251,9 +251,9 @@ const CONFIG = {
     boss: {
       firstDelay: 30, interval: 35, hpStep: 0.08, hpStepMax: 12,
       affixes: [
-        { key: "armored", name: "装甲", color: "#74c0fc", hpMult: 0.18, scoreMult: 1.12 },
-        { key: "rapid", name: "急袭", color: "#ff8787", fireMult: 0.82, scoreMult: 1.15 },
-        { key: "prism", name: "棱镜", color: "#cc5de8", attack: "laser", every: 5.5, warn: 0.55, dur: 0.65, width: 42, damageMult: 0.85, scoreMult: 1.16 },
+        { key: "armored", name: "装甲", desc: "生命更高", color: "#74c0fc", hpMult: 0.18, scoreMult: 1.12 },
+        { key: "rapid", name: "急袭", desc: "攻击更快", color: "#ff8787", fireMult: 0.82, scoreMult: 1.15 },
+        { key: "prism", name: "棱镜", desc: "周期瞄准镭射", color: "#cc5de8", attack: "laser", every: 5.5, warn: 0.55, dur: 0.65, width: 42, damageMult: 0.85, scoreMult: 1.16 },
       ],
     },
   },
