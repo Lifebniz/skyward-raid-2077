@@ -7,7 +7,10 @@ const assert = require("assert");
 const sandbox = { console, Math };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync("src/config.js", "utf8") + "\nglobalThis.CONFIG = CONFIG;", sandbox);
+vm.runInContext(fs.readFileSync("src/core.js", "utf8"), sandbox);
+vm.runInContext(fs.readFileSync("src/game.js", "utf8") + "\nglobalThis.game = game;", sandbox);
 const { CONFIG } = sandbox;
+const { game } = sandbox;
 
 const between = (value, min, max, label) => assert(value >= min && value <= max, `${label} ${value} outside ${min}-${max}`);
 const unique = (items, label) => assert.strictEqual(new Set(items).size, items.length, `${label} has duplicate keys`);
@@ -61,6 +64,15 @@ for (const e of CONFIG.endless.events) {
     between(e.warn || 0, 0.4, 1.2, `event ${e.key} laser warn`);
     between(e.width || 0, 20, 70, `event ${e.key} laser width`);
   }
+}
+
+const draftIds = CONFIG.chipOrder.map(k => "chip:" + k).concat(CONFIG.bonusOrder.map(k => "bonus:" + k));
+for (const e of CONFIG.endless.events.filter(e => e.routeBias)) {
+  const matching = draftIds.filter(id => game.draftCardRoute(game.cardInfo(id)) === e.routeBias);
+  assert(matching.length, `event ${e.key} routeBias ${e.routeBias} has no matching draft cards`);
+  game.endless = true; game._endlessEvent = e; game._endlessEventTimer = 10; game.bonuses = {}; game.chips = {}; game._chipChoices = []; game._rng = () => 0.999;
+  game.drawChipChoices();
+  assert(game._chipChoices.some(id => matching.includes(id)), `event ${e.key} draft should include one matching route card`);
 }
 
 const affixes = CONFIG.endless.boss.affixes;
