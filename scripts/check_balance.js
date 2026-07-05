@@ -139,7 +139,7 @@ for (const a of affixes) {
 
 const bonusKeys = new Set(Object.keys(CONFIG.bonuses));
 for (const key of CONFIG.bonusOrder) assert(bonusKeys.has(key), `bonusOrder references missing bonus ${key}`);
-for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "leech", "painConverter", "armorCaliber", "vitalReactor", "shieldAmplifier", "signalFilter"]) {
+for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "leech", "livingArmor", "painConverter", "armorCaliber", "vitalReactor", "shieldAmplifier", "signalFilter"]) {
   assert(bonusKeys.has(key), `missing survival/build bonus ${key}`);
 }
 assert(CONFIG.bonuses.armorCaliber.hpPerDamage > 0, "armorCaliber hpPerDamage must be positive");
@@ -149,6 +149,9 @@ between(CONFIG.bonuses.vitalReactor.damageMult, 0.02, 0.08, "vitalReactor damage
 between(CONFIG.bonuses.vitalReactor.maxDamageMult, 0.1, 0.4, "vitalReactor maxDamageMult");
 between(CONFIG.bonuses.shieldAmplifier.damageMult, 0.08, 0.3, "shieldAmplifier damageMult");
 between(CONFIG.bonuses.signalFilter.jamResist, 0.08, 0.3, "signalFilter jamResist");
+between(CONFIG.bonuses.livingArmor.every, 8, 18, "livingArmor kill interval");
+between(CONFIG.bonuses.livingArmor.hp, 1, 6, "livingArmor hp gain");
+between(CONFIG.bonuses.livingArmor.maxHp, 18, 60, "livingArmor max HP per stack");
 game.bonuses = {}; game._bonusStats = {}; game._bonusHpGain = {}; game.floats = []; game.player = { x: 100, y: 100, hp: 80, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
 game.activateBonus("maxHp");
 game.activateBonus("reinforcedHull");
@@ -156,6 +159,14 @@ assert(game._bonusHpGain.maxHp >= CONFIG.bonuses.maxHp.hp, "maxHp bonus should r
 assert(game._bonusHpGain.reinforcedHull > 0, "reinforcedHull should record HP gain");
 assert(game.bonusHUDText("maxHp").includes("HP"), "HP bonus HUD should show gained HP");
 assert(game.endlessReviewTags({ telemetry: {}, time: 60, bonuses: game.bonuses, bonusHpGain: game._bonusHpGain }).some(t => t.includes("HP")), "endless review should tag HP builds");
+game.bonuses = { livingArmor: 1 }; game._bonusHpGain = {}; game.floats = []; game._bonusKillN = CONFIG.bonuses.livingArmor.every - 1; game.player = { x: 100, y: 100, hp: 80, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
+assert.strictEqual(game.triggerLivingArmorGrowth(), 0, "livingArmor should wait for its kill interval");
+game._bonusKillN++;
+assert.strictEqual(game.triggerLivingArmorGrowth(), CONFIG.bonuses.livingArmor.hp, "livingArmor should grow max HP on interval kills");
+assert(game.player.maxHp > 100 && game._bonusHpGain.livingArmor > 0, "livingArmor should record gained max HP");
+game._bonusHpGain.livingArmor = CONFIG.bonuses.livingArmor.maxHp;
+game._bonusKillN += CONFIG.bonuses.livingArmor.every;
+assert.strictEqual(game.triggerLivingArmorGrowth(), 0, "livingArmor should respect max HP cap");
 game.bonuses = { shieldAmplifier: 1 }; game.chips = {}; game.player = { hp: 100, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
 assert.strictEqual(game.playerDamage(100), 100, "shieldAmplifier should not add damage without shield");
 game.player.shieldHp = 10;
