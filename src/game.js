@@ -639,6 +639,9 @@ const game = {
     const info = this.routePreviewInfo(card);
     return info ? "路线 " + info.top.name + " +" + info.top.gain + (info.unlocked ? " · 解锁共鸣" : "") : "";
   },
+  chipRouteName(key) {
+    return ({ laserFocus: "激光", chargeCore: "激光", homingSwarm: "追踪", missileBarrage: "导弹", capacitor: "生存", sideGuns: "主炮", volatileCore: "风险" })[key] || "";
+  },
   withDraftBonus(key, fn) {
     const old = this.bonuses[key] || 0;
     this.bonuses[key] = old + 1;
@@ -699,7 +702,8 @@ const game = {
     const info = this.routePreviewInfo(card), top = this.buildRouteSummary().top;
     if (info && info.unlocked) w *= 1.65;
     else if (info && top.score >= 3 && info.top.name === top.name) w *= 1.35;
-    if (info && info.top.name === this.activeEventRouteBias()) w *= 1.2;
+    const eventBias = this.activeEventRouteBias(), cardRoute = card.type === "chip" ? this.chipRouteName(card.key) : (info && info.top.name);
+    if (eventBias && cardRoute === eventBias) w *= 1.55;
     return w;
   },
   chipChoiceRect(i) { return { x: 40, y: 238 + i * 104, w: CONFIG.WIDTH - 80, h: 92 }; },
@@ -1532,7 +1536,7 @@ const game = {
     const effectText = this.routeEffectText(), eventBias = this.activeEventRouteBias();
     const meta = [];
     if (effectText) meta.push("共鸣 " + effectText);
-    if (eventBias) meta.push("空域偏向 " + eventBias);
+    if (eventBias) meta.push("空域偏向 " + eventBias + " 卡牌↑");
     if (meta.length) { ctx.fillStyle = "#adb5bd"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText(meta.join(" · "), x + 16, y + 45); }
     ctx.fillStyle = "#adb5bd"; ctx.font = "13px 'Segoe UI', sans-serif";
     if (!keys.length && !active.length) ctx.fillText("暂无永久 BONUS", x + 16, y + 62);
