@@ -770,7 +770,7 @@ const game = {
   claimChipReward() {
     if (this.endless) {
       if (!this.canClaimChipReward()) return false;
-      this._nextChipDraftAt = this._endlessT + (CONFIG.powerup.chipDraftInterval || 25);
+      this._nextChipDraftAt = this._endlessT + (CONFIG.powerup.chipDraftInterval || 30);
       this.beginChipDraft(); return true;
     }
     const key = this.activateNextChip(), c = CONFIG.chips[key];
@@ -1548,7 +1548,7 @@ const game = {
     ctx.fillStyle = "rgba(0,0,0,.72)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
     ctx.textAlign = "center";
     ctx.fillStyle = "#fff"; ctx.font = "bold 34px 'Segoe UI', sans-serif"; ctx.fillText("选择本局强化", cx, 166);
-    ctx.fillStyle = "#adb5bd"; ctx.font = "15px 'Segoe UI', sans-serif"; ctx.fillText("本次奖励", cx, 196);
+    ctx.fillStyle = "#adb5bd"; ctx.font = "15px 'Segoe UI', sans-serif"; ctx.fillText("本次奖励 · 每" + (CONFIG.powerup.chipDraftInterval || 30) + "秒一次", cx, 196);
     for (let i = 0; i < 3; i++) {
       const card = this.cardInfo(this._chipChoices[i] || "");
       if (!card) continue;
@@ -2431,19 +2431,32 @@ const game = {
     const e = this.activeEndlessEvent();
     if (!e) return;
     const text = e.name + " " + Math.ceil(this._endlessEventTimer) + "s";
+    const detail = this.endlessEventHUDDetail(e);
     const x = CONFIG.WIDTH / 2, y = this.boss ? 122 : 88;
     ctx.save();
     ctx.font = "bold 13px 'Segoe UI', sans-serif";
-    const w = Math.min(CONFIG.WIDTH - 64, ctx.measureText(text).width + 22), h = 24;
+    const w = Math.min(CONFIG.WIDTH - 64, Math.max(ctx.measureText(text).width, detail ? ctx.measureText(detail).width : 0) + 22), h = detail ? 40 : 24;
     ctx.fillStyle = "rgba(8, 16, 28, .74)"; UI.roundRect(ctx, x - w / 2, y - h + 4, w, h, 8); ctx.fill();
     ctx.strokeStyle = UI.rgba(e.color || "#ffd43b", .82); ctx.lineWidth = 1.2; UI.roundRect(ctx, x - w / 2, y - h + 4, w, h, 8); ctx.stroke();
-    ctx.textAlign = "center"; ctx.fillStyle = e.color || "#ffd43b"; ctx.fillText(text, x, y - 4);
+    ctx.textAlign = "center"; ctx.fillStyle = e.color || "#ffd43b"; ctx.fillText(text, x, y - (detail ? 18 : 4));
+    if (detail) { ctx.fillStyle = "#ced4da"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText(UI.wrapText(ctx, detail, w - 18, 1)[0] || detail, x, y - 3); }
     ctx.restore();
+  },
+  endlessEventHUDDetail(e) {
+    if (!e) return "";
+    const parts = [e.sub || ""].filter(Boolean);
+    const pct = v => Math.round(v * 100) + "%";
+    if (e.scoreBonus) parts.push("分+" + pct(e.scoreBonus));
+    if (e.threatGainMult && e.threatGainMult > 1) parts.push("威胁+" + pct(e.threatGainMult - 1));
+    if (e.enemyHpMult) parts.push("敌血+" + pct(e.enemyHpMult));
+    if (e.powerupChanceAdd) parts.push("补给+" + pct(e.powerupChanceAdd));
+    return parts.join(" · ");
   },
   drawDraftCooldownHUD(ctx) {
     if (!this.endless) return;
     const wait = this.chipRewardWait(), ready = wait <= 0;
-    const text = ready ? "强化就绪" : "强化 " + Math.ceil(wait) + "s";
+    const cadence = (CONFIG.powerup.chipDraftInterval || 30) + "秒/次";
+    const text = (ready ? "强化就绪" : "强化 " + Math.ceil(wait) + "s") + " · " + cadence;
     ctx.save();
     ctx.font = "bold 12px 'Segoe UI', sans-serif";
     const w = Math.max(86, ctx.measureText(text).width + 18), h = 22;
