@@ -67,9 +67,19 @@ for (const e of CONFIG.endless.events) {
 }
 
 const draftIds = CONFIG.chipOrder.map(k => "chip:" + k).concat(CONFIG.bonusOrder.map(k => "bonus:" + k));
-game.endless = true; game._endlessEvent = null; game._endlessEventTimer = 0; game.bonuses = {}; game.chips = {}; game._chipChoices = []; game._rng = () => 0.999;
+const hasSurvivalDraft = () => game._chipChoices.some(id => id.startsWith("bonus:") && game.draftCardRoute(game.cardInfo(id)) === "生存");
+game.endless = true; game.player = { power: CONFIG.powerup.chipMinPower }; game._endlessEvent = null; game._endlessEventTimer = 0; game.bonuses = {}; game.chips = {}; game._chipChoices = []; game._rng = () => 0.999;
+assert.strictEqual(game.canDrop("chip"), false, "endless should use timed drafts instead of chip drops");
 game.drawChipChoices();
 assert(game._chipChoices.some(id => id.startsWith("bonus:")), "endless draft should include one permanent bonus option");
+assert(hasSurvivalDraft(), "endless draft should include one survival/HP option");
+game.state = "playing"; game._endlessT = CONFIG.powerup.chipMinEndlessTime - 0.01; game._nextChipDraftAt = 0; game._endlessStats = { drafts: 0 };
+assert.strictEqual(game.updateChipDraftTimer(), false, "draft timer should wait until the fixed delay");
+game._endlessT = CONFIG.powerup.chipMinEndlessTime;
+assert.strictEqual(game.updateChipDraftTimer(), true, "draft timer should start a draft at the fixed delay");
+assert.strictEqual(game.state, "chipselect", "draft timer should open selection UI");
+assert.strictEqual(game._endlessStats.drafts, 1, "timed draft should be counted once");
+assert.strictEqual(game._nextChipDraftAt, CONFIG.powerup.chipMinEndlessTime + CONFIG.powerup.chipDraftInterval, "next draft should be one fixed interval later");
 for (const e of CONFIG.endless.events.filter(e => e.routeBias)) {
   const matching = draftIds.filter(id => game.draftCardRoute(game.cardInfo(id)) === e.routeBias);
   assert(matching.length, `event ${e.key} routeBias ${e.routeBias} has no matching draft cards`);
@@ -77,6 +87,7 @@ for (const e of CONFIG.endless.events.filter(e => e.routeBias)) {
   game.drawChipChoices();
   assert(game._chipChoices.some(id => matching.includes(id)), `event ${e.key} draft should include one matching route card`);
   assert(game._chipChoices.some(id => id.startsWith("bonus:")), `event ${e.key} draft should include one permanent bonus option`);
+  assert(hasSurvivalDraft(), `event ${e.key} draft should include one survival/HP option`);
 }
 
 const affixes = CONFIG.endless.boss.affixes;

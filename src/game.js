@@ -257,6 +257,7 @@ const game = {
     this.recordEndlessPressure(dt);
     this.recordChallengeSplits();
     this.recordEndlessTelemetry();
+    if (this.updateChipDraftTimer()) return;
     this.updateEndlessEvent(dt);
     this.updateRivalInterference();
     this.world = 1 + (Math.floor(this._endlessT / CONFIG.endless.worldInterval) % CONFIG.themes.length);   // 背景随时间轮换
@@ -728,25 +729,22 @@ const game = {
     const skip = new Set(exclude);
     const pool = CONFIG.chipOrder.map(k => "chip:" + k).concat(CONFIG.bonusOrder.map(k => "bonus:" + k)).filter(id => !skip.has(id) && this.canDraftCard(id));
     this._chipChoices = [];
+    const takeWeighted = (items) => {
+      const total = items.reduce((s, id) => s + this.draftCardWeight(id), 0);
+      if (total <= 0) return false;
+      let r = this.rng() * total, pick = items[0];
+      for (const id of items) { r -= this.draftCardWeight(id); if (r <= 0) { pick = id; break; } }
+      this._chipChoices.push(pick); pool.splice(pool.indexOf(pick), 1);
+      return true;
+    };
+    const hasBonusRoute = route => this._chipChoices.some(id => id.startsWith("bonus:") && this.draftCardRoute(this.cardInfo(id)) === route);
     const bias = this.activeEventRouteBias(), biased = bias ? pool.filter(id => this.draftCardRoute(this.cardInfo(id)) === bias) : [];
-    if (biased.length) {
-      let r = this.rng() * biased.reduce((s, id) => s + this.draftCardWeight(id), 0), pick = biased[0];
-      for (const id of biased) { r -= this.draftCardWeight(id); if (r <= 0) { pick = id; break; } }
-      this._chipChoices.push(pick); pool.splice(pool.indexOf(pick), 1);
-    }
+    if (biased.length) takeWeighted(biased);
     const bonusPool = pool.filter(id => id.startsWith("bonus:"));
-    if (!this._chipChoices.some(id => id.startsWith("bonus:")) && bonusPool.length) {
-      let r = this.rng() * bonusPool.reduce((s, id) => s + this.draftCardWeight(id), 0), pick = bonusPool[0];
-      for (const id of bonusPool) { r -= this.draftCardWeight(id); if (r <= 0) { pick = id; break; } }
-      this._chipChoices.push(pick); pool.splice(pool.indexOf(pick), 1);
-    }
-    while (this._chipChoices.length < 3 && pool.length) {
-      const total = pool.reduce((s, id) => s + this.draftCardWeight(id), 0);
-      if (total <= 0) break;
-      let r = this.rng() * total, i = 0;
-      for (; i < pool.length - 1; i++) { r -= this.draftCardWeight(pool[i]); if (r <= 0) break; }
-      this._chipChoices.push(pool.splice(i, 1)[0]);
-    }
+    if (!this._chipChoices.some(id => id.startsWith("bonus:")) && bonusPool.length) takeWeighted(bonusPool);
+    const survivalPool = pool.filter(id => id.startsWith("bonus:") && this.draftCardRoute(this.cardInfo(id)) === "生存");
+    if (!hasBonusRoute("生存") && survivalPool.length) takeWeighted(survivalPool);
+    while (this._chipChoices.length < 3 && pool.length && takeWeighted(pool)) {}
   },
   beginChipDraft() {
     if (!this.endless) return this.activateNextChip();
@@ -797,6 +795,10 @@ const game = {
   chipRewardWait() {
     if (!this.endless) return 0;
     return Math.max(0, Math.max(CONFIG.powerup.chipMinEndlessTime || 0, this._nextChipDraftAt || 0) - this._endlessT);
+  },
+  updateChipDraftTimer() {
+    if (!this.endless || this.state !== "playing" || !this.canClaimChipReward()) return false;
+    return this.claimChipReward();
   },
   claimChipReward() {
     if (this.endless) {
@@ -1245,7 +1247,7 @@ const game = {
   canDrop(kind) {
     if (kind !== "chip") return !!kind;
     if (!this.player) return false;
-    if (this.endless) return this.canClaimChipReward();
+    if (this.endless) return false;
     return this.player.power >= CONFIG.powerup.chipMinPower;
   },
   chooseDrop() {
@@ -1267,7 +1269,7 @@ const game = {
     const p = this.player, o = CONFIG.overflow;
     if (kind === "power") {
       if (p.power >= CONFIG.player.maxPower && p.overcharge >= CONFIG.player.maxOvercharge) {
-        if (!this.claimChipReward()) this.grantOverflowScore("#38d9a9");
+        if (this.endless || !this.claimChipReward()) this.grantOverflowScore("#38d9a9");
       }
       else {
         const wasMax = p.power >= CONFIG.player.maxPower;
@@ -1275,13 +1277,13 @@ const game = {
         this.floats.push(new FloatText(p.x, p.y - 34, wasMax ? "过载 +" + p.overcharge : "火力 +1", wasMax ? "#74c0fc" : "#38d9a9"));
       }
     } else if (kind === "chip") {
-      if (!this.claimChipReward()) this.grantOverflowScore("#4dabf7");
+      if (this.endless || !this.claimChipReward()) this.grantOverflowScore("#4dabf7");
     } else if (kind === "bomb") {
       if (p.bombs >= CONFIG.player.maxBombs) { p.addEnergy(o.bombEnergy); this.floats.push(new FloatText(p.x, p.y - 34, "能量 +" + o.bombEnergy, "#ffd43b")); this.addThreat(o.threatGain); this.grantOverflowScore("#ffd43b"); }
       else { p.addBomb(); this.floats.push(new FloatText(p.x, p.y - 34, "炸弹 +1", "#cc5de8")); }
     } else if (kind === "wing") {
       if (p.wings >= CONFIG.wingMax) {
-        if (this.endless) { if (!this.claimChipReward()) this.grantOverflowScore("#dee2e6"); }
+        if (this.endless) this.grantOverflowScore("#dee2e6");
         else { this.activateChip(o.wingChip, "侧翼炮组"); this.grantOverflowScore("#dee2e6"); }
       }
       else { p.addWing(); this.floats.push(new FloatText(p.x, p.y - 34, "僚机 +1", "#dee2e6")); }
@@ -1318,7 +1320,7 @@ const game = {
     this.updateDepthSystems(dt);
 
     director.update(dt);
-    if (this.endless) this.updateEndless(dt);
+    if (this.endless) { this.updateEndless(dt); if (this.state !== "playing") return; }
     else {   // Q:常规关卡(含刷分续关)每隔固定秒数自动刷新一个道具;无尽模式不刷新(有自己的掉落节奏)
       this._itemSpawnTimer -= dt;
       if (this._itemSpawnTimer <= 0) { this._itemSpawnTimer = this.itemAutoInterval(); this.spawnPowerUp(30 + this.rng() * (CONFIG.WIDTH - 60), this.chooseDrop()); }
