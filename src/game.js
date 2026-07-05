@@ -561,6 +561,20 @@ const game = {
     const ready = this.buildRouteSummary(source).routes.filter(r => r.score >= 7).slice(0, limit).map(r => effects[r.name]);
     return ready.length ? ready.join(" / ") : "";
   },
+  endlessReviewTags(r) {
+    const tele = r.telemetry || {}, time = Math.max(1, r.time || 1), routes = this.buildRouteSummary(r.bonuses || {}).routes;
+    const ready = routes.filter(x => x.score >= 7).map(x => x.name).slice(0, 2), tags = [];
+    if (ready.length) tags.push("构筑成型 " + ready.join("/"));
+    else tags.push(routes[0] && routes[0].score >= 3 ? "路线偏向 " + routes[0].name : "构筑未成型");
+    const hitsPerMin = (tele.hits || 0) / (time / 60), dmgPerMin = (tele.damageTaken || 0) / (time / 60);
+    if (hitsPerMin >= 4 || dmgPerMin >= 90) tags.push("承伤偏高");
+    else if (time >= 60 && hitsPerMin <= 1.5) tags.push("走位稳定");
+    if ((tele.bossKills || 0) >= 3) tags.push("Boss处理强");
+    else if ((r.bossAffixes || []).length && !(tele.bossKills || 0)) tags.push("Boss压力高");
+    if ((tele.drafts || 0) >= 3) tags.push((tele.picks || 0) >= tele.drafts ? "选择充分" : "跳过偏多");
+    if ((r.maxThreat || 0) >= 4 && hitsPerMin <= 2.2) tags.push("高威胁掌控");
+    return tags.slice(0, 4);
+  },
   routeScore(name) {
     const r = this.buildRouteSummary().routes.find(x => x.name === name);
     return r ? r.score : 0;
@@ -1433,11 +1447,13 @@ const game = {
     const bossAffixText = r.bossAffixes && r.bossAffixes.length ? r.bossAffixes.slice(-3).join(" / ") : "无";
     const routeText = this.buildRouteText(r.bonuses || {}, 2);
     const routeEffect = this.routeEffectText(r.bonuses || {}, 2);
+    const reviewText = this.endlessReviewTags(r).join(" · ");
     ctx.fillStyle = "#adb5bd"; ctx.font = "13px 'Segoe UI', sans-serif";
-    if (compactResult) { ctx.fillText(fitLine("威胁 Lv." + (r.maxThreat || 0) + " · 路线 " + routeText + (routeEffect ? " · 共鸣 " + routeEffect : "") + " · Boss词缀 " + bossAffixText + " · BONUS " + bonusText, 356), cx, infoY); infoY += 18; }
+    if (compactResult) { ctx.fillText(fitLine("复盘 " + reviewText + " · 路线 " + routeText + " · Boss词缀 " + bossAffixText + " · BONUS " + bonusText, 356), cx, infoY); infoY += 18; }
     else {
       ctx.fillText(fitLine("最高威胁 Lv." + (r.maxThreat || 0) + " · 路线 " + routeText + (routeEffect ? " · 共鸣 " + routeEffect : "") + " · 事件 " + eventText, 356), cx, infoY); infoY += 18;
       ctx.fillText(fitLine("Boss词缀 " + bossAffixText, 356), cx, infoY); infoY += 18;
+      if (reviewText) { ctx.fillText(fitLine("复盘 " + reviewText, 356), cx, infoY); infoY += 18; }
       ctx.fillText("芯片 " + chipText, cx, infoY); infoY += 22;
       ctx.fillText("BONUS " + bonusText, cx, infoY); infoY += 22;
     }
