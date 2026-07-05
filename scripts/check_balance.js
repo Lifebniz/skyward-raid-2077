@@ -69,9 +69,12 @@ for (const a of affixes) {
   assert(a.name && a.desc, `boss affix ${a.key} needs readable text`);
   if (a.scoreMult) between(a.scoreMult, 1, 1.35, `boss affix ${a.key} scoreMult`);
   if (a.attack) {
-    assert(["laser", "escort", "repair"].includes(a.attack), `boss affix ${a.key} has unknown attack ${a.attack}`);
+    assert(["laser", "ring", "escort", "repair"].includes(a.attack), `boss affix ${a.key} has unknown attack ${a.attack}`);
     between(a.every || 0, 3, 12, `boss affix ${a.key} interval`);
   }
+  if (a.count) between(a.count, 6, 24, `boss affix ${a.key} count`);
+  if (a.speed) between(a.speed, 140, 360, `boss affix ${a.key} speed`);
+  if (a.damageMult) between(a.damageMult, 0.5, 1.2, `boss affix ${a.key} damageMult`);
   if (a.enemy) assert(enemyKeys.has(a.enemy), `boss affix ${a.key} references missing enemy ${a.enemy}`);
   if (a.elite) assert(eliteTypes.includes(a.elite), `boss affix ${a.key} references missing elite ${a.elite}`);
   if (a.healPct) between(a.healPct, 0.01, 0.06, `boss affix ${a.key} healPct`);

@@ -984,6 +984,7 @@ const game = {
     if (b._affixTimer > 0) return;
     b._affixTimer = a.every || 5;
     if (a.attack === "laser") this.spawnBossLaser(this.player ? this.player.x : b.x, a.warn || 0.55, a.dur || 0.65, a.width || 42, b.bulletDamage * (a.damageMult || 1));
+    else if (a.attack === "ring") this.fireRing(b.x, b.y, a.count || 12, a.speed || 220, b.bulletDamage * (a.damageMult || 1));
     else if (a.attack === "escort") this.spawnBossEscort(b, a);
     else if (a.attack === "repair" && !this.repairBoss(b, a)) return;
     this.spawnShockwave(b.x, b.y, b.radius * 1.8, a.color);
