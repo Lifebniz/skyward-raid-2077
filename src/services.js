@@ -71,6 +71,9 @@ const Music = {
     this.applyVolume();
     if (autoplay) this.resume();
   },
+  title() {
+    return (this.tracks[this.index] && this.tracks[this.index].title) || "BGM";
+  },
   next() {
     this.load(this.index + 1, this.playing && this.enabled && this.volume > 0);
   },

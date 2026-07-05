@@ -1087,15 +1087,16 @@ const game = {
     return {
       sfxVolume:   { x: 110, y: 214, w: 320, h: 24 },   // JJ:音效音量滑轨
       musicVolume: { x: 110, y: 280, w: 320, h: 24 },   // JJ:音乐音量滑轨(独立于音效)
-      sound:    { x: W / 2 - 60, y: 346, w: 120, h: 44 },
-      music:    { x: W / 2 - 60, y: 412, w: 120, h: 44 },
+      nextTrack:{ x: W / 2 + 52, y: 318, w: 120, h: 38 },
+      sound:    { x: W / 2 - 60, y: 362, w: 120, h: 44 },
+      music:    { x: W / 2 - 60, y: 420, w: 120, h: 44 },
       haptics:  { x: W / 2 - 60, y: 478, w: 120, h: 44 },
-      hidewings:{ x: W / 2 - 60, y: 544, w: 120, h: 44 },
-      controlMode: { x: W / 2 - 80, y: 610, w: 160, h: 44 },   // KK:操作方式(拖动跟随/虚拟摇杆)二选一
-      exportSave: { x: W / 2 - 130, y: 686, w: 124, h: 44 },   // PP:存档导入导出
-      importSave: { x: W / 2 + 6, y: 686, w: 124, h: 44 },
-      reset:    { x: W / 2 - 130, y: 746, w: 260, h: 48 },
-      back:     { x: W / 2 - 100, y: 804, w: 200, h: 52 },
+      hidewings:{ x: W / 2 - 60, y: 536, w: 120, h: 44 },
+      controlMode: { x: W / 2 - 80, y: 594, w: 160, h: 44 },   // KK:操作方式(拖动跟随/虚拟摇杆)二选一
+      exportSave: { x: W / 2 - 130, y: 668, w: 124, h: 44 },   // PP:存档导入导出
+      importSave: { x: W / 2 + 6, y: 668, w: 124, h: 44 },
+      reset:    { x: W / 2 - 130, y: 728, w: 260, h: 48 },
+      back:     { x: W / 2 - 100, y: 786, w: 200, h: 52 },
     };
   },
   setSfxVolumeFromX(px) { const r = this.settingsRects().sfxVolume; Settings.set("sfxVolume", clamp((px - r.x) / r.w, 0, 1)); },
@@ -1106,6 +1107,7 @@ const game = {
     const inSlider = (r) => px >= r.x - 10 && px <= r.x + r.w + 10 && py >= r.y - 16 && py <= r.y + r.h + 16;
     if (inSlider(R.sfxVolume))   { this._sliderDrag = "sfx"; this.setSfxVolumeFromX(px); this._resetArmed = false; return; }
     if (inSlider(R.musicVolume)) { this._sliderDrag = "music"; this.setMusicVolumeFromX(px); this._resetArmed = false; return; }
+    if (inR(R.nextTrack)) { this._resetArmed = false; Music.next(); if (Settings.data.music) Music.play(); Sound.powerup(); return; }
     if (inR(R.sound))   { Settings.set("sound", !Settings.data.sound); this._resetArmed = false; return; }
     if (inR(R.music))   { Settings.set("music", !Settings.data.music); if (Settings.data.music) Music.play(); else Music.stop(); this._resetArmed = false; return; }
     if (inR(R.haptics)) { Settings.set("haptics", !Settings.data.haptics); if (Settings.data.haptics) Haptics.buzz(30); this._resetArmed = false; return; }
@@ -1140,6 +1142,8 @@ const game = {
     };
     slider(R.sfxVolume, "音效音量", Settings.data.sfxVolume);
     slider(R.musicVolume, "音乐音量", Settings.data.musicVolume);
+    ctx.textAlign = "left"; ctx.fillStyle = "#adb5bd"; ctx.font = "15px 'Segoe UI', sans-serif"; ctx.fillText("当前音乐: " + Music.title(), 110, R.nextTrack.y + 25);
+    UI.button(ctx, R.nextTrack, { label: "下一首", color: "#4dabf7", active: Settings.data.music, font: 15, radius: 10 });
     // 开关按钮(现代)+ 左侧标签
     const toggle = (r, label, on) => {
       ctx.textAlign = "left"; ctx.fillStyle = "#adb5bd"; ctx.font = "19px 'Segoe UI', sans-serif"; ctx.fillText(label, cx - 200, r.y + r.h / 2 + 6);
@@ -1153,7 +1157,7 @@ const game = {
     { const isJoy = Settings.data.controlMode === "joystick", r = R.controlMode;
       ctx.textAlign = "left"; ctx.fillStyle = "#adb5bd"; ctx.font = "19px 'Segoe UI', sans-serif"; ctx.fillText("操作方式", cx - 200, r.y + r.h / 2 + 6);
       UI.button(ctx, r, { label: isJoy ? "虚拟摇杆" : "拖动跟随", color: isJoy ? "#ff922b" : "#4dabf7", active: true, font: 16, radius: 11 }); }
-    ctx.textAlign = "center"; ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("上次难度会被记住 · 当前:" + CONFIG.difficulties[Settings.data.diff].name, cx, 672);
+    ctx.textAlign = "center"; ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("上次难度会被记住 · 当前:" + CONFIG.difficulties[Settings.data.diff].name, cx, 654);
     // PP:导出/导入存档(弹窗展示/粘贴 JSON 文本,零依赖不用文件下载)
     UI.button(ctx, R.exportSave, { label: "导出存档", color: "#4dabf7", font: 15, radius: 11 });
     UI.button(ctx, R.importSave, { label: "导入存档", color: "#4dabf7", font: 15, radius: 11 });
