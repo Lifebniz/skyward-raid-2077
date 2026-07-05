@@ -45,8 +45,12 @@ const drops = new Set(["power", "heal", "bomb", "wing", "chip"]);
 for (const e of CONFIG.endless.events) {
   assert(e.name && e.sub, `event ${e.key} needs readable text`);
   if (e.routeBias) assert(routeNames.has(e.routeBias), `event ${e.key} has invalid routeBias ${e.routeBias}`);
+  if (e.minTime != null) between(e.minTime, 0, 300, `event ${e.key} minTime`);
   if (e.enemyType) assert(enemyKeys.has(e.enemyType), `event ${e.key} references missing enemy ${e.enemyType}`);
   if (e.enemyChance != null) between(e.enemyChance, 0, 0.75, `event ${e.key} enemyChance`);
+  if (e.spawnBonus != null) between(e.spawnBonus, 0, 3, `event ${e.key} spawnBonus`);
+  if (e.scoreBonus != null) between(e.scoreBonus, 0, 0.35, `event ${e.key} scoreBonus`);
+  if (e.threatGainMult != null) between(e.threatGainMult, 1, 1.5, `event ${e.key} threatGainMult`);
   if (e.forceDrop) assert(drops.has(e.forceDrop), `event ${e.key} has invalid forceDrop ${e.forceDrop}`);
   if (e.powerupChanceAdd != null) between(CONFIG.endless.powerupChance + e.powerupChanceAdd, 0, 0.4, `event ${e.key} total powerup chance`);
   if (e.enemyHpMult != null) between(e.enemyHpMult, 0, 0.6, `event ${e.key} enemyHpMult`);

@@ -263,6 +263,7 @@ const CONFIG = {
       { key: "ionStorm", name: "离子风暴", color: "#cc5de8", sub: "周期镭射航道", routeBias: "激光", laserEvery: 4.2, laserDelay: 1.2, warn: 0.72, dur: 0.5, width: 34, damage: 7, jitter: 190 },
       { key: "jammerCloud", name: "扰频云层", color: "#15aabf", sub: "干扰机增多", routeBias: "追踪", spawnBonus: 1, jammerChance: 0.42 },
       { key: "sniperLockdown", name: "狙击封锁", color: "#e64980", sub: "狙击机增多,分数提升", routeBias: "主炮", minTime: 90, enemyType: "sniper", enemyChance: 0.46, spawnBonus: 1, powerupChanceAdd: 0.04, scoreBonus: 0.12 },
+      { key: "minefield", name: "爆雷空域", color: "#fab005", sub: "爆雷机增多,分数和威胁提升", routeBias: "导弹", minTime: 130, enemyType: "detonator", enemyChance: 0.44, spawnBonus: 1, scoreBonus: 0.16, threatGainMult: 1.18 },
     ],
     boss: {
       firstDelay: 30, interval: 35, hpStep: 0.08, hpStepMax: 12,
@@ -276,7 +277,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 26, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 27, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
