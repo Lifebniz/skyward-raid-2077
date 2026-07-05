@@ -228,15 +228,16 @@ const game = {
     let old = document.getElementById("challenge-modal");
     if (old) old.remove();
     const overlay = document.createElement("div"), panel = document.createElement("div"), title = document.createElement("div"), hint = document.createElement("div");
-    const input = document.createElement("textarea"), msg = document.createElement("div"), actions = document.createElement("div");
+    const input = document.createElement("textarea"), msg = document.createElement("div"), actions = document.createElement("div"), history = document.createElement("div");
     const style = (el, css) => Object.assign(el.style, css);
     style(overlay, { position: "fixed", inset: "0", zIndex: "50", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,.55)", color: "#fff", fontFamily: "'Segoe UI', sans-serif" });
-    style(panel, { width: "min(88vw, 380px)", background: "rgba(12,16,24,.96)", border: "1px solid rgba(255,255,255,.24)", borderRadius: "12px", boxShadow: "0 14px 40px rgba(0,0,0,.45)", padding: "18px" });
+    style(panel, { width: "min(88vw, 380px)", maxHeight: "88vh", overflowY: "auto", background: "rgba(12,16,24,.96)", border: "1px solid rgba(255,255,255,.24)", borderRadius: "12px", boxShadow: "0 14px 40px rgba(0,0,0,.45)", padding: "18px" });
     style(title, { fontSize: "22px", fontWeight: "700", color: "#ffd43b", marginBottom: "8px" });
     style(hint, { fontSize: "13px", lineHeight: "1.45", color: "#ced4da", marginBottom: "10px" });
     style(input, { width: "100%", minHeight: opts.readonly ? "92px" : "118px", boxSizing: "border-box", resize: "vertical", borderRadius: "8px", border: "1px solid rgba(255,255,255,.24)", background: "rgba(0,0,0,.32)", color: "#fff", padding: "10px", fontSize: "13px", outline: "none" });
     style(msg, { minHeight: "20px", margin: "8px 0", color: "#ff8787", fontSize: "13px" });
     style(actions, { display: "grid", gridTemplateColumns: opts.readonly ? "1fr 1fr" : "1fr 1fr 1fr 1fr", gap: "8px" });
+    style(history, { marginTop: "14px", display: "grid", gap: "8px" });
     const button = (label, color, fn) => {
       const b = document.createElement("button");
       b.textContent = label;
@@ -245,13 +246,18 @@ const game = {
       return b;
     };
     const close = () => overlay.remove();
+    const startCode = (raw) => {
+      const payload = Challenge.decode(raw);
+      if (!payload) { msg.style.color = "#ff8787"; msg.textContent = "挑战码无效"; return; }
+      close(); this.startEndless({ seed: payload.seed, ship: payload.ship, challenge: true, target: payload });
+    };
     title.textContent = opts.readonly ? "复制挑战码" : "挑战码 RIVAL";
     hint.textContent = opts.readonly ? "复制后发给朋友，对方会进入同一种子、同机型的无尽局。" : "粘贴朋友发来的挑战码，或直接开始每日/新挑战。";
     input.value = opts.code || "";
     input.readOnly = !!opts.readonly;
     overlay.id = "challenge-modal";
     overlay.onclick = (e) => { if (e.target === overlay) close(); };
-    panel.append(title, hint, input, msg, actions); overlay.append(panel); document.body.appendChild(overlay);
+    panel.append(title, hint, input, msg, actions, history); overlay.append(panel); document.body.appendChild(overlay);
     if (opts.readonly) {
       actions.append(
         button("复制", "#f59f00", async () => {
@@ -265,14 +271,31 @@ const game = {
         button("开始", "#f59f00", () => {
           const raw = input.value.trim();
           if (!raw) { close(); this.startEndless({ seed: Challenge.randomSeed(), challenge: true }); return; }
-          const payload = Challenge.decode(raw);
-          if (!payload) { msg.textContent = "挑战码无效"; return; }
-          close(); this.startEndless({ seed: payload.seed, ship: payload.ship, challenge: true, target: payload });
+          startCode(raw);
         }),
         button("每日", "#2f9e44", () => { close(); this.startDailyChallenge(); }),
         button("新挑战", "#1971c2", () => { close(); this.startEndless({ seed: Challenge.randomSeed(), challenge: true }); }),
         button("关闭", "#495057", close)
       );
+      const records = ChallengeHistory.load().filter(r => r.code || r.lastCode).slice(0, 3);
+      if (records.length) {
+        const hTitle = document.createElement("div");
+        hTitle.textContent = "最近挑战";
+        style(hTitle, { color: "#adb5bd", fontSize: "13px", fontWeight: "700", marginTop: "2px" });
+        history.appendChild(hTitle);
+        records.forEach(r => {
+          const row = document.createElement("div"), meta = document.createElement("div"), sub = document.createElement("div");
+          const ship = CONFIG.ships[r.ship] ? CONFIG.ships[r.ship].name : r.ship;
+          meta.textContent = "最佳 " + (r.score || 0) + " · " + (r.time || 0) + "s · " + ship;
+          sub.textContent = (r.daily ? "每日" : r.seed) + " · 尝试 " + (r.attempts || 1);
+          style(row, { display: "grid", gridTemplateColumns: "1fr 68px", gap: "8px", alignItems: "center", padding: "8px 0", borderTop: "1px solid rgba(255,255,255,.1)" });
+          style(meta, { color: "#e9ecef", fontSize: "13px", lineHeight: "1.35" });
+          style(sub, { color: "#868e96", fontSize: "12px", lineHeight: "1.35", marginTop: "2px" });
+          meta.appendChild(sub);
+          row.append(meta, button("重打", "#343a40", () => startCode(r.code || r.lastCode)));
+          history.appendChild(row);
+        });
+      }
     }
     setTimeout(() => { input.focus(); if (opts.readonly) input.select(); }, 0);
   },

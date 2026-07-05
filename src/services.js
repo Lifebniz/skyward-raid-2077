@@ -259,10 +259,10 @@ const ChallengeHistory = {
     const list = this.load(), id = this.id(run.seed, run.ship), ts = new Date().toISOString();
     let entry = list.find(r => r.id === id);
     if (!entry) { entry = { id, seed: run.seed, ship: run.ship, score: 0, time: 0, combo: 0, attempts: 0, ts }; list.unshift(entry); }
-    entry.attempts = (entry.attempts || 0) + 1; entry.ts = ts; entry.lastScore = run.score; entry.lastTime = run.time;
+    entry.attempts = (entry.attempts || 0) + 1; entry.ts = ts; entry.lastScore = run.score; entry.lastTime = run.time; entry.lastCode = run.code || entry.lastCode;
     entry.lastSplits = Challenge.cleanSplits(run.splits);
-    entry.code = run.code || entry.code; entry.daily = !!run.daily;
-    if (run.score >= (entry.score || 0)) { entry.score = run.score; entry.time = run.time; entry.combo = run.combo; entry.splits = entry.lastSplits; entry.date = ts.slice(0, 10); }
+    entry.daily = !!run.daily;
+    if (run.score >= (entry.score || 0)) { entry.score = run.score; entry.time = run.time; entry.combo = run.combo; entry.splits = entry.lastSplits; entry.code = run.code || entry.code; entry.date = ts.slice(0, 10); }
     list.sort((a, b) => String(b.ts || "").localeCompare(String(a.ts || "")));
     this.saveList(list.slice(0, this.max));
     return entry;
