@@ -247,7 +247,7 @@ const CONFIG = {
   endless: {
     hpMult: 0.7, maxEnemies: 14, diffKey: "normal", dmgRampTime: 300, dmgRampMult: 3, enemyHpRampTime: 300, enemyHpRampMult: 2.4,
     worldInterval: 40, powerupChance: 0.12,
-    eventInterval: 28, eventDuration: 16,
+    eventInterval: 28, eventDuration: 16, eventClearScore: 900, eventCleanShield: 24, eventCleanShieldDur: 5,
     spawn: { initialDelay: 1.0, intervalBase: 1.8, intervalDecay: 0.008, intervalMin: 0.8, countBase: 2, countStepSec: 15, countStepMax: 5 },
     moves: ["sine", "zigzag", "dive", "straight", "swoop", "orbit"],
     pools: [
@@ -283,7 +283,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 39, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 40, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

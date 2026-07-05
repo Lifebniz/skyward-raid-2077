@@ -11,6 +11,7 @@ vm.runInContext(fs.readFileSync("src/core.js", "utf8"), sandbox);
 vm.runInContext(fs.readFileSync("src/game.js", "utf8") + "\nglobalThis.game = game;", sandbox);
 const { CONFIG } = sandbox;
 const { game } = sandbox;
+sandbox.FloatText = class FloatText { constructor(x, y, text, color) { this.x = x; this.y = y; this.text = text; this.color = color; } };
 
 const between = (value, min, max, label) => assert(value >= min && value <= max, `${label} ${value} outside ${min}-${max}`);
 const unique = (items, label) => assert.strictEqual(new Set(items).size, items.length, `${label} has duplicate keys`);
@@ -24,6 +25,9 @@ between(CONFIG.endless.enemyHpRampMult, 1.5, 3.2, "endless enemy HP ramp");
 between(CONFIG.endless.dmgRampMult, 1.5, 3.5, "endless damage ramp");
 between(CONFIG.endless.boss.firstDelay, 20, 45, "first boss delay");
 between(CONFIG.endless.boss.interval, 25, 55, "boss interval");
+between(CONFIG.endless.eventClearScore, 300, 1800, "event clear score");
+between(CONFIG.endless.eventCleanShield, 8, 50, "event clean shield");
+between(CONFIG.endless.eventCleanShieldDur, 2, 10, "event clean shield duration");
 
 const enemyKeys = new Set(Object.keys(CONFIG.enemy));
 const eliteTypes = CONFIG.elite.types || [];
@@ -71,6 +75,15 @@ for (const e of CONFIG.endless.events) {
     between(e.width || 0, 20, 70, `event ${e.key} laser width`);
   }
 }
+game.score = 0; game.threat = 0; game.bonuses = {}; game.chips = {}; game.floats = []; game._endlessEventTimer = 0; game._endlessStats = { hits: 2 }; game._endlessEventStartHits = 1;
+game.player = { x: 100, y: 100, shieldHp: 0, grantShield(n, dur) { this.shieldHp = n; this.shieldTimer = dur; } };
+const eventHitGain = game.finishEndlessEvent(CONFIG.endless.events[0]);
+assert.strictEqual(eventHitGain, CONFIG.endless.eventClearScore, "event clear should grant base score after hits");
+assert.strictEqual(game.player.shieldHp, 0, "event clear should not grant clean shield after hits");
+game.score = 0; game.floats = []; game._endlessStats = { hits: 1 }; game._endlessEventStartHits = 1;
+const eventCleanGain = game.finishEndlessEvent(CONFIG.endless.events[0]);
+assert(eventCleanGain > eventHitGain, "clean event clear should grant bonus score");
+assert(game.player.shieldHp >= CONFIG.endless.eventCleanShield, "clean event clear should grant shield");
 
 const draftIds = CONFIG.chipOrder.map(k => "chip:" + k).concat(CONFIG.bonusOrder.map(k => "bonus:" + k));
 const hasSurvivalDraft = () => game._chipChoices.some(id => id.startsWith("bonus:") && game.draftCardRoute(game.cardInfo(id)) === "生存");
