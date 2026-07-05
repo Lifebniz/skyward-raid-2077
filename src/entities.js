@@ -70,7 +70,16 @@ class Player {
     }
     if (this.power >= s.laserPower) {
       this._laserTimer -= dt;
-      if (this._laserTimer <= 0) { this._laserTimer = Math.max(0.55, (s.laserInterval - oc * 0.06) * game.shipWeaponValue("laserIntervalMult", 1) * allCd * game.weaponCooldownMult()); game.spawnPlayerLaser(this.x, this.y - this.radius, oc); Sound.laser(); }
+      if (this._laserTimer <= 0) {
+        this._laserTimer = Math.max(0.55, (s.laserInterval - oc * 0.06) * game.shipWeaponValue("laserIntervalMult", 1) * allCd * game.weaponCooldownMult());
+        game.spawnPlayerLaser(this.x, this.y - this.radius, oc);
+        const split = game.bonusStacks("laserSplitter"), cfg = CONFIG.bonuses.laserSplitter;
+        for (let i = 1, n = Math.min(split, cfg.maxPairs); i <= n; i++) {
+          game.spawnPlayerLaser(this.x - cfg.offset * i, this.y - this.radius, oc, cfg.damageMult, cfg.widthMult);
+          game.spawnPlayerLaser(this.x + cfg.offset * i, this.y - this.radius, oc, cfg.damageMult, cfg.widthMult);
+        }
+        Sound.laser();
+      }
     }
     if (this.power >= s.missilePower) {
       this._missileTimer -= dt;
@@ -303,8 +312,8 @@ class Missile {
 }
 
 class PlayerLaser {
-  constructor(x, y, overcharge = 0) { this.init(x, y, overcharge); }
-  init(x, y, overcharge = 0) {
+  constructor(x, y, overcharge = 0, damageMult = 1, widthMult = 1) { this.init(x, y, overcharge, damageMult, widthMult); }
+  init(x, y, overcharge = 0, damageMult = 1, widthMult = 1) {
     const s = CONFIG.secondary;
     this.x = x; this.y = y; this.overcharge = overcharge; this.width = s.laserWidth + overcharge * 3;
     this.damage = s.laserDamage + Math.floor(overcharge / 2) + game.shipWeaponValue("laserDamageBonus", 0) + game.bonusValue("laserLens", "laserDamage") + game.routeBonus("激光", 2); this.life = (s.laserDuration + overcharge * 0.01 + game.bonusValue("laserLens", "laserDuration")) * game.rangeMult() * (1 + game.routeBonus("激光", 0.12));
@@ -313,6 +322,7 @@ class PlayerLaser {
       const c = CONFIG.chips.laserFocus;
       this.width *= c.laserWidthMult; this.damage += c.laserDamageBonus; this.life += c.laserDurationBonus;
     }
+    this.damage *= damageMult; this.width *= widthMult;
     this.maxLife = this.life; this.dead = false; this.hitEnemies = new Set();
   }
   update(dt) { this.life -= dt; if (this.life <= 0) this.dead = true; }

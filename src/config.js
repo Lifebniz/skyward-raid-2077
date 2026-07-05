@@ -95,7 +95,7 @@ const CONFIG = {
     sideGuns: { name: "侧翼炮组", desc: "主炮附加斜向火力", color: "#ffd43b", duration: 10, angle: 22 },
     volatileCore: { name: "危险过载", desc: "分数更高,承伤也更高", color: "#ff6b6b", duration: 9, scoreBonus: 0.35, threatGainMult: 1.35, damageTakenMult: 1.18 },
   },
-  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "fieldRepair", "leech", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "kineticAmmo", "laserLens", "swarmCore", "homingShards", "explosivePayload", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "adrenaline", "emergencyBarrier", "overdrive"],
+  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "fieldRepair", "leech", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "kineticAmmo", "laserLens", "laserSplitter", "swarmCore", "homingShards", "explosivePayload", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "adrenaline", "emergencyBarrier", "overdrive"],
   bonuses: {
     damage: { name: "火力校准", desc: "全武器伤害 +15%", color: "#ff6b6b", damageMult: 0.15 },
     fireRate: { name: "加速扳机", desc: "主炮/副武器射速 +10%", color: "#4dabf7", cooldownMult: 0.10 },
@@ -111,6 +111,7 @@ const CONFIG = {
     salvage: { name: "残骸回收", desc: "每 5 次击杀获得护盾", color: "#20c997", shield: 10, every: 5, dur: 5 },
     kineticAmmo: { name: "动能弹芯", desc: "主炮基础伤害 +1", color: "#ffa94d", bulletDamage: 1 },
     laserLens: { name: "棱镜透镜", desc: "激光更痛、更窄、更久", color: "#cc5de8", rarity: "稀有", weight: 42, laserDamage: 2, laserWidthShrink: 0.08, laserDuration: 0.04 },
+    laserSplitter: { name: "分束棱镜", desc: "每层增加1对低伤害激光副束,最多3对", color: "#be4bdb", rarity: "稀有", weight: 30, offset: 34, maxPairs: 3, damageMult: 0.45, widthMult: 0.62 },
     swarmCore: { name: "蜂群协议", desc: "追踪弹 +1,锁定和伤害提升", color: "#4dabf7", rarity: "稀有", weight: 38, extraCount: 1, homingDamage: 1, targetRangeMult: 0.12 },
     homingShards: { name: "追踪裂片", desc: "追踪弹命中时溅射附近敌人", color: "#4dabf7", rarity: "稀有", weight: 32, damage: 2, range: 120 },
     explosivePayload: { name: "高爆载荷", desc: "导弹伤害和爆炸范围提升", color: "#ff922b", rarity: "稀有", weight: 38, missileDamage: 3, splashMult: 0.25 },

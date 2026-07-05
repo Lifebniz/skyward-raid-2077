@@ -552,7 +552,7 @@ const game = {
   buildRouteSummary(source = this.bonuses) {
     const routes = [
       { name: "主炮", color: "#ffd43b", weights: { damage: 1, fireRate: 1, pierce: 2, kineticAmmo: 2, chainSpark: 1, pointDefense: 1, executioner: 1, glassCannon: 1, overdrive: 1 } },
-      { name: "激光", color: "#cc5de8", weights: { damage: 1, range: 1, laserLens: 3, chargeAmp: 1, bossHunter: 1, glassCannon: 1 } },
+      { name: "激光", color: "#cc5de8", weights: { damage: 1, range: 1, laserLens: 3, laserSplitter: 3, chargeAmp: 1, bossHunter: 1, glassCannon: 1 } },
       { name: "追踪", color: "#4dabf7", weights: { range: 1, fireRate: 1, swarmCore: 3, homingShards: 3, magnetCore: 1, comboBattery: 1, comboSurge: 1 } },
       { name: "导弹", color: "#ff922b", weights: { missileRack: 3, explosivePayload: 3, missileInterceptor: 2, fireRate: 1, range: 1, bossHunter: 1 } },
       { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, fieldRepair: 3, leech: 2, salvage: 2, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1 } },
@@ -809,7 +809,7 @@ const game = {
   spawnPlayerBullet(x, y, vx, vy) { this.playerBullets.push(pools.playerBullet.get(x, y, vx, vy)); },
   spawnHomingShot(x, y, overcharge) { this.homingShots.push(pools.homingShot.get(x, y, overcharge)); },
   spawnMissile(x, y, overcharge) { this.missiles.push(pools.missile.get(x, y, overcharge)); },
-  spawnPlayerLaser(x, y, overcharge) { this.playerLasers.push(pools.playerLaser.get(x, y, overcharge)); },
+  spawnPlayerLaser(x, y, overcharge, damageMult = 1, widthMult = 1) { this.playerLasers.push(pools.playerLaser.get(x, y, overcharge, damageMult, widthMult)); },
   spawnPowerUp(x, kind) { this.powerups.push(new PowerUp(x, -20, kind)); },
   nearestEnemy(x, y, maxDist = Infinity) {
     let best = null, bestD = maxDist * maxDist;
