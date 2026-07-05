@@ -633,6 +633,37 @@ const game = {
     const info = this.routePreviewInfo(card);
     return info ? "路线 " + info.top.name + " +" + info.top.gain + (info.unlocked ? " · 解锁共鸣" : "") : "";
   },
+  withDraftBonus(key, fn) {
+    const old = this.bonuses[key] || 0;
+    this.bonuses[key] = old + 1;
+    const out = fn();
+    if (old) this.bonuses[key] = old; else delete this.bonuses[key];
+    return out;
+  },
+  draftStatPreviewText(card) {
+    if (!card || card.type !== "bonus") return "";
+    const key = card.key, b = CONFIG.bonuses[key], p = this.player;
+    const pct = v => Math.round(v * 100) + "%", num = v => Math.round(v * 10) / 10;
+    if (!b) return "";
+    if (key === "maxHp" && p) return "最大生命 " + p.maxHp + "→" + (p.maxHp + b.hp);
+    if (key === "reinforcedHull" && p) { const gain = Math.max(1, Math.round(p.maxHp * b.hpPct)); return "最大生命 " + p.maxHp + "→" + (p.maxHp + gain); }
+    if (key === "armorCaliber" && p) return "主炮加成 +" + this.armorCaliberDamage() + "→+" + this.withDraftBonus(key, () => this.armorCaliberDamage());
+    if (["kineticAmmo", "heavyRounds"].includes(key)) return "主炮伤害 " + num(this.mainBulletDamage()) + "→" + num(this.withDraftBonus(key, () => this.mainBulletDamage()));
+    if (key === "armorPiercer") return "高血主炮 +" + pct(this.bonusValue(key, "heavyDamageMult")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "heavyDamageMult")));
+    if (["damage", "glassCannon", "bossHunter"].includes(key)) return "伤害倍率 " + pct(this.playerDamage(1, { isBoss: key === "bossHunter", hp: 1, maxHp: 1 })) + "→" + pct(this.withDraftBonus(key, () => this.playerDamage(1, { isBoss: key === "bossHunter", hp: 1, maxHp: 1 })));
+    if (["fireRate", "overdrive"].includes(key)) return "武器冷却 " + pct(this.weaponCooldownMult()) + "→" + pct(this.withDraftBonus(key, () => this.weaponCooldownMult()));
+    if (["armorPlating"].includes(key)) return "承伤 " + pct(this.damageTakenMult()) + "→" + pct(this.withDraftBonus(key, () => this.damageTakenMult()));
+    if (key === "range") return "射程 " + pct(this.rangeMult()) + "→" + pct(this.withDraftBonus(key, () => this.rangeMult()));
+    if (key === "magnetCore") return "吸附 " + pct(this.pickupRangeMult()) + "→" + pct(this.withDraftBonus(key, () => this.pickupRangeMult()));
+    if (key === "sideCannons") return "侧炮对 " + Math.min(this.bonusStacks(key), b.maxPairs) + "→" + Math.min(this.bonusStacks(key) + 1, b.maxPairs);
+    if (key === "laserSplitter") return "激光副束 " + Math.min(this.bonusStacks(key), b.maxPairs) + "→" + Math.min(this.bonusStacks(key) + 1, b.maxPairs);
+    if (key === "missileRack") return "导弹 +" + this.bonusValue(key, "missileCount") + "→+" + this.withDraftBonus(key, () => this.bonusValue(key, "missileCount"));
+    if (key === "swarmCore") return "追踪弹 +" + this.bonusValue(key, "extraCount") + "→+" + this.withDraftBonus(key, () => this.bonusValue(key, "extraCount"));
+    return "";
+  },
+  draftPreviewText(card) {
+    return [this.draftStatPreviewText(card), this.routePreviewText(card)].filter(Boolean).join(" · ");
+  },
   draftProgressText(card) {
     if (!card) return "";
     if (card.type === "bonus") {
@@ -1509,8 +1540,8 @@ const game = {
       ctx.fillStyle = "#fff"; ctx.font = "bold 23px 'Segoe UI', sans-serif"; ctx.fillText(card.name, r.x + 88, r.y + 51);
       ctx.fillStyle = "#ced4da"; ctx.font = "14px 'Segoe UI', sans-serif";
       UI.wrapText(ctx, card.desc, r.w - 118, 1).forEach((line, j) => ctx.fillText(line, r.x + 88, r.y + 73 + j * 17));
-      const preview = this.routePreviewText(card);
-      if (preview) { ctx.fillStyle = rarityColor; ctx.font = "bold 12px 'Segoe UI', sans-serif"; ctx.fillText(preview, r.x + 88, r.y + 88); }
+      const preview = this.draftPreviewText(card);
+      if (preview) { ctx.fillStyle = rarityColor; ctx.font = "bold 12px 'Segoe UI', sans-serif"; ctx.fillText(UI.wrapText(ctx, preview, r.w - 118, 1)[0] || preview, r.x + 88, r.y + 88); }
     }
     this.drawChipActionButton(ctx, "reroll", this._chipRerolls > 0 ? "重抽" : "已重抽", "#4dabf7", this._chipRerolls <= 0);
     this.drawChipActionButton(ctx, "skip", "跳过拿分", "#adb5bd", false);
