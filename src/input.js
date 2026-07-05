@@ -25,6 +25,11 @@ function resetJoystick() {
   input.joystickActive = false; input.joyDX = 0; input.joyDY = 0;
   input.joyKnobX = CONFIG.joystick.baseX; input.joyKnobY = CONFIG.joystick.baseY;
 }
+function toggleMute() {
+  const on = !(Settings.data.sound || Settings.data.music);
+  Settings.set("sound", on); Settings.set("music", on);
+  if (on) Music.play(); else Music.stop();
+}
 canvas.addEventListener("pointerdown", (e) => {
   Sound.resume(); Music.resume(true);
   const p = toLogic(e.clientX, e.clientY);
@@ -81,6 +86,6 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "b" || e.key === "B" || e.code === "Space") { if (game.state === "playing") game.useBomb(); e.preventDefault(); }
   if (e.key === "x" || e.key === "X") { if (game.state === "playing") game.useSpecial(); e.preventDefault(); }
   if (e.key === "p" || e.key === "P" || e.key === "Escape") { game.togglePause(); e.preventDefault(); }
-  if (e.key === "m" || e.key === "M") Settings.set("sound", !Settings.data.sound);
+  if (e.key === "m" || e.key === "M") { toggleMute(); e.preventDefault(); }
   if (e.key === "v" || e.key === "V") Settings.set("haptics", !Settings.data.haptics);
 });
