@@ -24,7 +24,7 @@ const game = {
   _mapScrollY: 0, _mapDragStartX: 0, _mapDragStartY: 0, _mapDragStartScrollY: 0, _mapDragging: false, _mapDragMoved: false,
   _mapHighlightId: null, _mapHighlightT: 0,   // MM:从图鉴跳转过来时高亮提示的关卡
   _levelTransX: 0, _levelTransY: 0, _levelTransT: 0,   // NN:进入关卡的聚焦扩散过渡(从点击处展开)
-  autoNext: true, endless: false, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0,
+  autoNext: true, endless: false, challengeSeed: "", challengeMode: false, challengeTarget: null, _rng: null, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0,
   _shake: 0, _shakeT: 0, _hitStopT: 0,   // N:打击感
   // 触控按钮放大,便于拇指操作
   bombBtn: { x: 58, y: CONFIG.HEIGHT - 70, r: 42 },
@@ -39,6 +39,8 @@ const game = {
   itemAutoInterval() { return CONFIG.powerup.autoInterval * (this.isBossLevel() ? this.activeDiff.itemDropMult : 1); },
   // T:无尽模式统一使用固定难度(不受地图选择影响);常规关卡仍用地图选的 this.diff
   get activeDiff() { return this.endless ? CONFIG.difficulties[CONFIG.endless.diffKey] : this.diff; },
+  rng() { return this._rng ? this._rng() : Math.random(); },
+  pick(list) { return list[(this.rng() * list.length) | 0]; },
   toTitle() { this.state = "title"; Music.play(); },
   toMap() { this.state = "map"; Music.play(); },
   // 某关是否解锁:首关或前一关已通关
@@ -126,7 +128,7 @@ const game = {
   pauseButtonHit(x, y) { const b = this.pauseBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
   // 开始某一关(索引)
   startLevel(i) {
-    this.currentLevel = i; this.world = LEVELS[i].world; this.endless = false;
+    this.currentLevel = i; this.world = LEVELS[i].world; this.endless = false; this.challengeSeed = ""; this.challengeMode = false; this.challengeTarget = null; this._rng = null;
     this.state = "playing";
     this.player = new Player(); this.boss = null;
     this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.floats = []; this.lasers = []; this.shockwaves = []; this.specialWaves = [];
@@ -151,8 +153,10 @@ const game = {
   startFarm() { this.farming = true; this.state = "playing"; this._farmTimer = 1.0; if (director.script) director.cursor = director.script.length; },
 
   // F:无尽生存模式
-  startEndless() {
-    this.endless = true; this.farming = false; this._reached = false; this.currentLevel = 0; this.world = 1;
+  startEndless(opts = {}) {
+    if (opts.ship && CONFIG.ships[opts.ship]) this.setShip(opts.ship);
+    this.endless = true; this.challengeSeed = opts.seed || Challenge.randomSeed(); this.challengeMode = !!opts.challenge; this.challengeTarget = opts.target || null; this._rng = Challenge.rng(this.challengeSeed);
+    this.farming = false; this._reached = false; this.currentLevel = 0; this.world = 1;
     this.state = "playing";
     this.player = new Player(); this.boss = null;
     this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.floats = []; this.lasers = []; this.shockwaves = []; this.specialWaves = [];
@@ -162,7 +166,7 @@ const game = {
     this._endlessT = 0; this._endlessSpawnT = 1.0; this._endlessBossT = 30; this._endlessBossN = 0;
     director.begin(null);
     input.targetX = CONFIG.player.startX; input.targetY = CONFIG.player.startY;
-    Sound.start(); Music.play(); this.banner("无尽模式");
+    Sound.start(); Music.play(); this.banner(this.challengeMode ? "挑战模式" : "无尽模式", this.challengeMode ? "同种子竞速" : "");
     Achievements.trackShipUse(this.ship.key);   // OO
   },
   updateEndless(dt) {
@@ -176,18 +180,36 @@ const game = {
       // W2:t>=250 再加一档,carrier 权重继续往上提,长线存活的玩家会越来越常遇到"一炸一窝"的母舰,难度持续爬坡而不是160秒后封顶
       const pool = t < 20 ? ["small", "small", "medium"] : t < 50 ? ["small", "medium", "medium", "large", "gunner"] : t < 100 ? ["small", "medium", "large", "gunner", "splitter"] : t < 160 ? ["small", "medium", "large", "gunner", "splitter", "sniper", "detonator"] : t < 250 ? ["small", "medium", "large", "gunner", "splitter", "sniper", "detonator", "phantom", "phantom", "carrier"] : ["small", "medium", "large", "gunner", "splitter", "sniper", "detonator", "phantom", "phantom", "carrier", "carrier", "carrier"];
       const moves = ["sine", "zigzag", "dive", "straight", "swoop", "orbit"];
-      for (let i = 0; i < n; i++) { const type = pool[(Math.random() * pool.length) | 0], r = CONFIG.enemy[type].radius; this.enemies.push(pools.enemy.get(type, r + 20 + Math.random() * (CONFIG.WIDTH - 2 * (r + 20)), 0, moves[(Math.random() * moves.length) | 0])); }
-      if (Math.random() < 0.12) this.spawnPowerUp(30 + Math.random() * (CONFIG.WIDTH - 60), this.chooseDrop());
+      for (let i = 0; i < n; i++) { const type = this.pick(pool), r = CONFIG.enemy[type].radius; this.enemies.push(pools.enemy.get(type, r + 20 + this.rng() * (CONFIG.WIDTH - 2 * (r + 20)), 0, this.pick(moves))); }
+      if (this.rng() < 0.12) this.spawnPowerUp(30 + this.rng() * (CONFIG.WIDTH - 60), this.chooseDrop());
     }
     this._endlessBossT -= dt;
     if (this._endlessBossT <= 0 && !this.boss) { this._endlessBossT = 35; this.spawnBoss(this._endlessBossN % CONFIG.bosses.length); this._endlessBossN++; }
   },
   settleEndless() {
     const final = Math.round(this.score * this.activeDiff.scoreMult);
-    this.endlessResult = { base: this.score, diffFactor: this.activeDiff.scoreMult, time: Math.floor(this._endlessT), final, maxCombo: this.maxCombo };
+    const time = Math.floor(this._endlessT);
+    const challengeCode = Challenge.encode({ seed: this.challengeSeed, ship: this.ship.key, score: final, time, combo: this.maxCombo });
+    this.endlessResult = { base: this.score, diffFactor: this.activeDiff.scoreMult, time, final, maxCombo: this.maxCombo, challengeCode, challengeSeed: this.challengeSeed, challengeMode: this.challengeMode, target: this.challengeTarget };
     this.endlessTop = EndlessBoard.submit(final);
     this.state = "endlessover";
     Achievements.checkEndlessEnd({ time: this._endlessT, maxCombo: this.maxCombo });   // OO
+  },
+  openChallengePrompt() {
+    const text = window.prompt("粘贴挑战码开始同种子无尽；留空则创建一个新的挑战:", "");
+    if (text == null) return;
+    const raw = text.trim();
+    if (!raw) { this.startEndless({ seed: Challenge.randomSeed(), challenge: true }); return; }
+    const payload = Challenge.decode(raw);
+    if (!payload) { window.prompt("挑战码无效，可以关闭这个窗口后重新尝试:", raw); return; }
+    this.startEndless({ seed: payload.seed, ship: payload.ship, challenge: true, target: payload });
+  },
+  endlessChallengeRect() { return { x: CONFIG.WIDTH / 2 - 150, y: 650, w: 300, h: 48 }; },
+  endlessChallengeHit(px, py) { const r = this.endlessChallengeRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  copyEndlessChallenge() {
+    const r = this.endlessResult;
+    if (!r || !r.challengeCode) return;
+    window.prompt("复制挑战码发给朋友，对方会进入同一种子、同机型的无尽局:", r.challengeCode);
   },
   // 结算:按血量系数 + 关卡难度系数算最终分,记录进度/排行
   computeFinal() {
@@ -213,8 +235,8 @@ const game = {
     if (n <= 0) return;
     const types = ["small", "small", "medium", "large"], moves = ["sine", "zigzag", "dive", "straight"];
     for (let i = 0; i < n; i++) {
-      const type = types[(Math.random() * types.length) | 0], r = CONFIG.enemy[type].radius;
-      this.enemies.push(pools.enemy.get(type, r + 20 + Math.random() * (CONFIG.WIDTH - 2 * (r + 20)), 0, moves[(Math.random() * moves.length) | 0]));
+      const type = this.pick(types), r = CONFIG.enemy[type].radius;
+      this.enemies.push(pools.enemy.get(type, r + 20 + this.rng() * (CONFIG.WIDTH - 2 * (r + 20)), 0, this.pick(moves)));
     }
   },
   settleButtonHit(x, y) { const b = this.settleBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
@@ -426,14 +448,14 @@ const game = {
     this.bannerText = n + " COMBO!"; this.bannerSub = ""; this.bannerTimer = 1.1;
     Sound.powerup();
   },
-  maybeDrop(type, x, y) { if (type === "small") return; if (Math.random() < CONFIG.powerup.dropChance) this.powerups.push(new PowerUp(x, y, this.chooseDrop())); },
+  maybeDrop(type, x, y) { if (type === "small") return; if (this.rng() < CONFIG.powerup.dropChance) this.powerups.push(new PowerUp(x, y, this.chooseDrop())); },
   canDrop(kind) { return !!kind; },
   chooseDrop() {
     const w = this.endless ? CONFIG.powerup.endlessWeights : CONFIG.powerup.weights;
     const kinds = ["power", "heal", "bomb", "wing"].filter(k => this.canDrop(k));
     const total = kinds.reduce((s, k) => s + w[k], 0);
     if (total <= 0) return "heal";
-    let r = Math.random() * total;
+    let r = this.rng() * total;
     for (const k of kinds) { if (r < w[k]) return k; r -= w[k]; }
     return kinds[kinds.length - 1];
   },
@@ -488,7 +510,7 @@ const game = {
     if (this.endless) this.updateEndless(dt);
     else {   // Q:常规关卡(含刷分续关)每隔固定秒数自动刷新一个道具;无尽模式不刷新(有自己的掉落节奏)
       this._itemSpawnTimer -= dt;
-      if (this._itemSpawnTimer <= 0) { this._itemSpawnTimer = this.itemAutoInterval(); this.spawnPowerUp(30 + Math.random() * (CONFIG.WIDTH - 60), this.chooseDrop()); }
+      if (this._itemSpawnTimer <= 0) { this._itemSpawnTimer = this.itemAutoInterval(); this.spawnPowerUp(30 + this.rng() * (CONFIG.WIDTH - 60), this.chooseDrop()); }
     }
     if (this.farming) {
       if (this.score >= this._clearScore * CONFIG.scoring.farmScoreCapMult) { this.settle(); }   // 达刷分总分上限 → 强制结算
@@ -671,16 +693,20 @@ const game = {
   drawEndlessOver(ctx) {
     const cx = CONFIG.WIDTH / 2, r = this.endlessResult || { base: this.score, diffFactor: this.activeDiff.scoreMult, time: 0, final: this.score, maxCombo: this.maxCombo };
     const top = this.endlessTop || EndlessBoard.load();
+    const targetScore = r.target && r.target.score ? r.target.score : 0;
+    const boardY = targetScore ? 458 : 434;
     ctx.fillStyle = "rgba(0,0,0,.78)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
     ctx.textAlign = "center";
     ctx.fillStyle = "#ff922b"; ctx.font = "bold 40px 'Segoe UI', sans-serif"; ctx.fillText("生存结束", cx, 250);
     ctx.fillStyle = "#fff"; ctx.font = "22px 'Segoe UI', sans-serif"; ctx.fillText("存活 " + r.time + " 秒   最高连击 " + r.maxCombo, cx, 300);
     ctx.fillStyle = "#dee2e6"; ctx.font = "20px 'Segoe UI', sans-serif"; ctx.fillText("得分 " + this.easedCount(r.base) + "  × 难度 " + r.diffFactor.toFixed(1), cx, 336);
     ctx.fillStyle = "#fff"; ctx.font = "bold 30px 'Segoe UI', sans-serif"; ctx.fillText("最终得分  " + this.easedCount(r.final, 1.3), cx, 384);
-    ctx.fillStyle = "#adb5bd"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("── 无尽榜 ──", cx, 434);
+    if (targetScore) { ctx.fillStyle = r.final > targetScore ? "#38d9a9" : "#ffd43b"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("挑战目标 " + targetScore + "  ·  " + (r.final > targetScore ? "已超越" : "继续冲刺"), cx, 418); }
+    ctx.fillStyle = "#adb5bd"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("── 无尽榜 ──", cx, boardY);
     let hl = false;
-    top.forEach((e, i) => { const me = !hl && e.score === r.final; if (me) hl = true; ctx.fillStyle = me ? "#ffd43b" : "#dee2e6"; ctx.font = (me ? "bold " : "") + "17px 'Segoe UI', sans-serif"; ctx.fillText((i + 1) + ".   " + e.score + "   " + e.date + (me ? "  ◄" : ""), cx, 464 + i * 28); });
-    ctx.fillStyle = "#4a90d9"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("点击返回首页", cx, 464 + top.length * 28 + 30);
+    top.forEach((e, i) => { const me = !hl && e.score === r.final; if (me) hl = true; ctx.fillStyle = me ? "#ffd43b" : "#dee2e6"; ctx.font = (me ? "bold " : "") + "17px 'Segoe UI', sans-serif"; ctx.fillText((i + 1) + ".   " + e.score + "   " + e.date + (me ? "  ◄" : ""), cx, boardY + 30 + i * 28); });
+    if (r.challengeCode) UI.button(ctx, this.endlessChallengeRect(), { label: "复制挑战码 RIVAL", color: "#ffd43b", active: true, font: 20, radius: 14 });
+    ctx.fillStyle = "#4a90d9"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("点击空白返回首页", cx, 724);
     ctx.textAlign = "left";
   },
 
@@ -695,12 +721,14 @@ const game = {
     ctx.textAlign = "left";
   },
 
-  // ── 标题界面 ──(S:开始/无尽/机型三个大按钮同宽同高,竖向排列)
-  titleStartRect() { const w = 300, h = 60, x = (CONFIG.WIDTH - w) / 2, y = 396; return { x, y, w, h }; },
+  // ── 标题界面 ──(S:开始/无尽/挑战码/机型四个大按钮同宽同高,竖向排列)
+  titleStartRect() { const w = 300, h = 58, x = (CONFIG.WIDTH - w) / 2, y = 376; return { x, y, w, h }; },
   titleStartHit(px, py) { const r = this.titleStartRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
-  titleEndlessRect() { const w = 300, h = 60, x = (CONFIG.WIDTH - w) / 2, y = 472; return { x, y, w, h }; },
+  titleEndlessRect() { const w = 300, h = 58, x = (CONFIG.WIDTH - w) / 2, y = 448; return { x, y, w, h }; },
   titleEndlessHit(px, py) { const r = this.titleEndlessRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
-  titleShipRect() { const w = 300, h = 60, x = (CONFIG.WIDTH - w) / 2, y = 548; return { x, y, w, h }; },
+  titleChallengeRect() { const w = 300, h = 58, x = (CONFIG.WIDTH - w) / 2, y = 520; return { x, y, w, h }; },
+  titleChallengeHit(px, py) { const r = this.titleChallengeRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  titleShipRect() { const w = 300, h = 58, x = (CONFIG.WIDTH - w) / 2, y = 592; return { x, y, w, h }; },
   titleShipHit(px, py) { const r = this.titleShipRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
   titleSettingsRect() { return { x: CONFIG.WIDTH - 108, y: 30, w: 92, h: 40 }; },
   titleSettingsHit(px, py) { const r = this.titleSettingsRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
@@ -725,12 +753,13 @@ const game = {
     UI.button(ctx, this.titleSettingsRect(), { label: "⚙ 设置", color: "#adb5bd", font: 15, radius: 10 });
     UI.button(ctx, this.titleCodexRect(), { label: "📖 图鉴", color: "#adb5bd", font: 15, radius: 10 });
     UI.button(ctx, this.titleHelpRect(), { label: "？帮助", color: "#adb5bd", font: 15, radius: 10 });
-    // S:三个同尺寸大按钮 —— 开始 / 无尽(难度固定) / 机型选择
+    // S:四个同尺寸大按钮 —— 开始 / 无尽 / 挑战码 / 机型选择
     UI.button(ctx, this.titleStartRect(), { label: "关卡地图 MAP", color: "#38d9a9", active: true, font: 26, radius: 16 });
     UI.button(ctx, this.titleEndlessRect(), { label: "无尽模式 ENDLESS", sub: "难度固定 · 普通", color: "#ff922b", active: true, font: 26, radius: 16 });
+    UI.button(ctx, this.titleChallengeRect(), { label: "挑战码 RIVAL", sub: "同种子无尽", color: "#ffd43b", active: true, font: 25, radius: 16 });
     UI.button(ctx, this.titleShipRect(), { label: "机型选择 SHIP", sub: this.ship.name, color: "#4dabf7", active: true, font: 24, radius: 16 });
     // Q:排行榜按关卡区分,标题页无具体关卡上下文,故不再显示总榜;进入关卡结算/失败画面时显示该关排行
-    ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("排行榜 · 按关卡分别记录,通关或失败后可见", cx, 650);
+    ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("排行榜 · 按关卡分别记录,通关或失败后可见", cx, 700);
     ctx.textAlign = "left";
   },
 

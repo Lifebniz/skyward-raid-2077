@@ -182,6 +182,61 @@ const Leaderboard = {
   clearAll() { try { localStorage.removeItem(this.key); } catch (e) {} this._mem = {}; },
 };
 
+const Challenge = {
+  prefix: "SR2077-",
+  randomSeed() {
+    const d = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const n = Math.floor(Math.random() * 0x1000000).toString(36).toUpperCase().padStart(5, "0");
+    return "RAID-" + d + "-" + n;
+  },
+  hash(seed) {
+    let h = 2166136261;
+    const s = String(seed || "");
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  },
+  rng(seed) {
+    let a = this.hash(seed) || 1;
+    return () => {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  },
+  encode(run) {
+    const payload = {
+      v: 1,
+      mode: "endless",
+      seed: String(run.seed || this.randomSeed()),
+      ship: run.ship || "balanced",
+      score: run.score || 0,
+      time: run.time || 0,
+      combo: run.combo || 0,
+    };
+    const raw = btoa(JSON.stringify(payload)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    return this.prefix + raw;
+  },
+  decode(text) {
+    try {
+      let raw = String(text || "").trim();
+      if (!raw) return null;
+      if (raw.startsWith(this.prefix)) raw = raw.slice(this.prefix.length);
+      raw = raw.replace(/-/g, "+").replace(/_/g, "/");
+      while (raw.length % 4) raw += "=";
+      const payload = JSON.parse(atob(raw));
+      if (!payload || payload.v !== 1 || payload.mode !== "endless" || !payload.seed) return null;
+      return payload;
+    } catch (e) {
+      return null;
+    }
+  },
+};
+
 // F:无尽模式独立排行榜
 const EndlessBoard = {
   key: "kzts_endless", max: 5, _mem: [],

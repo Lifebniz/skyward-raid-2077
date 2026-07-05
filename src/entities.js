@@ -319,9 +319,9 @@ class Enemy {
     const t = CONFIG.enemy[type];
     this.type = type; this.isBoss = false; this.x = x; this.y = -t.radius - yOffset;
     this.baseX = x; this.baseY = this.y; this.radius = t.radius; this.hp = t.hp; this.speed = t.speed; this.score = t.score; this.color = t.color; this.cfg = t;
-    this._fireTimer = 0.6 + Math.random() * 0.6; this.dead = false;
+    this._fireTimer = 0.6 + game.rng() * 0.6; this.dead = false;
     this.elite = elite || this.rollElite(); this.eliteCfg = this.elite ? CONFIG.elite[this.elite] : null;
-    this.eliteShield = this.eliteCfg && this.eliteCfg.shield ? this.eliteCfg.shield : 0; this._eliteCd = 1.2 + Math.random(); this._eliteWarn = 0;
+    this.eliteShield = this.eliteCfg && this.eliteCfg.shield ? this.eliteCfg.shield : 0; this._eliteCd = 1.2 + game.rng(); this._eliteWarn = 0;
     if (this.eliteCfg) { this.hp = Math.round(this.hp * (this.eliteCfg.hpMult || 1)); this.score = Math.round(this.score * (this.eliteCfg.scoreMult || 1)); }
     // 运动状态
     this.move = move; this.mp = CONFIG.moves[move] || {}; this._mt = 0;
@@ -333,8 +333,8 @@ class Enemy {
     const e = CONFIG.elite;
     let chance = game.currentLevel >= e.minLevel ? e.baseChance + game.currentLevel * e.levelChance : 0;
     if (game.endless) chance = e.endlessChance + game.threatLevel() * e.threatChance + Math.min(game._endlessT / 900, 0.08);
-    if (Math.random() > Math.min(chance, e.maxChance)) return null;
-    return Math.random() < 0.55 ? "shield" : "charger";
+    if (game.rng() > Math.min(chance, e.maxChance)) return null;
+    return game.rng() < 0.55 ? "shield" : "charger";
   }
   applyMove(dt) {
     const W = CONFIG.WIDTH, m = this.mp;
@@ -536,7 +536,7 @@ class Boss {
     else if (def.movement === "figure8") { this.x = cx + Math.sin(this._t * def.moveSpeed) * def.moveRange; this.y = def.enterY + Math.sin(this._t * def.moveSpeed * 2) * 40; }
     else if (def.movement === "dart") {
       this.x += (this._targetX - this.x) * 0.06;
-      if (this._moveT > (def.dartEvery || 2)) { this._moveT = 0; const m = def.radius + 40; this._targetX = m + Math.random() * (CONFIG.WIDTH - 2 * m); }
+      if (this._moveT > (def.dartEvery || 2)) { this._moveT = 0; const m = def.radius + 40; this._targetX = m + game.rng() * (CONFIG.WIDTH - 2 * m); }
     }
   }
   update(dt) {

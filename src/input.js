@@ -44,8 +44,8 @@ function toggleMute() {
 canvas.addEventListener("pointerdown", (e) => {
   Sound.resume(); Music.resume(true);
   const p = toLogic(e.clientX, e.clientY);
-  if (game.state === "title") { if (game.titleSettingsHit(p.x, p.y)) { game._resetArmed = false; game.state = "settings"; return; } if (game.titleCodexHit(p.x, p.y)) { game.toCodex(); return; } if (game.titleHelpHit(p.x, p.y)) { game.toTutorial(); return; } if (game.titleShipHit(p.x, p.y)) { game.toShipSelect(); return; } if (game.titleEndlessHit(p.x, p.y)) { game.startEndless(); return; } if (game.titleStartHit(p.x, p.y)) game.toMap(); return; }
-  if (game.state === "endlessover") { game.endless = false; game.toTitle(); return; }
+  if (game.state === "title") { if (game.titleSettingsHit(p.x, p.y)) { game._resetArmed = false; game.state = "settings"; return; } if (game.titleCodexHit(p.x, p.y)) { game.toCodex(); return; } if (game.titleHelpHit(p.x, p.y)) { game.toTutorial(); return; } if (game.titleShipHit(p.x, p.y)) { game.toShipSelect(); return; } if (game.titleChallengeHit(p.x, p.y)) { game.openChallengePrompt(); return; } if (game.titleEndlessHit(p.x, p.y)) { game.startEndless(); return; } if (game.titleStartHit(p.x, p.y)) game.toMap(); return; }
+  if (game.state === "endlessover") { if (game.endlessChallengeHit(p.x, p.y)) { game.copyEndlessChallenge(); return; } game.endless = false; game.toTitle(); return; }
   if (game.state === "settings") { game.settingsPointerDown(p.x, p.y); return; }
   if (game.state === "shipselect") { game.shipSelectPointerDown(p.x, p.y); return; }
   if (game.state === "codex") { game.codexPointerDown(p.x, p.y); return; }
