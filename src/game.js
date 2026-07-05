@@ -24,7 +24,7 @@ const game = {
   _mapScrollY: 0, _mapDragStartX: 0, _mapDragStartY: 0, _mapDragStartScrollY: 0, _mapDragging: false, _mapDragMoved: false,
   _mapHighlightId: null, _mapHighlightT: 0,   // MM:从图鉴跳转过来时高亮提示的关卡
   _levelTransX: 0, _levelTransY: 0, _levelTransT: 0,   // NN:进入关卡的聚焦扩散过渡(从点击处展开)
-  autoNext: true, endless: false, challengeSeed: "", challengeMode: false, challengeDaily: false, challengeTarget: null, _rng: null, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0,
+  autoNext: true, endless: false, challengeSeed: "", challengeMode: false, challengeDaily: false, challengeTarget: null, challengeSplits: [], _rng: null, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0,
   _shake: 0, _shakeT: 0, _hitStopT: 0,   // N:打击感
   // 触控按钮放大,便于拇指操作
   bombBtn: { x: 58, y: CONFIG.HEIGHT - 70, r: 42 },
@@ -128,7 +128,7 @@ const game = {
   pauseButtonHit(x, y) { const b = this.pauseBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
   // 开始某一关(索引)
   startLevel(i) {
-    this.currentLevel = i; this.world = LEVELS[i].world; this.endless = false; this.challengeSeed = ""; this.challengeMode = false; this.challengeDaily = false; this.challengeTarget = null; this._rng = null;
+    this.currentLevel = i; this.world = LEVELS[i].world; this.endless = false; this.challengeSeed = ""; this.challengeMode = false; this.challengeDaily = false; this.challengeTarget = null; this.challengeSplits = []; this._rng = null;
     this.state = "playing";
     this.player = new Player(); this.boss = null;
     this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.floats = []; this.lasers = []; this.shockwaves = []; this.specialWaves = [];
@@ -155,7 +155,7 @@ const game = {
   // F:无尽生存模式
   startEndless(opts = {}) {
     if (opts.ship && CONFIG.ships[opts.ship]) this.setShip(opts.ship);
-    this.endless = true; this.challengeSeed = opts.seed || Challenge.randomSeed(); this.challengeMode = !!opts.challenge; this.challengeDaily = !!opts.daily; this.challengeTarget = opts.target || null; this._rng = Challenge.rng(this.challengeSeed);
+    this.endless = true; this.challengeSeed = opts.seed || Challenge.randomSeed(); this.challengeMode = !!opts.challenge; this.challengeDaily = !!opts.daily; this.challengeTarget = opts.target || null; this.challengeSplits = []; this._rng = Challenge.rng(this.challengeSeed);
     this.farming = false; this._reached = false; this.currentLevel = 0; this.world = 1;
     this.state = "playing";
     this.player = new Player(); this.boss = null;
@@ -171,6 +171,7 @@ const game = {
   },
   updateEndless(dt) {
     this._endlessT += dt;
+    this.recordChallengeSplits();
     this.world = 1 + (Math.floor(this._endlessT / 40) % CONFIG.themes.length);   // 背景随时间轮换
     this._endlessSpawnT -= dt;
     if (this._endlessSpawnT <= 0 && this.enemies.length < CONFIG.endless.maxEnemies) {
@@ -189,10 +190,11 @@ const game = {
   settleEndless() {
     const final = Math.round(this.score * this.activeDiff.scoreMult);
     const time = Math.floor(this._endlessT);
+    const splits = this.challengeSplits.slice();
     const previousBest = ChallengeHistory.best(this.challengeSeed, this.ship.key);
-    const challengeCode = Challenge.encode({ seed: this.challengeSeed, ship: this.ship.key, score: final, time, combo: this.maxCombo });
-    const best = ChallengeHistory.submit({ seed: this.challengeSeed, ship: this.ship.key, score: final, time, combo: this.maxCombo, code: challengeCode, daily: this.challengeDaily });
-    this.endlessResult = { base: this.score, diffFactor: this.activeDiff.scoreMult, time, final, maxCombo: this.maxCombo, challengeCode, challengeSeed: this.challengeSeed, challengeMode: this.challengeMode, challengeDaily: this.challengeDaily, target: this.challengeTarget, best, newBest: !previousBest || final > previousBest.score };
+    const challengeCode = Challenge.encode({ seed: this.challengeSeed, ship: this.ship.key, score: final, time, combo: this.maxCombo, splits });
+    const best = ChallengeHistory.submit({ seed: this.challengeSeed, ship: this.ship.key, score: final, time, combo: this.maxCombo, splits, code: challengeCode, daily: this.challengeDaily });
+    this.endlessResult = { base: this.score, diffFactor: this.activeDiff.scoreMult, time, final, maxCombo: this.maxCombo, splits, challengeCode, challengeSeed: this.challengeSeed, challengeMode: this.challengeMode, challengeDaily: this.challengeDaily, target: this.challengeTarget, best, newBest: !previousBest || final > previousBest.score };
     this.endlessTop = EndlessBoard.submit(final);
     this.state = "endlessover";
     Achievements.checkEndlessEnd({ time: this._endlessT, maxCombo: this.maxCombo });   // OO
@@ -201,6 +203,20 @@ const game = {
     this.showChallengeModal();
   },
   startDailyChallenge() { this.startEndless({ seed: Challenge.dailySeed(), challenge: true, daily: true }); },
+  challengeSplitMarks() { return [30, 60, 120]; },
+  recordChallengeSplits() {
+    const marks = this.challengeSplitMarks();
+    while (this.challengeSplits.length < marks.length && this._endlessT >= marks[this.challengeSplits.length]) {
+      this.challengeSplits.push({ t: marks[this.challengeSplits.length], score: Math.round(this.score * this.activeDiff.scoreMult) });
+    }
+  },
+  targetChallengeSplit() {
+    const splits = this.challengeTarget && this.challengeTarget.splits;
+    if (!Array.isArray(splits) || !splits.length) return null;
+    let target = splits[0];
+    for (const split of splits) { if (this._endlessT >= split.t) target = split; else break; }
+    return target;
+  },
   endlessChallengeRect() { return { x: CONFIG.WIDTH / 2 - 150, y: 650, w: 300, h: 48 }; },
   endlessChallengeHit(px, py) { const r = this.endlessChallengeRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
   copyEndlessChallenge() {
@@ -743,6 +759,7 @@ const game = {
     const cx = CONFIG.WIDTH / 2, r = this.endlessResult || { base: this.score, diffFactor: this.activeDiff.scoreMult, time: 0, final: this.score, maxCombo: this.maxCombo };
     const top = this.endlessTop || EndlessBoard.load();
     const targetScore = r.target && r.target.score ? r.target.score : 0;
+    const targetSplits = r.target ? Challenge.cleanSplits(r.target.splits) : [];
     let infoY = 418;
     ctx.fillStyle = "rgba(0,0,0,.78)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
     ctx.textAlign = "center";
@@ -751,6 +768,7 @@ const game = {
     ctx.fillStyle = "#dee2e6"; ctx.font = "20px 'Segoe UI', sans-serif"; ctx.fillText("得分 " + this.easedCount(r.base) + "  × 难度 " + r.diffFactor.toFixed(1), cx, 336);
     ctx.fillStyle = "#fff"; ctx.font = "bold 30px 'Segoe UI', sans-serif"; ctx.fillText("最终得分  " + this.easedCount(r.final, 1.3), cx, 384);
     if (targetScore) { ctx.fillStyle = r.final > targetScore ? "#38d9a9" : "#ffd43b"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("挑战目标 " + targetScore + "  ·  " + (r.final > targetScore ? "已超越" : "继续冲刺"), cx, infoY); infoY += 24; }
+    if (targetSplits.length) { ctx.fillStyle = "#adb5bd"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("影子节点 " + targetSplits.map(s => s.t + "s " + s.score).join(" / "), cx, infoY); infoY += 22; }
     if (r.best && r.best.score) { ctx.fillStyle = r.newBest ? "#38d9a9" : "#74c0fc"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("个人最佳 " + r.best.score + "  ·  " + (r.newBest ? "新纪录" : "差 " + Math.max(0, r.best.score - r.final)), cx, infoY); infoY += 24; }
     const boardY = infoY > 418 ? infoY + 16 : 434;
     ctx.fillStyle = "#adb5bd"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("── 无尽榜 ──", cx, boardY);
@@ -1502,6 +1520,21 @@ const game = {
     }
     ctx.restore();
   },
+  drawChallengeHUD(ctx) {
+    const target = this.targetChallengeSplit();
+    if (!target) return;
+    const current = Math.round(this.score * this.activeDiff.scoreMult), delta = current - target.score;
+    const text = "影子 " + target.t + "s " + target.score + " · " + (delta >= 0 ? "+" : "") + delta;
+    const x = CONFIG.WIDTH / 2, y = this.boss ? 96 : 64;
+    ctx.save();
+    ctx.font = "bold 13px 'Segoe UI', sans-serif";
+    const w = Math.min(CONFIG.WIDTH - 56, ctx.measureText(text).width + 22), h = 24;
+    ctx.fillStyle = "rgba(8, 16, 28, .72)"; UI.roundRect(ctx, x - w / 2, y - h + 4, w, h, 8); ctx.fill();
+    ctx.strokeStyle = delta >= 0 ? "rgba(56,217,169,.78)" : "rgba(255,212,59,.78)";
+    ctx.lineWidth = 1.2; UI.roundRect(ctx, x - w / 2, y - h + 4, w, h, 8); ctx.stroke();
+    ctx.textAlign = "center"; ctx.fillStyle = delta >= 0 ? "#38d9a9" : "#ffd43b"; ctx.fillText(text, x, y - 4);
+    ctx.restore();
+  },
   drawHUD(ctx) {
     ctx.fillStyle = "#e9ecef"; ctx.font = "20px 'Segoe UI', sans-serif"; ctx.textAlign = "left";
     ctx.fillText("得分 " + this.score, 16, 30);
@@ -1510,6 +1543,7 @@ const game = {
     this.drawCountBadge(ctx, 40, 40, this.player.overcharge > 0 ? this.player.power + "+" + this.player.overcharge : this.player.power, this.player.overcharge > 0 ? "#74c0fc" : "#38d9a9");
     ctx.fillStyle = "#adb5bd"; ctx.font = "16px 'Segoe UI', sans-serif"; ctx.fillText(this.endless ? "无尽 " + Math.floor(this._endlessT) + "s" : "关卡 " + this.levelDef().id, 200, 28);
     this.drawThreatHUD(ctx);
+    this.drawChallengeHUD(ctx);
 
     // AA:HP 血条 —— 更大更醒目:渐变(绿→黄→红)+ 底槽玻璃质感 + 掉血残影 + 危险脉动发光 + 图标
     const hpW = 190, hpH = 18, hpX = CONFIG.WIDTH - hpW - 16, hpY = 14;

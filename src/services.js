@@ -213,7 +213,12 @@ const Challenge = {
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   },
+  cleanSplits(splits) {
+    if (!Array.isArray(splits)) return [];
+    return splits.map(s => ({ t: Math.floor(Number(s.t) || 0), score: Math.max(0, Math.round(Number(s.score) || 0)) })).filter(s => s.t > 0).slice(0, 3);
+  },
   encode(run) {
+    const splits = this.cleanSplits(run.splits);
     const payload = {
       v: 1,
       mode: "endless",
@@ -223,6 +228,7 @@ const Challenge = {
       time: run.time || 0,
       combo: run.combo || 0,
     };
+    if (splits.length) payload.splits = splits;
     const raw = btoa(JSON.stringify(payload)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
     return this.prefix + raw;
   },
@@ -235,6 +241,7 @@ const Challenge = {
       while (raw.length % 4) raw += "=";
       const payload = JSON.parse(atob(raw));
       if (!payload || payload.v !== 1 || payload.mode !== "endless" || !payload.seed) return null;
+      payload.splits = this.cleanSplits(payload.splits);
       return payload;
     } catch (e) {
       return null;
@@ -253,8 +260,9 @@ const ChallengeHistory = {
     let entry = list.find(r => r.id === id);
     if (!entry) { entry = { id, seed: run.seed, ship: run.ship, score: 0, time: 0, combo: 0, attempts: 0, ts }; list.unshift(entry); }
     entry.attempts = (entry.attempts || 0) + 1; entry.ts = ts; entry.lastScore = run.score; entry.lastTime = run.time;
+    entry.lastSplits = Challenge.cleanSplits(run.splits);
     entry.code = run.code || entry.code; entry.daily = !!run.daily;
-    if (run.score >= (entry.score || 0)) { entry.score = run.score; entry.time = run.time; entry.combo = run.combo; entry.date = ts.slice(0, 10); }
+    if (run.score >= (entry.score || 0)) { entry.score = run.score; entry.time = run.time; entry.combo = run.combo; entry.splits = entry.lastSplits; entry.date = ts.slice(0, 10); }
     list.sort((a, b) => String(b.ts || "").localeCompare(String(a.ts || "")));
     this.saveList(list.slice(0, this.max));
     return entry;
