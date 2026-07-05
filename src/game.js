@@ -2268,7 +2268,7 @@ const game = {
       if (x > CONFIG.WIDTH - 120) { x = 16; y += 28; }
     }
     for (const key of bonuses) {
-      const b = CONFIG.bonuses[key], text = b.name + "×" + this.bonuses[key];
+      const b = CONFIG.bonuses[key], text = this.bonusHUDText(key);
       const w = Math.max(72, ctx.measureText(text).width + 18);
       ctx.fillStyle = "rgba(8, 16, 28, .68)"; UI.roundRect(ctx, x, y - 12, w, 24, 8); ctx.fill();
       ctx.strokeStyle = UI.rgba(b.color, .75); ctx.lineWidth = 1.2; UI.roundRect(ctx, x, y - 12, w, 24, 8); ctx.stroke();
@@ -2277,6 +2277,12 @@ const game = {
       if (x > CONFIG.WIDTH - 120) { x = 16; y += 28; }
     }
     ctx.restore();
+  },
+  bonusHUDText(key) {
+    const b = CONFIG.bonuses[key], n = this.bonuses[key] || 0;
+    if (!b) return key + "×" + n;
+    if (key === "lastStand" && n > 0) return b.name + " " + (this._lastStandCd > 0 ? Math.ceil(this._lastStandCd) + "s" : "就绪");
+    return b.name + "×" + n;
   },
   drawEndlessEventHUD(ctx) {
     const e = this.activeEndlessEvent();
