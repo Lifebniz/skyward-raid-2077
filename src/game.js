@@ -221,6 +221,7 @@ const game = {
     if (!e || !this.player) return 0;
     const cfg = CONFIG.endless, clean = this._endlessStats && this._endlessStats.hits === this._endlessEventStartHits;
     const gain = Math.round((cfg.eventClearScore || 0) * (clean ? 1.5 : 1) * this.threatScoreMult());
+    if (this._endlessStats) { this._endlessStats.eventClears = (this._endlessStats.eventClears || 0) + 1; this._endlessStats.eventScore = (this._endlessStats.eventScore || 0) + gain; if (clean) this._endlessStats.cleanEvents = (this._endlessStats.cleanEvents || 0) + 1; }
     if (gain > 0) { this.score += gain; this.floats.push(new FloatText(this.player.x, this.player.y - 78, "空域突破 +" + gain, e.color || "#ffd43b")); }
     if (clean && cfg.eventCleanShield > 0) {
       this.player.grantShield(Math.min(90, this.player.shieldHp + cfg.eventCleanShield), cfg.eventCleanShieldDur || 5);
@@ -309,7 +310,7 @@ const game = {
   startDailyChallenge() { this.startEndless({ seed: Challenge.dailySeed(), challenge: true, daily: true }); },
   challengeSplitMarks() { return CONFIG.challenge.splits; },
   resetEndlessTelemetry() {
-    this._endlessStats = { kills: 0, bossKills: 0, hits: 0, blocked: 0, damageTaken: 0, bombs: 0, drafts: 0, picks: 0, skips: 0, rerolls: 0, events: 0, jammed: 0 };
+    this._endlessStats = { kills: 0, bossKills: 0, hits: 0, blocked: 0, damageTaken: 0, bombs: 0, drafts: 0, picks: 0, skips: 0, rerolls: 0, events: 0, eventClears: 0, cleanEvents: 0, eventScore: 0, jammed: 0 };
     this._endlessTimeline = []; this._endlessMarkIdx = 0;
   },
   endlessTelemetryMarks() { return [60, 120, 180, 300]; },
@@ -628,6 +629,8 @@ const game = {
     else if (time >= 60 && hitsPerMin <= 1.5) tags.push("走位稳定");
     if ((tele.bossKills || 0) >= 3) tags.push("Boss处理强");
     else if ((r.bossAffixes || []).length && !(tele.bossKills || 0)) tags.push("Boss压力高");
+    if (tele.cleanEvents) tags.push("完美空域 " + tele.cleanEvents);
+    else if (tele.eventClears) tags.push("空域突破 " + tele.eventClears);
     if ((tele.jammed || 0) / time >= 0.18) tags.push("干扰压力高");
     if ((tele.drafts || 0) >= 3) tags.push((tele.picks || 0) >= tele.drafts ? "选择充分" : "跳过偏多");
     if ((r.maxThreat || 0) >= 4 && hitsPerMin <= 2.2) tags.push("高威胁掌控");
@@ -1695,7 +1698,7 @@ const game = {
       ctx.fillText("BONUS " + bonusText, cx, infoY); infoY += 22;
     }
     const tele = r.telemetry || {};
-    ctx.fillText(fitLine("战况 击杀 " + (tele.kills || 0) + " · Boss " + (tele.bossKills || 0) + " · 受击 " + (tele.hits || 0) + "(格挡 " + (tele.blocked || 0) + ") · 承伤 " + Math.round(tele.damageTaken || 0) + " · 干扰 " + Math.round(tele.jammed || 0) + "s · 炸弹 " + (tele.bombs || 0) + " · 选择 " + (tele.picks || 0) + "/" + (tele.drafts || 0), 356), cx, infoY); infoY += 18;
+    ctx.fillText(fitLine("战况 击杀 " + (tele.kills || 0) + " · Boss " + (tele.bossKills || 0) + " · 受击 " + (tele.hits || 0) + "(格挡 " + (tele.blocked || 0) + ") · 承伤 " + Math.round(tele.damageTaken || 0) + " · 空域 " + (tele.eventClears || 0) + "/" + (tele.cleanEvents || 0) + " · 干扰 " + Math.round(tele.jammed || 0) + "s · 炸弹 " + (tele.bombs || 0) + " · 选择 " + (tele.picks || 0) + "/" + (tele.drafts || 0), 356), cx, infoY); infoY += 18;
     const timeline = (r.timeline || []).map(m => m.t + "s " + m.score + "分/" + m.kills + "杀/HP" + m.hp + "%" + (m.jam ? "/干扰" + m.jam + "s" : "")).join(" · ");
     if (timeline && !compactResult) { ctx.fillText(fitLine("节点 " + timeline, 356), cx, infoY); infoY += 22; }
     const boardY = infoY > 418 ? infoY + 16 : 434;

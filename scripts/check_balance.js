@@ -80,10 +80,15 @@ game.player = { x: 100, y: 100, shieldHp: 0, grantShield(n, dur) { this.shieldHp
 const eventHitGain = game.finishEndlessEvent(CONFIG.endless.events[0]);
 assert.strictEqual(eventHitGain, CONFIG.endless.eventClearScore, "event clear should grant base score after hits");
 assert.strictEqual(game.player.shieldHp, 0, "event clear should not grant clean shield after hits");
+assert.strictEqual(game._endlessStats.eventClears, 1, "event clear should be tracked");
+assert.strictEqual(game._endlessStats.cleanEvents || 0, 0, "hit event clear should not count as clean");
+assert.strictEqual(game._endlessStats.eventScore, eventHitGain, "event score should be tracked");
 game.score = 0; game.floats = []; game._endlessStats = { hits: 1 }; game._endlessEventStartHits = 1;
 const eventCleanGain = game.finishEndlessEvent(CONFIG.endless.events[0]);
 assert(eventCleanGain > eventHitGain, "clean event clear should grant bonus score");
 assert(game.player.shieldHp >= CONFIG.endless.eventCleanShield, "clean event clear should grant shield");
+assert.strictEqual(game._endlessStats.cleanEvents, 1, "clean event clear should be tracked");
+assert(game.endlessReviewTags({ telemetry: game._endlessStats, time: 60, bonuses: {} }).some(t => t.includes("完美空域")), "clean event clears should appear in review tags");
 
 const draftIds = CONFIG.chipOrder.map(k => "chip:" + k).concat(CONFIG.bonusOrder.map(k => "bonus:" + k));
 const hasSurvivalDraft = () => game._chipChoices.some(id => id.startsWith("bonus:") && game.draftCardRoute(game.cardInfo(id)) === "生存");
