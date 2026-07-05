@@ -1,0 +1,2778 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>空袭复刻 · 原型 v3.6</title>
+<style>
+  html, body {
+    margin: 0; height: 100%;
+    background: #0a0e14; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    -webkit-user-select: none; user-select: none; touch-action: none;
+  }
+  #stage { position: relative; background: #000; box-shadow: 0 0 40px rgba(0,150,255,.15); }
+  canvas { display: block; }
+  #hint {
+    position: absolute; left: 0; right: 0; bottom: 8px;
+    text-align: center; color: #4a90d9; font-size: 12px; opacity: .6; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game"></canvas>
+  <div id="hint">地图选难度/机型 · 拖动移动 · B炸弹 · X机型技能 · P暂停 · M静音</div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+ *  《空中突袭 1945》复刻 —— 竖切片原型  v0.5
+ *  引擎:HTML5 原生 Canvas,零依赖。双击本文件即可在浏览器运行。
+ *
+ *  本版新增:标题界面 / 难度选择(简单·普通·困难)/ 完整游戏流程(标题↔对局↔结算)
+ *  历史功能:卷轴背景 · 连击系统 · 分数排行 · 多关卡 · 炸弹清屏 · 爆炸粒子 · 音效钩子
+ *            火力升级 · 多阶段 BOSS · 敌机弹幕
+ *
+ *  ⚠ 美术/音效均为占位(代码图形 + WebAudio 合成),非原版素材。替换即用,逻辑不动。
+ *  ⚠ 数值集中在 CONFIG。
+ * ===================================================================== */
+
+/* =====================================================================
+ * 1) CONFIG
+ * ===================================================================== */
+const CONFIG = {
+  WIDTH: 540, HEIGHT: 960,
+
+  player: {
+    startX: 270, startY: 800, radius: 15, maxHp: 100, lerp: 0.35,
+    fireInterval: 0.11, bulletSpeed: 950, maxPower: 7, maxBombs: 5, bombInvuln: 1.4,
+  },
+  bullet: { radius: 5, damage: 1 },
+  // KK:虚拟摇杆操作模式(和默认的"拖动跟随"二选一,设置页可切换)。baseX/baseY 固定底座位置(避开底部按钮行),
+  // radius 摇杆最大可推距离,deadzone 死区比例(小于这个比例视为无输入),maxSpeed 推到底时的移动速度(px/s)。
+  joystick: { baseX: 110, baseY: 770, radius: 70, deadzone: 0.15, maxSpeed: 480 },
+
+  enemy: {
+    small:  { hp: 1,  speed: 200, radius: 15, score: 100, color: "#ff6b6b", fireInterval: 0,   bulletSpeed: 0,   damage: 0 },
+    medium: { hp: 5,  speed: 120, radius: 23, score: 300, color: "#ffa94d", fireInterval: 1.8, bulletSpeed: 280, damage: 8, shots: 1 },
+    large:  { hp: 16, speed: 80,  radius: 33, score: 700, color: "#f06595", fireInterval: 2.4, bulletSpeed: 250, damage: 8, shots: 3 },
+    // D:新增两种。gunner 重炮机(高血/双发瞄准);splitter 分裂机(死亡裂成小型机)
+    gunner:   { hp: 10, speed: 90,  radius: 26, score: 500, color: "#748ffc", fireInterval: 1.2, bulletSpeed: 300, damage: 9, shots: 2 },
+    splitter: { hp: 8,  speed: 100, radius: 26, score: 400, color: "#20c997", fireInterval: 0,   bulletSpeed: 0,   damage: 0, splits: 3 },
+    // Z:世界4 新增两种。sniper 狙击机(慢速/低频但单发高伤精准狙击,shots:1 时 fireFan 天然退化为直线瞄准);
+    //   detonator 雷机(自身不开火,死亡时炸出一圈弹幕,onEnemyKilled 里按 ringCount/ringSpeed/ringDamage 处理)
+    sniper:     { hp: 7, speed: 70,  radius: 22, score: 550, color: "#e64980", fireInterval: 2.6, bulletSpeed: 520, damage: 14, shots: 1 },
+    detonator:  { hp: 6, speed: 110, radius: 24, score: 450, color: "#fab005", fireInterval: 0,   bulletSpeed: 0,   damage: 0, ringCount: 14, ringSpeed: 210, ringDamage: 9 },
+    // V:世界5 新增两种。phantom 幻影机(高速/双发瞄准,量多但脆);
+    //   carrier 母舰机(自身不开火,死亡时裂出 spawnCount 只 spawns 类型的僚机,onEnemyKilled 里处理,同 splitter 套路但更硬更重)
+    phantom:  { hp: 9,  speed: 150, radius: 20, score: 600, color: "#22d3ee", fireInterval: 1.0, bulletSpeed: 340, damage: 11, shots: 2 },
+    carrier:  { hp: 22, speed: 65,  radius: 32, score: 900, color: "#9775fa", fireInterval: 0,   bulletSpeed: 0,   damage: 0, spawns: "medium", spawnCount: 2 },
+  },
+  enemyBullet: { radius: 6 },
+
+  // 敌机运动模式参数(波次表用 move 字段引用;缺省 straight 直线下落)
+  moves: {
+    straight: {},
+    sine:     { amp: 90,  freq: 3.0 },              // 正弦蛇行
+    zigzag:   { amp: 110, period: 1.4 },            // 锯齿折返
+    swoop:    { holdY: 210, hold: 0.7, diveVy: 2.4 }, // 下降→驻留→俯冲
+    dive:     { speedMul: 1.7, triggerY: 0.16 },    // 下降片刻后瞄准玩家直冲(神风)
+    orbit:    { radius: 60, speed: 2.2 },            // Z:绕基准点公转,同时缓慢下降(比 sine 多了纵向摆动)
+  },
+
+  weapon: {
+    1: [ { ox: 0,  deg: 0 } ],
+    2: [ { ox: -9, deg: 0 }, { ox: 9, deg: 0 } ],
+    3: [ { ox: 0, deg: 0 }, { ox: -11, deg: -12 }, { ox: 11, deg: 12 } ],
+    4: [ { ox: -7, deg: 0 }, { ox: 7, deg: 0 }, { ox: -13, deg: -16 }, { ox: 13, deg: 16 } ],
+    5: [ { ox: 0, deg: 0 }, { ox: -8, deg: -10 }, { ox: 8, deg: 10 }, { ox: -15, deg: -22 }, { ox: 15, deg: 22 } ],
+    6: [ { ox: 0, deg: 0 }, { ox: -8, deg: -9 }, { ox: 8, deg: 9 }, { ox: -16, deg: -20 }, { ox: 16, deg: 20 }, { ox: -22, deg: -32 }, { ox: 22, deg: 32 } ],                                  // 7 路
+    7: [ { ox: 0, deg: 0 }, { ox: -7, deg: -7 }, { ox: 7, deg: 7 }, { ox: -14, deg: -16 }, { ox: 14, deg: 16 }, { ox: -20, deg: -26 }, { ox: 20, deg: 26 }, { ox: -26, deg: -38 }, { ox: 26, deg: 38 } ],  // 9 路
+  },
+
+  // weights 普通掉落;endlessWeights 无尽掉落(炸弹更稀有)。四项各自累加,和为 1。
+  // autoInterval:常规关卡(非无尽)每隔多久自动刷新一个道具(秒)。
+  powerup: { radius: 14, speed: 130, dropChance: 0.14, healAmount: 12, autoInterval: 5,
+    weights:        { power: 0.5,  heal: 0.22, bomb: 0.13, wing: 0.15 },
+    endlessWeights: { power: 0.55, heal: 0.26, bomb: 0.04, wing: 0.15 } },
+  bomb: { bossDamage: 70, flash: 0.35 },
+
+  // 每关一个独立 BOSS:各有移动方式(sweep 横扫 / figure8 八字 / dart 瞬移)
+  // 与分阶段弹幕组合(attacks 里的 type 见 runBossAttack 弹幕库)。
+  bosses: [
+    { name: "近卫舰", hp: 400, radius: 58, score: 6000, enterY: 150, damage: 9, shape: "delta", taunt: "休想越过这道防线!",
+      colors: ["#845ef7", "#e64980", "#f03e3e"], movement: "sweep", moveSpeed: 1.1, moveRange: 170,
+      phases: [
+        { until: 0.66, cd: 1.30, attacks: [ { type: "fanDown", count: 5, spread: 55, speed: 250 } ] },
+        { until: 0.33, cd: 0.90, attacks: [ { type: "aimed", count: 3, spread: 16, speed: 280 } ] },
+        { until: 0.00, cd: 1.05, attacks: [ { type: "ring", count: 18, speed: 225 }, { type: "fanDown", count: 6, spread: 60, speed: 250 } ] },
+      ] },
+    { name: "旋刃", hp: 540, radius: 54, score: 7500, enterY: 150, damage: 9, shape: "cross", taunt: "在我的刃下化作齑粉吧。",
+      colors: ["#4dabf7", "#22b8cf", "#f03e3e"], movement: "figure8", moveSpeed: 1.0, moveRange: 150,
+      phases: [
+        { until: 0.60, cd: 0.14, attacks: [ { type: "spiral", arms: 2, step: 19, speed: 170 } ] },     // 连续旋转弹幕
+        { until: 0.30, cd: 0.85, attacks: [ { type: "aimed", count: 5, spread: 22, speed: 260 } ] },
+        { until: 0.00, cd: 0.12, attacks: [ { type: "spiral", arms: 3, step: 26, speed: 190 } ] },
+      ] },
+    { name: "轰炸机", hp: 680, radius: 62, score: 9000, enterY: 135, damage: 10, shape: "hex", taunt: "地毯式火力,无处可逃!",
+      colors: ["#ffa94d", "#ff922b", "#f03e3e"], movement: "dart", dartEvery: 2.2,
+      phases: [
+        { until: 0.60, cd: 1.60, attacks: [ { type: "wall", spacing: 46, gap: 100, speed: 180 } ] },   // 带缺口弹墙,逼走位
+        { until: 0.30, cd: 0.80, attacks: [ { type: "aimed", count: 5, spread: 26, speed: 270 } ] },
+        { until: 0.00, cd: 1.40, attacks: [ { type: "wall", spacing: 40, gap: 90, speed: 200 }, { type: "ring", count: 12, speed: 210 } ] },
+      ] },
+    { name: "双核要塞", hp: 880, radius: 60, score: 11000, enterY: 150, damage: 11, shape: "delta", taunt: "双核同调……全弹发射!",
+      colors: ["#e64980", "#f06595", "#f03e3e"], movement: "sweep", moveSpeed: 1.5, moveRange: 190,
+      phases: [
+        { until: 0.66, cd: 1.00, attacks: [ { type: "ring", count: 16, speed: 220 }, { type: "aimed", count: 3, spread: 14, speed: 280 } ] },
+        { until: 0.33, cd: 0.13, attacks: [ { type: "spiral", arms: 3, step: 23, speed: 200 } ] },
+        { until: 0.00, cd: 1.20, attacks: [ { type: "ring", count: 20, speed: 230 }, { type: "wall", spacing: 44, gap: 80, speed: 190 } ] },
+      ] },
+    { name: "天空要塞", hp: 1120, radius: 66, score: 15000, enterY: 150, damage: 12, shape: "hex", taunt: "这里,就是你的坟墓。",
+      colors: ["#f783ac", "#f03e3e", "#ff3b3b"], movement: "figure8", moveSpeed: 1.2, moveRange: 170,
+      phases: [
+        { until: 0.70, cd: 0.90, attacks: [ { type: "fanDown", count: 7, spread: 70, speed: 250 }, { type: "aimed", count: 3, spread: 12, speed: 290 } ] },
+        { until: 0.40, cd: 0.12, attacks: [ { type: "spiral", arms: 4, step: 21, speed: 200 } ] },
+        { until: 0.00, cd: 1.00, attacks: [ { type: "ring", count: 22, speed: 230 }, { type: "wall", spacing: 38, gap: 80, speed: 200 }, { type: "spiral", arms: 2, step: 17, speed: 180 }, { type: "laser", warn: 0.6, dur: 0.9, width: 50, cd: 4.8, aimed: true } ] },
+      ] },
+    // Z:世界4 最终BOSS —— shape:"star" 新造型,主打 laser(镭射柱)机制 + 狂暴(继承自 Boss 通用逻辑)
+    { name: "深渊君王", hp: 1400, radius: 70, score: 20000, enterY: 150, damage: 13, shape: "star", taunt: "深渊无门,唯有臣服。",
+      colors: ["#12b886", "#343a40", "#ff3b3b"], movement: "figure8", moveSpeed: 1.3, moveRange: 180,
+      phases: [
+        { until: 0.72, cd: 0.85, attacks: [ { type: "fanDown", count: 8, spread: 80, speed: 260 }, { type: "aimed", count: 3, spread: 12, speed: 300 } ] },
+        { until: 0.42, cd: 0.11, attacks: [ { type: "spiral", arms: 4, step: 20, speed: 210 }, { type: "laser", warn: 0.55, dur: 0.9, width: 54, cd: 3.8, aimed: true } ] },
+        { until: 0.00, cd: 0.95, attacks: [ { type: "ring", count: 24, speed: 240 }, { type: "wall", spacing: 36, gap: 76, speed: 210 }, { type: "laser", warn: 0.5, dur: 1.0, width: 60, cd: 3.2, aimed: true } ] },
+      ] },
+    // V:世界5 最终BOSS —— shape:"octagon" 新造型,全游戏最强,laser+spiral+wall 三件套叠加收官
+    { name: "虚空吞噬者", hp: 1700, radius: 76, score: 26000, enterY: 150, damage: 15, shape: "octagon", taunt: "万物终将被虚空吞噬。",
+      colors: ["#5f3dc4", "#101010", "#ff3b3b"], movement: "figure8", moveSpeed: 1.4, moveRange: 190,
+      phases: [
+        { until: 0.70, cd: 0.80, attacks: [ { type: "fanDown", count: 9, spread: 85, speed: 270 }, { type: "aimed", count: 4, spread: 14, speed: 300 } ] },
+        { until: 0.38, cd: 0.10, attacks: [ { type: "spiral", arms: 5, step: 18, speed: 220 }, { type: "laser", warn: 0.5, dur: 0.9, width: 56, cd: 3.5, aimed: true } ] },
+        { until: 0.00, cd: 0.85, attacks: [ { type: "ring", count: 26, speed: 250 }, { type: "wall", spacing: 34, gap: 72, speed: 220 }, { type: "laser", warn: 0.45, dur: 1.0, width: 64, cd: 2.8, aimed: true } ] },
+      ] },
+  ],
+
+  crashDamage: 25,
+
+  // C:机型。hpMult 血量倍率 / fireMult 射击间隔倍率(<1 更快) / bombs 额外炸弹 / wings 初始僚机
+  // X:机型深化 —— lerpMult 移动跟手倍率 / radiusMult 机体&判定缩放 / dmgTakenMult 受伤倍率 / energyMult 必杀能量获取倍率
+  //   comboTimeoutMult 连击判定时间倍率 / bombDmgMult 炸弹对BOSS伤害倍率 / specialCooldownMult 必杀冷却倍率
+  //   bodyShape 决定 Player 机身剪影(delta/twin/bulk/dart,见 drawShipBody)
+  // X4:必杀技机型专属化(specialType,见 game.useSpecial 分派)—— 攻击型保留原来的全屏重伤;防御型改护盾+回血;
+  //   侦查型改隐身;平衡型改冲击波抵消弹幕。specialName/specialDesc 供机型选择页展示。
+  shipOrder: ["balanced", "attacker", "defender", "scout"],
+  ships: {
+    balanced: { key: "balanced", name: "平衡型", color: "#4dabf7", desc: "均衡·带1僚机", hpMult: 1.0, fireMult: 1.0,  bombs: 0, wings: 1,
+      bodyShape: "delta", lerpMult: 1.0, radiusMult: 1.0, dmgTakenMult: 1.0, energyMult: 1.0, comboTimeoutMult: 1.0, bombDmgMult: 1.0, specialCooldownMult: 1.0,
+      perkName: "全面均衡", perkDesc: "无明显短板,新手推荐",
+      specialType: "wave", specialName: "破阵冲击波", specialDesc: "向前发射一道扩散能量波,抵消沿途弹幕并对敌机造成伤害" },
+    attacker: { key: "attacker", name: "攻击型", color: "#ff6b6b", desc: "火力猛·皮薄",  hpMult: 0.75, fireMult: 0.78, bombs: 0, wings: 0,
+      bodyShape: "twin", lerpMult: 1.1, radiusMult: 0.95, dmgTakenMult: 1.0, energyMult: 1.0, comboTimeoutMult: 1.4, bombDmgMult: 1.0, specialCooldownMult: 1.0,
+      perkName: "狂热连击", perkDesc: "连击判定时间 +40%,更容易叠满倍率",
+      specialType: "nuke", specialName: "全屏轰杀", specialDesc: "对场上所有敌机造成重伤,并获得短暂无敌" },
+    defender: { key: "defender", name: "防御型", color: "#38d9a9", desc: "血厚·多炸弹",  hpMult: 1.5, fireMult: 1.18, bombs: 2, wings: 0,
+      bodyShape: "bulk", lerpMult: 0.85, radiusMult: 1.15, dmgTakenMult: 0.8, energyMult: 1.0, comboTimeoutMult: 1.0, bombDmgMult: 1.25, specialCooldownMult: 1.0,
+      perkName: "钢铁装甲", perkDesc: "受到伤害 -20% · 炸弹伤害 +25%",
+      specialType: "shield", specialName: "护盾展开", specialDesc: "立即回复部分生命,并展开可吸收伤害的能量护盾" },
+    scout: { key: "scout", name: "侦查型", color: "#ffd43b", desc: "机动灵活·体积小", hpMult: 0.65, fireMult: 0.92, bombs: 1, wings: 0,
+      bodyShape: "dart", lerpMult: 1.5, radiusMult: 0.78, dmgTakenMult: 1.0, energyMult: 1.15, comboTimeoutMult: 1.0, bombDmgMult: 1.0, specialCooldownMult: 0.75,
+      perkName: "灵敏机动", perkDesc: "跟手 +50% · 受击体积 -22% · 必杀冷却 -25% · 能量获取 +15%",
+      specialType: "stealth", specialName: "光学迷彩", specialDesc: "短暂隐身,期间免疫所有伤害" },
+  },
+  // A:僚机上限。B:必杀(能量攒满 + 冷却结束才可释放,offensive 全屏重伤;对 BOSS 伤害减半)
+  wingMax: 4,
+  // X3:cooldown 10→15(必杀强度没变,拉长间隔避免刷太快);新增 passiveGainPerSec —— 除了击杀攒能量,不管有没有击杀都按秒缓慢回能
+  //   (60秒能从0攒满,纯粹是保底,不会比正常边打边攒更快),避免"没打到东西的时候必杀完全不涨"的干等感
+  // X4:机型专属必杀参数——shieldHp/shieldDur/healOnShield 给防御型;stealthDur 给侦查型;waveDamage/waveSpeed/waveWidthGrow 给平衡型
+  special: { bossDamage: 110, gainPerKill: 3, gainBossKill: 25, passiveGainPerSec: 1.7, invuln: 0.8, cooldown: 15,
+    shieldHp: 60, shieldDur: 9, healOnShield: 0.3, stealthDur: 4.0, waveDamage: 45 },
+  // F 无尽模式:玩家血量倍率更低、同屏敌人上限更小。T:难度统一固定,不跟随地图选择
+  // dmgRampTime/dmgRampMult:无尽模式敌弹伤害从 t=0 的 1 倍线性增长,到 dmgRampTime 秒时封顶为 dmgRampMult 倍
+  endless: { hpMult: 0.7, maxEnemies: 14, diffKey: "normal", dmgRampTime: 300, dmgRampMult: 3 },
+
+  combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
+
+  // 结算:最终分 = 本局分 ×(1 + 血量比例×hpCoeff)× 难度 scoreMult
+  // bombKillMult:炸弹清兵得分折扣(不吃连击)。farmMaxEnemies:刷分在场敌人上限。
+  // farmScoreCapMult:刷分总分上限=通关时得分×此倍数,达到则强制结算。
+  scoring: { hpCoeff: 0.6, farmInterval: 1.4, bombKillMult: 0.25, farmMaxEnemies: 12, farmScoreCapMult: 2 },
+  bg: { speed: 130 },
+  themes: [
+    { sky1: "#081826", sky2: "#0d3a5c", band1: "rgba(20,80,110,.55)", band2: "rgba(40,130,160,.4)" },
+    { sky1: "#241207", sky2: "#5a2e12", band1: "rgba(120,64,28,.55)",  band2: "rgba(170,96,40,.4)" },
+    { sky1: "#0a0a1e", sky2: "#241040", band1: "rgba(60,36,110,.55)",  band2: "rgba(110,70,180,.4)" },
+    { sky1: "#1a0505", sky2: "#3d0d0d", band1: "rgba(120,20,20,.55)",  band2: "rgba(180,40,20,.4)" },   // Z:世界4"深渊"主题
+    { sky1: "#05030a", sky2: "#140a2e", band1: "rgba(70,30,120,.55)",  band2: "rgba(120,60,190,.4)" },  // V:世界5"虚空"主题
+  ],
+  // P:关卡过场副标题(按世界)
+  worldIntro: ["第一战区 · 近海突破", "第二战区 · 大漠强袭", "第三战区 · 夜空决战", "第四战区 · 深渊禁地", "第五战区 · 虚空回廊"],
+
+  // 难度档:dmgMult 敌方伤害倍率 / fireMult 敌方射击间隔倍率(>1 更慢=更易)
+  //          bossHpMult BOSS 血量倍率 / invuln 玩家受击无敌时长 / startBombs 初始炸弹
+  // X3:itemDropMult(仅 BOSS 关卡的自动掉落间隔倍率,>1 更慢更稀有)/ preBossMobMult(标了 preBoss:true 的波次数量倍率)
+  //   —— 难度越高,BOSS 关卡里白捡的道具越少、BOSS 前要清的小怪越多,和已有的 dmgMult/bossHpMult 一起构成完整的难度曲线
+  difficulties: {
+    // X4:desc 补上新的BOSS关卡道具/小怪经济差异(原来只提伤害/炸弹/无敌时长),并在地图难度按钮上显示出来(之前定义了但从没真正渲染过)
+    easy:   { key: "easy",   name: "简单 EASY",   color: "#38d9a9", desc: "伤害低·补给多",   dmgMult: 0.6, fireMult: 1.35, bossHpMult: 0.60, invuln: 1.5, startBombs: 4, scoreMult: 0.5, rank: 1, itemDropMult: 0.75, preBossMobMult: 0.8 },
+    normal: { key: "normal", name: "普通 NORMAL", color: "#4dabf7", desc: "标准平衡",         dmgMult: 1.0, fireMult: 1.00, bossHpMult: 0.82, invuln: 1.2, startBombs: 3, scoreMult: 1.0, rank: 2, itemDropMult: 1.0,  preBossMobMult: 1.0 },
+    hard:   { key: "hard",   name: "困难 HARD",   color: "#ff6b6b", desc: "弹幕快·补给少",   dmgMult: 1.4, fireMult: 0.80, bossHpMult: 1.25, invuln: 0.9, startBombs: 2, scoreMult: 3.0, rank: 3, itemDropMult: 1.6,  preBossMobMult: 1.5 },
+  },
+};
+
+// FF:新手引导内容(首页可左右滑动翻看的教程页,首次启动自动展示,之后可点"？帮助"重看)
+const TUTORIAL_PAGES = [
+  { icon: "✈", title: "移动 & 开火", lines: ["拖动屏幕(或按住鼠标)移动飞机", "飞机会自动持续开火,无需额外按键"] },
+  { icon: "💣", title: "炸弹 & 机型技能", lines: ["左下角炸弹图标:清屏 + 短暂无敌", "机型技能要等能量条攒满且冷却结束才能放", "机型技能效果因机型而异(轰炸/护盾/隐身/冲击波),不打人也会随时间缓慢回能"] },
+  { icon: "🔥", title: "连击 & 道具", lines: ["连续击杀不中断可以叠连击倍率,越高分越多", "火力/僚机道具到满级后就不会再掉落了", "常规关卡每隔几秒会自然刷新一个道具"] },
+  { icon: "⚠", title: "BOSS 机制", lines: ["BOSS 血量过低会触发狂暴,攻击变快变猛", "镭射攻击有红色预警,亮起后千万别站在里面", "首页"+ "「📖 图鉴」" + "可以查看所有 BOSS 的详细信息"] },
+  { icon: "🛩", title: "机型 & 世界", lines: ["不同机型有独特的被动技能和专属机型技能,首页可左右滑动查看", "关卡地图也能换机型,和首页共用同一个选择", "已开放 5 个世界共 15 关,难度逐步升级"] },
+];
+
+/* =====================================================================
+ * 1.5) 音效钩子(WebAudio 合成)
+ * ===================================================================== */
+const Sound = {
+  enabled: true, volume: 1, ctx: null, noiseBuf: null,
+  init() {
+    if (this.ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    this.ctx = new AC();
+    const n = Math.floor(this.ctx.sampleRate * 0.5), buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    this.noiseBuf = buf;
+  },
+  resume() { this.init(); if (this.ctx && this.ctx.state === "suspended") this.ctx.resume(); },
+  tone(freq, dur, type, gain, glideTo) {
+    if (!this.enabled || !this.ctx || this.volume <= 0) return;
+    const t = this.ctx.currentTime, o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = type || "square"; o.frequency.setValueAtTime(freq, t);
+    if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t + dur);
+    g.gain.setValueAtTime(gain * this.volume, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t + dur);
+  },
+  noise(dur, gain, fromFreq) {
+    if (!this.enabled || !this.ctx || this.volume <= 0) return;
+    const t = this.ctx.currentTime, s = this.ctx.createBufferSource(), g = this.ctx.createGain(), f = this.ctx.createBiquadFilter();
+    s.buffer = this.noiseBuf; f.type = "lowpass"; f.frequency.setValueAtTime(fromFreq || 1500, t); f.frequency.exponentialRampToValueAtTime(200, t + dur);
+    g.gain.setValueAtTime(gain * this.volume, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f).connect(g).connect(this.ctx.destination); s.start(t); s.stop(t + dur);
+  },
+  shoot()      { this.tone(880, 0.03, "square", 0.012); },
+  // GG:按敌机体型分级的爆炸音色 —— 小的短促尖锐,大的低沉更有分量
+  explosion(tier) {
+    if (tier === "large") { this.noise(0.42, 0.32, 900); this.tone(90, 0.35, "sawtooth", 0.16, 40); }
+    else if (tier === "medium") { this.noise(0.32, 0.27, 1200); this.tone(130, 0.22, "sawtooth", 0.14, 50); }
+    else this.noise(0.2, 0.2, 1900);
+  },
+  hit()        { this.tone(160, 0.15, "sawtooth", 0.18, 70); },
+  powerup()    { this.tone(520, 0.08, "square", 0.14); this.tone(780, 0.10, "square", 0.12); },
+  bomb()       { this.noise(0.5, 0.4, 2600); this.tone(120, 0.5, "sawtooth", 0.2, 40); },
+  bossDefeat() { this.noise(0.7, 0.35, 1800); this.tone(300, 0.7, "square", 0.2, 60); },
+  start()      { this.tone(440, 0.08, "square", 0.12); this.tone(660, 0.10, "square", 0.12); },
+};
+
+/* =====================================================================
+ * 1.52) BGM(M)—— WebAudio 合成的循环音乐,由主循环按 dt 步进,仅在对局时发声
+ * ===================================================================== */
+// UU:BGM 重做 —— 原来 lead 用方波、几乎没有起音过渡、BOSS 战还把音符密度和速度一起翻倍,
+// 听起来就是又急又冲的"滴滴滴"报警声。这次把音色换软、加了起音渐入和低通滤波去掉数码毛刺、
+// 音符时值拉长做legato(而不是一个个孤立的短促音块),BOSS 的紧张感改由"低音更沉+周期性持续低音铺底"来营造,
+// 而不是单纯地提速加密——听觉上更接近"紧张的配乐"而不是"闹钟"。
+const Music = {
+  playing: false, step: 0, timer: 0, stepDur: 0.18, gain: 0.09,
+  enabled: true, volume: 0.8,   // JJ:独立于 Sound 的音乐开关/音量(共用同一个 Sound.ctx 这个 AudioContext,但音量/开关分开)
+  // W2:世界1-3独立根音,世界4复用世界1(原有设计不变);世界5起改用第4个根音——如果只是简单取模(5-1)%3 又会绕回世界2,
+  //   听不出"新世界"的差异,所以下面 update() 里对 world>=5 单独给了固定的第4档,不再走纯取模。
+  roots: [220.0, 174.6, 196.0, 246.9],
+  endlessRoot: 164.8,   // X3:无尽模式专属根音(比世界1-5都更低更沉),不跟着 game.world 每40秒切换背景一起变,给无尽一个统一、更有"终章感"的基调
+  bass: [0, 0, 7, 0, 5, 5, 3, 7],                       // 相对根音半音级
+  lead: [12, 15, 19, 22, 19, 15, 17, 12],
+  bossBass: [0, 3, 0, 3, 5, 3, 7, 5],   // BOSS 战低音型音程更紧张(小三度),但节奏不再加密
+  play() { this.playing = true; this.step = 0; this.timer = 0; },
+  stop() { this.playing = false; },
+  update(dt) {
+    if (!this.playing || !this.enabled || this.volume <= 0 || !Sound.ctx || game.state !== "playing") return;
+    const boss = !!game.boss, tense = boss || game.endless;   // X3:无尽模式全程当"紧张态"处理(低音型+持续铺底),不只是撞到BOSS才有终章感
+    // X4:无尽模式的"紧张强度"随存活时间缓慢爬升(5分钟/300秒封顶),而不是从进无尽的第一秒就和后面一样强——
+    //   只加音量/音色的浓度,不碰节奏/速度(碰速度就是重蹈 v2.9 之前"加速=报警声"的坑,见 memory 里的教训)。
+    //   刻意不让它超过真正BOSS战的强度(boss 分支数值不变),BOSS战依然是全场最紧张的时刻。
+    const ei = game.endless ? clamp(game._endlessT / 300, 0, 1) : 0;
+    const stepDur = this.stepDur * (boss ? 0.92 : 1);   // UU:只轻微提速(之前 0.72 太急),避免报警感
+    this.timer -= dt;
+    if (this.timer > 0) return;
+    this.timer += stepDur;
+    const wi = game.world <= 4 ? (game.world - 1) % 3 : 3, root = game.endless ? this.endlessRoot : this.roots[wi], i = this.step % 8;
+    const bassArr = tense ? this.bossBass : this.bass;
+    this._note(root / 2 * Math.pow(2, bassArr[i] / 12), stepDur * 1.5, "triangle", this.gain * (boss ? 1.1 : (game.endless ? 1 + ei * 0.15 : 1)), 1100);
+    if (i % 2 === 0) this._note(root * Math.pow(2, this.lead[i] / 12), stepDur * 1.3, "triangle", this.gain * (boss ? 0.5 : (game.endless ? 0.40 + ei * 0.10 : 0.42)), 2400);
+    // UU:BOSS战紧张感靠"每循环一次的持续低音铺底"而不是靠加速加密——氛围感,不刺耳
+    // X3:无尽模式全程都铺这层持续低音(音量比BOSS战略低,避免一直很吵),而不是只有撞上BOSS的35秒才有,让整局无尽都有终章般的氛围感
+    if (tense && i === 0) this._note(root / 4, stepDur * 7.5, "sine", boss ? 0.06 : (0.03 + ei * 0.025), 480);
+    this.step++;
+  },
+  // UU:加了柔和起音(15ms 线性渐入,消掉数码"咔"声)+ 低通滤波(滤掉刺耳的高频毛刺,音色更圆润)
+  _note(freq, dur, type, gain, cutoff) {
+    const c = Sound.ctx, t = c.currentTime, o = c.createOscillator(), g = c.createGain(), f = c.createBiquadFilter();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    f.type = "lowpass"; f.frequency.setValueAtTime(cutoff || 2200, t);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain * this.volume, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(f).connect(g).connect(c.destination); o.start(t); o.stop(t + dur);
+  },
+};
+
+/* =====================================================================
+ * 1.55) 震动反馈钩子(navigator.vibrate;仅部分手机支持,不支持自动无视)
+ *       想调震感强度就改各函数的时长/节奏数组。V 键可开关。
+ * ===================================================================== */
+const Haptics = {
+  enabled: true,
+  buzz(pattern) { if (this.enabled && typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(pattern); },
+  hit()        { this.buzz(60); },
+  bomb()       { this.buzz([0, 45, 30, 45]); },
+  bossDefeat() { this.buzz([0, 90, 40, 130]); },
+  powerup()    { this.buzz(20); },
+};
+
+/* =====================================================================
+ * 1.57) 设置(localStorage 持久化:音量 / 音效 / 震动 / 上次难度)
+ * ===================================================================== */
+const Settings = {
+  key: "kzts_settings",
+  // JJ:音效/音乐拆成独立音量+独立开关(原来共用一个 volume,音乐音效没法分别调)
+  data: { sfxVolume: 0.8, musicVolume: 0.7, sound: true, music: true, haptics: true, diff: "normal", ship: "balanced", autoNext: true, hideWings: false, seenTutorial: false, controlMode: "drag" },
+  load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(this.key));
+      if (s) {
+        // JJ:旧存档只有单一 volume 字段,迁移到新的 sfxVolume/musicVolume,避免老玩家音量突然被清零
+        if (s.volume != null && s.sfxVolume == null) s.sfxVolume = s.volume;
+        if (s.volume != null && s.musicVolume == null) s.musicVolume = s.volume;
+        Object.assign(this.data, s);
+      }
+    } catch (e) {}
+    this.apply();
+  },
+  save() { try { localStorage.setItem(this.key, JSON.stringify(this.data)); } catch (e) {} },
+  apply() { Sound.enabled = this.data.sound; Sound.volume = this.data.sfxVolume; Music.enabled = this.data.music; Music.volume = this.data.musicVolume; Haptics.enabled = this.data.haptics; },
+  set(k, v) { this.data[k] = v; this.apply(); this.save(); },
+};
+
+/* =====================================================================
+ * 1.58) 关卡进度(localStorage:每关是否通关 / 最高分 / 通关难度)
+ * ===================================================================== */
+const Progress = {
+  key: "kzts_progress", data: {},
+  load() { try { this.data = JSON.parse(localStorage.getItem(this.key)) || {}; } catch (e) { this.data = {}; } },
+  save() { try { localStorage.setItem(this.key, JSON.stringify(this.data)); } catch (e) {} },
+  // 星数 = 最高通关难度 rank(简单1/普通2/困难3);高难度过关不会被低难度降级
+  record(id, score, diffKey, rank) {
+    const p = this.data[id] || { best: 0, diffRank: 0, diff: null, cleared: false };
+    p.cleared = true;
+    if (score > p.best) p.best = score;
+    if (rank > (p.diffRank || 0)) { p.diffRank = rank; p.diff = diffKey; }
+    this.data[id] = p; this.save();
+  },
+  entry(id) { return this.data[id] || null; },
+  isCleared(id) { const p = this.data[id]; return !!(p && p.cleared); },
+  clearAll() { this.data = {}; this.save(); },
+};
+
+/* =====================================================================
+ * 1.6) 分数排行(localStorage,file:// 不可用时回退内存)
+ *      Q:按关卡 id 分开存放,排行榜只显示当前关卡的排行情况。
+ * ===================================================================== */
+const Leaderboard = {
+  key: "kzts_scores", max: 5, _mem: {},
+  loadAll() { try { return JSON.parse(localStorage.getItem(this.key)) || {}; } catch (e) { return this._mem; } },
+  saveAll(all) { try { localStorage.setItem(this.key, JSON.stringify(all)); } catch (e) { this._mem = all; } },
+  load(id) { return this.loadAll()[id] || []; },
+  submit(id, score) {
+    const all = this.loadAll(), l = all[id] || [];
+    l.push({ score: score, date: new Date().toISOString().slice(0, 10) });
+    l.sort((a, b) => b.score - a.score);
+    const top = l.slice(0, this.max); all[id] = top; this.saveAll(all); return top;
+  },
+  clearAll() { try { localStorage.removeItem(this.key); } catch (e) {} this._mem = {}; },
+};
+
+// F:无尽模式独立排行榜
+const EndlessBoard = {
+  key: "kzts_endless", max: 5, _mem: [],
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return this._mem; } },
+  saveList(list) { try { localStorage.setItem(this.key, JSON.stringify(list)); } catch (e) { this._mem = list; } },
+  submit(score) { const l = this.load(); l.push({ score, date: new Date().toISOString().slice(0, 10) }); l.sort((a, b) => b.score - a.score); const top = l.slice(0, this.max); this.saveList(top); return top; },
+  clearAll() { try { localStorage.removeItem(this.key); } catch (e) {} this._mem = []; },
+};
+
+// OO:成就系统 —— 定义 + 持久化。check* 系列在对应结算/事件点调用,内部自己判断解锁条件、去重、弹提示。
+const ACHIEVEMENTS = [
+  { id: "first_clear",  icon: "🏅", name: "初露锋芒", desc: "通关任意一关" },
+  { id: "all_clear",    icon: "👑", name: "全线告捷", desc: "通关全部关卡" },
+  { id: "no_hit",       icon: "🛡", name: "完美无伤", desc: "满血通关一关" },
+  { id: "no_bomb",      icon: "💎", name: "轻装上阵", desc: "不用炸弹通关一关" },
+  { id: "combo_30",     icon: "🔥", name: "连击大师", desc: "单局连击达到 30" },
+  { id: "boss_slayer",  icon: "⚔", name: "屠龙勇士", desc: "累计击败 20 次 BOSS" },
+  { id: "endless_5min", icon: "⏱", name: "持久战士", desc: "无尽模式存活 5 分钟" },
+  { id: "all_ships",    icon: "🛩", name: "全机长征", desc: "体验过全部机型" },
+  { id: "void_slayer",  icon: "🌀", name: "虚空终结者", desc: "击败最终 BOSS「虚空吞噬者」" },
+];
+const Achievements = {
+  key: "kzts_achievements",
+  data: { unlocked: {}, bossKills: 0, shipsUsed: [] },
+  load() { try { const s = JSON.parse(localStorage.getItem(this.key)); if (s) Object.assign(this.data, s); } catch (e) {} },
+  save() { try { localStorage.setItem(this.key, JSON.stringify(this.data)); } catch (e) {} },
+  isUnlocked(id) { return !!this.data.unlocked[id]; },
+  clearAll() { try { localStorage.removeItem(this.key); } catch (e) {} this.data = { unlocked: {}, bossKills: 0, shipsUsed: [] }; },
+  unlock(id) {
+    if (this.data.unlocked[id]) return;
+    this.data.unlocked[id] = true; this.save();
+    const def = ACHIEVEMENTS.find(a => a.id === id);
+    if (def) { game.banner("🏆 成就达成", def.name); Sound.powerup(); }
+  },
+  trackShipUse(key) {
+    if (!this.data.shipsUsed.includes(key)) { this.data.shipsUsed.push(key); this.save(); }
+    if (CONFIG.shipOrder.every(k => this.data.shipsUsed.includes(k))) this.unlock("all_ships");
+  },
+  trackBossKill(defIndex) { this.data.bossKills++; this.save(); if (this.data.bossKills >= 20) this.unlock("boss_slayer"); if (defIndex === 6) this.unlock("void_slayer"); },
+  checkLevelClear({ hpRatio, bombsUsed, maxCombo }) {
+    this.unlock("first_clear");
+    if (hpRatio >= 0.999) this.unlock("no_hit");
+    if (bombsUsed === 0) this.unlock("no_bomb");
+    if (maxCombo >= 30) this.unlock("combo_30");
+    if (Object.values(Progress.data).filter(p => p.cleared).length >= LEVELS.length) this.unlock("all_clear");
+  },
+  checkEndlessEnd({ time, maxCombo }) {
+    if (time >= 300) this.unlock("endless_5min");
+    if (maxCombo >= 30) this.unlock("combo_30");
+  },
+};
+
+// PP:存档导入导出 —— 单文件双击运行没有后端也没有文件下载习惯,用 window.prompt 展示/读取 JSON 文本最省事,
+// 复制粘贴即可备份/换设备,零依赖不用引入任何下载/剪贴板 API。
+const SaveData = {
+  keys: ["kzts_settings", "kzts_progress", "kzts_scores", "kzts_endless", "kzts_achievements"],
+  exportAll() {
+    const out = { _game: "airstrike1945remake", _v: 1 };
+    for (const k of this.keys) { const v = localStorage.getItem(k); if (v != null) out[k] = v; }
+    return JSON.stringify(out);
+  },
+  importAll(jsonStr) {
+    let obj;
+    try { obj = JSON.parse(jsonStr); } catch (e) { return false; }
+    if (!obj || typeof obj !== "object" || obj._game !== "airstrike1945remake") return false;
+    for (const k of this.keys) { if (obj[k] != null) { try { localStorage.setItem(k, obj[k]); } catch (e) {} } }
+    Settings.load(); Progress.load(); Achievements.load();
+    game.diff = CONFIG.difficulties[Settings.data.diff] || CONFIG.difficulties.normal;
+    game.ship = CONFIG.ships[Settings.data.ship] || CONFIG.ships.balanced;
+    return true;
+  },
+};
+
+/* =====================================================================
+ * 2) 画布 & 自适应
+ * ===================================================================== */
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+// EE:高分屏适配 —— backing store 按 devicePixelRatio(封顶2,避免低端机因像素过多掉帧)放大,
+// 再用 ctx.scale 抵消,这样后面所有绘制代码仍按 540×960 逻辑坐标写,不用改一行。
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+canvas.width = CONFIG.WIDTH * DPR; canvas.height = CONFIG.HEIGHT * DPR;
+ctx.scale(DPR, DPR);
+function fitToScreen() {
+  const ratio = CONFIG.WIDTH / CONFIG.HEIGHT;
+  let h = window.innerHeight * 0.98, w = h * ratio;
+  if (w > window.innerWidth) { w = window.innerWidth; h = w / ratio; }
+  const stage = document.getElementById("stage");
+  stage.style.width = w + "px"; stage.style.height = h + "px";
+  canvas.style.width = w + "px"; canvas.style.height = h + "px";
+}
+window.addEventListener("resize", fitToScreen); fitToScreen();
+function toLogic(cx, cy) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (cx - r.left) / r.width * CONFIG.WIDTH, y: (cy - r.top) / r.height * CONFIG.HEIGHT };
+}
+
+/* =====================================================================
+ * 3) 输入 —— 按游戏状态分派
+ * ===================================================================== */
+const input = {
+  dragging: false, targetX: CONFIG.player.startX, targetY: CONFIG.player.startY,
+  // KK:虚拟摇杆状态。joyDX/joyDY 是 -1..1 的方向×强度(死区内为0),joyKnobX/Y 是摇杆头当前绘制位置。
+  joystickActive: false, joyDX: 0, joyDY: 0, joyKnobX: CONFIG.joystick.baseX, joyKnobY: CONFIG.joystick.baseY,
+  // YY:movePointerId 记录"正在负责移动飞机"的那根手指的 pointerId。移动端常见操作是一根手指按住拖动飞机、
+  //   另一根手指点必杀/炸弹/暂停按钮——Pointer Events 本身按手指区分 pointerId,但原来 pointermove/up 从不检查
+  //   是哪根手指发来的事件,导致"点技能"那根手指抬起/移动时的坐标会串进移动目标,飞机瞬间被拽向按钮位置。
+  movePointerId: null,
+};
+// KK:根据触点位置更新摇杆头位置和方向强度(触点越靠近/超出摇杆半径,强度越接近1;死区内视为无输入)
+function updateJoystick(px, py) {
+  const j = CONFIG.joystick, dx = px - j.baseX, dy = py - j.baseY, dist = Math.hypot(dx, dy), clamped = Math.min(dist, j.radius);
+  const norm = dist > 0.001 ? clamped / dist : 0;
+  input.joyKnobX = j.baseX + dx * norm; input.joyKnobY = j.baseY + dy * norm;
+  const mag = clamped / j.radius;
+  if (mag < j.deadzone || dist < 0.001) { input.joyDX = 0; input.joyDY = 0; }
+  else { input.joyDX = (dx / dist) * mag; input.joyDY = (dy / dist) * mag; }
+}
+function resetJoystick() {
+  input.joystickActive = false; input.joyDX = 0; input.joyDY = 0;
+  input.joyKnobX = CONFIG.joystick.baseX; input.joyKnobY = CONFIG.joystick.baseY;
+}
+canvas.addEventListener("pointerdown", (e) => {
+  Sound.resume();
+  const p = toLogic(e.clientX, e.clientY);
+  if (game.state === "title") { if (game.titleSettingsHit(p.x, p.y)) { game._resetArmed = false; game.state = "settings"; return; } if (game.titleCodexHit(p.x, p.y)) { game.toCodex(); return; } if (game.titleHelpHit(p.x, p.y)) { game.toTutorial(); return; } if (game.titleShipHit(p.x, p.y)) { game.toShipSelect(); return; } if (game.titleEndlessHit(p.x, p.y)) { game.startEndless(); return; } if (game.titleStartHit(p.x, p.y)) game.toMap(); return; }
+  if (game.state === "endlessover") { game.endless = false; game.toTitle(); return; }
+  if (game.state === "settings") { game.settingsPointerDown(p.x, p.y); return; }
+  if (game.state === "shipselect") { game.shipSelectPointerDown(p.x, p.y); return; }
+  if (game.state === "codex") { game.codexPointerDown(p.x, p.y); return; }
+  if (game.state === "tutorial") { game.tutorialPointerDown(p.x, p.y); return; }
+  if (game.state === "map") { game.mapPointerDown(p.x, p.y); return; }
+  if (game.state === "cleared") {
+    if (game.clearedCheckHit(p.x, p.y)) { game.autoNext = !game.autoNext; Settings.set("autoNext", game.autoNext); return; }
+    const i = game.clearedMenuHit(p.x, p.y); if (i === 0) game.settle(game.autoNext); else if (i === 1) game.startFarm(); return;
+  }
+  // UU:BUG修复——按钮文案是"返回首页"但之前调的是 toMap()(尤其无尽模式下,无尽没有"当前关卡"概念,落到地图页很莫名其妙)
+  if (game.state === "paused") { const i = game.pauseMenuHit(p.x, p.y); if (i === 0) game.resume(); else if (i === 1) { game.endless = false; game.toTitle(); } return; }
+  if (game.state !== "playing") { game.toMap(); return; }                                            // 结算/失败界面 → 返回地图
+  if (game.farming && game.settleButtonHit(p.x, p.y)) { game.settle(); return; }                     // 刷分中点结算
+  if (game.specialButtonHit(p.x, p.y)) { game.useSpecial(); return; }                                // 必杀按钮
+  if (game.pauseButtonHit(p.x, p.y)) { game.pause(); return; }                                       // 暂停按钮
+  if (game.bombButtonHit(p.x, p.y)) { game.useBomb(); return; }
+  // KK:操作方式二选一 —— 虚拟摇杆(定速推杆)或拖动跟随(默认,飞机跟手指位置)
+  // YY:记下这根手指的 pointerId,后续 move/up 只认这一根,不会被另一根点按钮的手指干扰
+  input.movePointerId = e.pointerId;
+  if (Settings.data.controlMode === "joystick") { input.joystickActive = true; updateJoystick(p.x, p.y); }
+  else { input.dragging = true; input.targetX = p.x; input.targetY = p.y; }
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointermove", (e) => {
+  const p = toLogic(e.clientX, e.clientY);
+  if (game.state === "settings" && game._sliderDrag === "sfx") { game.setSfxVolumeFromX(p.x); return; }
+  if (game.state === "settings" && game._sliderDrag === "music") { game.setMusicVolumeFromX(p.x); return; }
+  if (game.state === "map" && game._mapDragging) { game.mapPointerMove(p.x, p.y); return; }
+  // YY:忽略非移动手指发来的坐标——否则点技能/炸弹/暂停按钮的那根手指稍微一动就会把飞机的移动目标改成按钮位置
+  if (e.pointerId !== input.movePointerId) return;
+  if (input.joystickActive) { updateJoystick(p.x, p.y); return; }
+  if (!input.dragging) return; input.targetX = p.x; input.targetY = p.y;
+});
+canvas.addEventListener("pointerup", (e) => {
+  if (e.pointerId === input.movePointerId) { input.dragging = false; resetJoystick(); input.movePointerId = null; }   // YY:只有移动手指抬起才停止跟随
+  game._sliderDrag = false;
+  if (game.state === "shipselect" && game._shipDragging) { const p = toLogic(e.clientX, e.clientY); game.shipSelectSwipe(p.x); }
+  if (game.state === "codex" && game._codexDragging) { const p = toLogic(e.clientX, e.clientY); game.codexSwipe(p.x); }
+  if (game.state === "tutorial" && game._tutorialDragging) { const p = toLogic(e.clientX, e.clientY); game.tutorialSwipe(p.x); }
+  if (game.state === "map" && game._mapDragging) { const p = toLogic(e.clientX, e.clientY); game.mapPointerUp(p.x, p.y); }
+  game._shipDragging = false; game._codexDragging = false; game._tutorialDragging = false; game._mapDragging = false;
+});
+canvas.addEventListener("pointercancel", (e) => {
+  if (e.pointerId === input.movePointerId) { input.dragging = false; resetJoystick(); input.movePointerId = null; }
+  game._sliderDrag = false; game._shipDragging = false; game._codexDragging = false; game._tutorialDragging = false; game._mapDragging = false;
+});
+window.addEventListener("keydown", (e) => {
+  if (e.key === "b" || e.key === "B" || e.code === "Space") { if (game.state === "playing") game.useBomb(); e.preventDefault(); }
+  if (e.key === "x" || e.key === "X") { if (game.state === "playing") game.useSpecial(); e.preventDefault(); }
+  if (e.key === "p" || e.key === "P" || e.key === "Escape") { game.togglePause(); e.preventDefault(); }
+  if (e.key === "m" || e.key === "M") Settings.set("sound", !Settings.data.sound);
+  if (e.key === "v" || e.key === "V") Settings.set("haptics", !Settings.data.haptics);
+});
+
+/* =====================================================================
+ * 4) 工具
+ * ===================================================================== */
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const DEG = Math.PI / 180;
+// 僚机横向偏移:左右交替、逐对外扩(支持 4 架)
+const wingOffsetX = (i) => ((i % 2 === 0) ? -1 : 1) * (30 + Math.floor(i / 2) * 22);
+
+// ── 现代 UI:圆角按钮(渐变 + 高光 + 描边),取代简陋矩形边框 ──
+const UI = {
+  // QQ:兼容 3 位缩写 hex(如 "#fff",BOSS 受击闪白用的就是这个),不然 slice 会切出空字符串导致 NaN
+  hex2rgb(h) { let c = h.replace("#", ""); if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2]; return [parseInt(c.slice(0, 2), 16), parseInt(c.slice(2, 4), 16), parseInt(c.slice(4, 6), 16)]; },
+  rgba(h, a) { const [r, g, b] = this.hex2rgb(h); return "rgba(" + r + "," + g + "," + b + "," + a + ")"; },
+  // QQ:明暗混色 —— amt>0 往白混(变亮),amt<0 往黑混(变暗),给纯色形状做渐变立体感用
+  shade(h, amt) {
+    const [r, g, b] = this.hex2rgb(h);
+    const f = (c) => Math.max(0, Math.min(255, Math.round(amt >= 0 ? c + (255 - c) * amt : c * (1 + amt))));
+    return "rgb(" + f(r) + "," + f(g) + "," + f(b) + ")";
+  },
+  // X6:按当前 ctx.font 逐字符量宽度换行(中文没有空格分词,逐字符贪心断行足够用)——调用前必须先设好 ctx.font,
+  //   最多返回 maxLines 行,超出的部分会被截断(而不是无限换行撑爆版面),末尾补"…"提示被截断。
+  wrapText(ctx, text, maxWidth, maxLines = 2) {
+    const lines = []; let cur = "";
+    for (const ch of text) {
+      const test = cur + ch;
+      if (ctx.measureText(test).width > maxWidth && cur) { lines.push(cur); cur = ch; if (lines.length >= maxLines) { cur = ""; break; } }
+      else cur = test;
+    }
+    if (cur) lines.push(cur);
+    if (lines.length > maxLines) { lines.length = maxLines; lines[maxLines - 1] = lines[maxLines - 1].slice(0, -1) + "…"; }
+    else if (lines.length === maxLines) {
+      const consumed = lines.join("").length;
+      if (consumed < text.length) lines[maxLines - 1] = lines[maxLines - 1].slice(0, -1) + "…";
+    }
+    return lines;
+  },
+  // QQ:玻璃质感面板(卡片通用)—— 阴影 + 渐变 + 顶部高光 + 强调色描边,和 UI.button 的视觉语言统一
+  panel(ctx, x, y, w, h, r, opts) {
+    const o = opts || {}, accent = o.accent || "#4dabf7";
+    ctx.save(); ctx.shadowColor = "rgba(0,0,0,.4)"; ctx.shadowBlur = 14; ctx.shadowOffsetY = 6;
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, o.top || "rgba(255,255,255,.09)"); g.addColorStop(1, o.bottom || "rgba(255,255,255,.02)");
+    this.roundRect(ctx, x, y, w, h, r); ctx.fillStyle = g; ctx.fill();
+    ctx.restore();
+    this.roundRect(ctx, x, y, w, h, r); ctx.lineWidth = o.lineWidth || 1.5; ctx.strokeStyle = o.stroke || this.rgba(accent, .45); ctx.stroke();
+    this.roundRect(ctx, x + 2, y + 2, Math.max(0, w - 4), h * 0.35, Math.max(0, r - 2)); ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.fill();
+  },
+  roundRect(ctx, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath(); ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  },
+  // rect:{x,y,w,h}  opts:{label,sub,color,active,radius,font,textColor}
+  button(ctx, rect, opts) {
+    const o = opts || {}, { x, y, w, h } = rect, col = o.color || "#4dabf7", active = !!o.active, rad = o.radius != null ? o.radius : 13;
+    // 阴影
+    ctx.save(); ctx.shadowColor = active ? this.rgba(col, 0.5) : "rgba(0,0,0,.35)"; ctx.shadowBlur = active ? 14 : 6; ctx.shadowOffsetY = 2;
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    if (active) { g.addColorStop(0, this.rgba(col, 0.5)); g.addColorStop(1, this.rgba(col, 0.24)); }
+    else { g.addColorStop(0, "rgba(255,255,255,.09)"); g.addColorStop(1, "rgba(255,255,255,.02)"); }
+    this.roundRect(ctx, x, y, w, h, rad); ctx.fillStyle = g; ctx.fill(); ctx.restore();
+    // 描边
+    this.roundRect(ctx, x, y, w, h, rad); ctx.lineWidth = active ? 2.5 : 1.5; ctx.strokeStyle = active ? col : "rgba(255,255,255,.28)"; ctx.stroke();
+    // 顶部高光
+    this.roundRect(ctx, x + 2.5, y + 2.5, w - 5, h * 0.44, rad - 3); ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fill();
+    if (o.label != null) {
+      // HH:改成保存/还原调用方原有的 textAlign/textBaseline,而不是无脑写死 "left"/"alphabetic"——
+      // 之前写死会把调用方在按钮之前设的 "center" 冲掉,导致按钮之后的文字全部跟着变成从中线往右的左对齐,
+      // 短文本看不出来,长一点的段落(如新手引导)就会明显超出右边框。
+      const prevAlign = ctx.textAlign, prevBaseline = ctx.textBaseline;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = active ? "#fff" : (o.textColor || "#dee2e6"); ctx.font = "bold " + (o.font || 18) + "px 'Segoe UI', sans-serif";
+      ctx.fillText(o.label, x + w / 2, y + h / 2 + (o.sub ? -8 : 0));
+      if (o.sub) { ctx.fillStyle = active ? "rgba(255,255,255,.85)" : "rgba(206,212,218,.7)"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText(o.sub, x + w / 2, y + h / 2 + 11); }
+      ctx.textAlign = prevAlign; ctx.textBaseline = prevBaseline;
+    }
+  },
+  // AA:圆形玻璃质感按钮(HUD 里的炸弹/暂停/必杀/结算按钮统一走这个,取代裸 arc+纯色)
+  roundButton(ctx, cx, cy, r, col, opts) {
+    const o = opts || {};
+    ctx.save(); ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 8; ctx.shadowOffsetY = 3;
+    const g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.35, r * 0.15, cx, cy, r);
+    g.addColorStop(0, this.rgba(col, o.alpha != null ? o.alpha : 0.9));
+    g.addColorStop(1, this.rgba(col, (o.alpha != null ? o.alpha : 0.9) * 0.5));
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+    ctx.restore();
+    ctx.lineWidth = o.lineWidth || 2.5; ctx.strokeStyle = o.stroke || "rgba(255,255,255,.55)";
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    // 玻璃高光(顶部弧形亮带)
+    ctx.beginPath(); ctx.arc(cx, cy - r * 0.32, r * 0.62, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.strokeStyle = "rgba(255,255,255,.4)"; ctx.lineWidth = Math.max(2, r * 0.16); ctx.stroke();
+  },
+  // AA:圆角进度条统一样式(血条/必杀条/BOSS条共用)—— 深色底槽 + 渐变填充 + 顶部高光,ready 时外发光脉动
+  // opts.trailRatio:残影(如血条掉血后缓慢跟随下降),画在底槽和主填充之间,只在 trailRatio > ratio 时可见
+  bar(ctx, x, y, w, h, ratio, colFrom, colTo, opts) {
+    const o = opts || {}, r = h / 2;
+    if (o.glow) { ctx.save(); ctx.shadowColor = o.glowColor || this.rgba(colTo, .9); ctx.shadowBlur = (o.glowBlur || 12) * (o.pulse != null ? o.pulse : 1); this.roundRect(ctx, x, y, w, h, r); ctx.fillStyle = this.rgba(o.glowColor || colTo, .16); ctx.fill(); ctx.restore(); }
+    this.roundRect(ctx, x, y, w, h, r); ctx.fillStyle = "#1a1d22"; ctx.fill();
+    if (o.trailRatio != null && o.trailRatio > ratio) {
+      const tw = Math.max(0, (w - 4) * clamp(o.trailRatio, 0, 1));
+      this.roundRect(ctx, x + 2, y + 2, tw, h - 4, (h - 4) / 2); ctx.fillStyle = o.trailColor || "rgba(255,90,90,.55)"; ctx.fill();
+    }
+    ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(255,255,255,.12)"; this.roundRect(ctx, x, y, w, h, r); ctx.stroke();
+    const fw = Math.max(0, (w - 4) * clamp(ratio, 0, 1));
+    if (fw > 0) {
+      const g = ctx.createLinearGradient(x, 0, x + w, 0); g.addColorStop(0, colFrom); g.addColorStop(1, colTo);
+      this.roundRect(ctx, x + 2, y + 2, fw, h - 4, (h - 4) / 2); ctx.fillStyle = g; ctx.globalAlpha = o.pulse != null ? o.pulse : 1; ctx.fill(); ctx.globalAlpha = 1;
+      this.roundRect(ctx, x + 3, y + 3, Math.max(0, fw - 2), (h - 4) * 0.4, (h - 4) * 0.2); ctx.fillStyle = "rgba(255,255,255,.3)"; ctx.fill();
+    }
+  },
+};
+function hit(a, b) { const dx = a.x - b.x, dy = a.y - b.y, rr = a.radius + b.radius; return dx * dx + dy * dy <= rr * rr; }
+
+/* =====================================================================
+ * 4.5) 卷轴背景
+ * ===================================================================== */
+const background = {
+  scroll: 0,
+  update(dt) { this.scroll += CONFIG.bg.speed * dt; },
+  draw(ctx, level) {
+    const W = CONFIG.WIDTH, H = CONFIG.HEIGHT, th = CONFIG.themes[(level - 1) % CONFIG.themes.length];
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, th.sky1); g.addColorStop(1, th.sky2);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // RR:星云软云层 —— 比 band1/band2 更慢的视差(纵深感的"最远景"),纯径向渐变模拟柔光,不用 ctx.filter 保性能。
+    // 交替左右位置同样要用"绝对行号"(nebBaseRow+i)判断奇偶,道理和下面 band2 的注释一样,不然循环归零时会跳变。
+    const nebSp = 480, nebT = this.scroll * 0.12, offNeb = nebT % nebSp, nebBaseRow = Math.floor(nebT / nebSp);
+    for (let y = -nebSp + offNeb, i = 0; y < H + nebSp; y += nebSp, i++) {
+      const ncx = W * (((nebBaseRow + i) % 2 === 0) ? 0.28 : 0.72), nr = 150;
+      const ng = ctx.createRadialGradient(ncx, y, 0, ncx, y, nr);
+      ng.addColorStop(0, th.band2); ng.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = ng; ctx.beginPath(); ctx.arc(ncx, y, nr, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = th.band1;
+    const sp1 = 320, off1 = (this.scroll * 0.35) % sp1;
+    for (let y = -sp1 + off1; y < H + sp1; y += sp1) ctx.fillRect(0, y, W, 150);
+    ctx.fillStyle = th.band2;
+    // U:交替左右的色块用"绝对行号"(baseRow+i)判断奇偶,而非每帧从 0 重新计的循环变量 i,
+    // 否则 off2 每循环一圈归零时,同一个色块的奇偶性(从而左右位置)会突然翻转,产生明显跳变。
+    const sp2 = 170, t2 = this.scroll * 0.7, off2 = t2 % sp2, baseRow = Math.floor(t2 / sp2);
+    for (let y = -sp2 + off2, i = 0; y < H + sp2; y += sp2, i++) ctx.fillRect(((baseRow + i) % 2 === 0) ? 40 : W * 0.45, y, W * 0.4, 60);
+  },
+};
+
+/* =====================================================================
+ * 5) 实体
+ * ===================================================================== */
+class Player {
+  constructor() {
+    const c = CONFIG.player, ship = game.ship;
+    this.ship = ship;
+    this.x = c.startX; this.y = c.startY; this.radius = c.radius * (ship.radiusMult || 1);
+    this.maxHp = Math.round(c.maxHp * ship.hpMult * (game.endless ? CONFIG.endless.hpMult : 1)); this.hp = this.maxHp;
+    this.fireInterval = c.fireInterval * ship.fireMult;
+    this.power = 1;
+    this.bombs = clamp(game.activeDiff.startBombs + ship.bombs, 0, CONFIG.player.maxBombs);
+    this.wings = ship.wings;      // A:僚机数
+    this.energy = 0;             // B:必杀能量 0-100
+    this.specialCooldown = 0;    // Q:必杀冷却(秒),能量满 + 冷却结束才可释放
+    this.invulnAmount = game.activeDiff.invuln;
+    this._fireTimer = 0; this.invulnTimer = 0; this._flameTimer = 0;   // RR:引擎尾焰粒子发射计时
+    // X4:机型专属必杀状态——护盾(防御型)/隐身(侦查型)。攻击型必杀(全屏重伤)/平衡型必杀(冲击波)不需要常驻状态,现开现用。
+    this.shieldHp = 0; this.shieldMax = 0; this.shieldTimer = 0; this.stealthTimer = 0;
+  }
+  update(dt) {
+    const c = CONFIG.player;
+    if (Settings.data.controlMode === "joystick") {   // KK:定速推杆,而非贴向触点位置
+      const speed = CONFIG.joystick.maxSpeed * (this.ship.lerpMult || 1);
+      this.x += input.joyDX * speed * dt; this.y += input.joyDY * speed * dt;
+    } else {
+      const lerp = c.lerp * (this.ship.lerpMult || 1);
+      this.x += (input.targetX - this.x) * lerp; this.y += (input.targetY - this.y) * lerp;
+    }
+    this.x = clamp(this.x, this.radius, CONFIG.WIDTH - this.radius); this.y = clamp(this.y, this.radius, CONFIG.HEIGHT - this.radius);
+    if (this.invulnTimer > 0) this.invulnTimer -= dt;
+    if (this.specialCooldown > 0) this.specialCooldown -= dt;
+    if (this.stealthTimer > 0) this.stealthTimer -= dt;
+    if (this.shieldTimer > 0) { this.shieldTimer -= dt; if (this.shieldTimer <= 0) { this.shieldHp = 0; this.shieldMax = 0; } }
+    this.addEnergy(CONFIG.special.passiveGainPerSec * dt);   // X3:必杀能量随时间缓慢自然回复,不完全依赖击杀
+    // RR:引擎尾焰拖尾粒子(叠加在三角形闪烁尾焰之下,做出推进的动态感)
+    this._flameTimer -= dt;
+    if (this._flameTimer <= 0) { this._flameTimer = 0.03; game.spawnEngineFlame(this.x, this.y + 11); }
+    this._fireTimer -= dt;
+    if (this._fireTimer <= 0) {
+      this._fireTimer = this.fireInterval;
+      const pattern = CONFIG.weapon[clamp(this.power, 1, c.maxPower)];
+      for (const s of pattern) { const rad = s.deg * DEG; game.spawnPlayerBullet(this.x + s.ox, this.y - this.radius, Math.sin(rad) * c.bulletSpeed, -Math.cos(rad) * c.bulletSpeed); }
+      for (let i = 0; i < this.wings; i++) game.spawnPlayerBullet(this.x + wingOffsetX(i), this.y + 4, 0, -c.bulletSpeed);   // 僚机直射(任意数量排布)
+      Sound.shoot();
+    }
+  }
+  // X4:护盾(防御型必杀)优先吸收伤害——盾量池打光了溢出部分才真正扣血;隐身(侦查型必杀)期间和普通受击无敌一样完全免伤
+  takeDamage(d) {
+    if (this.invulnTimer > 0 || this.stealthTimer > 0) return;
+    let dmg = d * (this.ship.dmgTakenMult || 1);
+    if (this.shieldHp > 0) {
+      game.spawnShieldHitSpark(this.x, this.y);
+      if (dmg <= this.shieldHp) { this.shieldHp -= dmg; dmg = 0; }
+      else { dmg -= this.shieldHp; this.shieldHp = 0; this.shieldTimer = 0; }
+    }
+    if (dmg > 0) this.hp -= dmg;
+    this.invulnTimer = this.invulnAmount; Sound.hit(); Haptics.hit(); game.addShake(4, 0.12); if (CONFIG.combo.resetOnHit) game.breakCombo();
+  }
+  addPower()   { this.power = clamp(this.power + 1, 1, CONFIG.player.maxPower); }
+  addBomb()    { this.bombs = clamp(this.bombs + 1, 0, CONFIG.player.maxBombs); }
+  addWing()    { this.wings = clamp(this.wings + 1, 0, CONFIG.wingMax); }
+  addEnergy(n) { this.energy = clamp(this.energy + n * (this.ship.energyMult || 1), 0, 100); }
+  heal(n)      { this.hp = clamp(this.hp + n, 0, this.maxHp); }
+  // X4:原来的机身绘制拆成 _drawBody,供隐身态(稳定半透明)和正常态共用,避免复制一遍
+  _drawBody(ctx) {
+    const x = this.x, y = this.y;
+    // 僚机(带小尾焰;可在设置里隐藏,世界坐标下绘制,不随机身缩放)
+    if (!Settings.data.hideWings) for (let i = 0; i < this.wings; i++) {
+      const wx = x + wingOffsetX(i), wy = y + 6;
+      ctx.fillStyle = "#ffa94d"; ctx.fillRect(wx - 1.5, wy + 6, 3, 4 + Math.random() * 3);
+      ctx.fillStyle = "#ced4da"; ctx.beginPath(); ctx.moveTo(wx, wy - 9); ctx.lineTo(wx - 7, wy + 7); ctx.lineTo(wx + 7, wy + 7); ctx.closePath(); ctx.fill();
+    }
+    // 主引擎尾焰(闪烁)
+    const fl = 9 + Math.random() * 7;
+    ctx.fillStyle = "#ffe066"; ctx.beginPath(); ctx.moveTo(x - 5, y + 11); ctx.lineTo(x + 5, y + 11); ctx.lineTo(x, y + 11 + fl); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#ff922b"; ctx.beginPath(); ctx.moveTo(x - 3, y + 11); ctx.lineTo(x + 3, y + 11); ctx.lineTo(x, y + 11 + fl * 0.6); ctx.closePath(); ctx.fill();
+    // X:机身按 ship.bodyShape 分派专属剪影,整体按 radiusMult 缩放
+    drawShipBody(ctx, x, y, this.ship);
+  }
+  // X4:护盾(防御型必杀)——玻璃质感能量泡:径向渐变(边缘亮/中心透)+ 顶部高光弧(立体感)+ 六边形纹理(科技感)+ 随盾量衰减
+  _drawShield(ctx) {
+    const x = this.x, y = this.y, r = this.radius + 14, ratio = clamp(this.shieldHp / (this.shieldMax || 1), 0, 1);
+    const pulse = 0.85 + Math.sin(game.titleT * 4) * 0.15;
+    ctx.save(); ctx.globalAlpha = (0.35 + ratio * 0.35) * pulse;
+    const g = ctx.createRadialGradient(x, y, r * 0.3, x, y, r);
+    g.addColorStop(0, "rgba(120,220,255,.05)"); g.addColorStop(0.75, "rgba(80,180,255,.16)"); g.addColorStop(1, "rgba(150,230,255,.55)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    // 六边形纹理线,营造"能量护盾"的科技质感,而不是一片纯色泡泡
+    ctx.strokeStyle = "rgba(200,240,255,.25)"; ctx.lineWidth = 1;
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + game.titleT * 0.3; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); ctx.stroke(); }
+    // 外缘亮环
+    ctx.strokeStyle = "rgba(210,245,255,.85)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+    // 顶部高光弧——模拟球面反光,是"立体感"和"真实透明感"的关键笔触
+    ctx.globalAlpha *= 0.8; ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(x, y, r - 4, Math.PI * 1.15, Math.PI * 1.55); ctx.stroke();
+    ctx.restore();
+  }
+  // X4:隐身(侦查型必杀)光晕——比护盾更冷、更"虚化",两条错相位的青色描边圈缓慢扩散淡出,呼应"隐匿"而非"防护"
+  _drawStealthShimmer(ctx) {
+    const x = this.x, y = this.y;
+    ctx.save(); ctx.strokeStyle = "rgba(153,233,242,.5)"; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 2; i++) { const ph = (game.titleT * 1.4 + i * 0.5) % 1, rr = this.radius + 6 + ph * 22; ctx.globalAlpha = (1 - ph) * 0.5; ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.restore();
+  }
+  draw(ctx) {
+    if (this.stealthTimer > 0) {   // X4:稳定半透明,而不是像普通受击无敌那样快速闪烁——两者要能一眼区分开
+      ctx.save(); ctx.globalAlpha = 0.4; this._drawBody(ctx); ctx.restore();
+      this._drawStealthShimmer(ctx);
+      return;
+    }
+    if (this.invulnTimer > 0 && (Math.floor(this.invulnTimer * 20) % 2 === 0)) return;
+    this._drawBody(ctx);
+    if (this.shieldHp > 0) this._drawShield(ctx);
+  }
+}
+// X:机型专属机身剪影(delta 平衡/twin 攻击/bulk 防御/dart 侦查),按 ship.radiusMult 整体缩放
+// QQ:机翼/机身/座舱全部改渐变(取代纯色)+ 机翼加柔和投影,做出立体感;原始剪影坐标完全不变。
+function drawShipBody(ctx, x, y, ship) {
+  const col = ship.color, s = ship.radiusMult || 1, shape = ship.bodyShape || "delta";
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  const wingGrad = ctx.createLinearGradient(0, -4, 0, 16);
+  wingGrad.addColorStop(0, "#3d4f70"); wingGrad.addColorStop(1, "#161d2b");
+  const bodyGrad = ctx.createLinearGradient(-10, -20, 10, 14);
+  bodyGrad.addColorStop(0, UI.shade(col, 0.42)); bodyGrad.addColorStop(0.55, col); bodyGrad.addColorStop(1, UI.shade(col, -0.35));
+  const armorGrad = ctx.createLinearGradient(0, 3, 0, 13);
+  armorGrad.addColorStop(0, "#5c6572"); armorGrad.addColorStop(1, "#33383f");
+  const cockpitGrad = ctx.createRadialGradient(-1, -6.5, 0.4, 0, -4, 6);
+  cockpitGrad.addColorStop(0, "#ffffff"); cockpitGrad.addColorStop(0.55, "#bde3ff"); cockpitGrad.addColorStop(1, "#3b7dc4");
+
+  ctx.save(); ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 7; ctx.shadowOffsetY = 4; ctx.fillStyle = wingGrad;
+  if (shape === "twin") { ctx.fillRect(-17, 6, 9, 8); ctx.fillRect(8, 6, 9, 8); }
+  else if (shape === "bulk") { ctx.beginPath(); ctx.moveTo(-20, 12); ctx.lineTo(0, 2); ctx.lineTo(20, 12); ctx.lineTo(12, 16); ctx.lineTo(-12, 16); ctx.closePath(); ctx.fill(); }
+  else if (shape === "dart") { ctx.beginPath(); ctx.moveTo(-11, 8); ctx.lineTo(0, 3); ctx.lineTo(11, 8); ctx.lineTo(6, 10); ctx.lineTo(-6, 10); ctx.closePath(); ctx.fill(); }
+  else { ctx.beginPath(); ctx.moveTo(-16, 10); ctx.lineTo(0, 1); ctx.lineTo(16, 10); ctx.lineTo(9, 14); ctx.lineTo(-9, 14); ctx.closePath(); ctx.fill(); }
+  ctx.restore();   // 阴影只加机翼这一层,不然多层叠加显脏
+
+  if (shape === "bulk") { ctx.fillStyle = armorGrad; ctx.fillRect(-14, 3, 6, 10); ctx.fillRect(8, 3, 6, 10); }
+
+  ctx.fillStyle = bodyGrad;
+  if (shape === "twin") { ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(-6, 12); ctx.lineTo(6, 12); ctx.closePath(); ctx.fill(); }
+  else if (shape === "bulk") { ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(-10, 12); ctx.lineTo(10, 12); ctx.closePath(); ctx.fill(); }
+  else if (shape === "dart") { ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(-5, 9); ctx.lineTo(5, 9); ctx.closePath(); ctx.fill(); }
+  else { ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(-8, 11); ctx.lineTo(8, 11); ctx.closePath(); ctx.fill(); }
+
+  ctx.fillStyle = "rgba(255,255,255,.4)";
+  if (shape === "twin") { ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(-2, 6); ctx.lineTo(0, 6); ctx.closePath(); ctx.fill(); }
+  else if (shape === "dart") { ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(-2, 5); ctx.lineTo(0, 5); ctx.closePath(); ctx.fill(); }
+  else if (shape !== "bulk") { ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(-3, 6); ctx.lineTo(0, 6); ctx.closePath(); ctx.fill(); }
+
+  ctx.fillStyle = cockpitGrad; ctx.beginPath(); ctx.ellipse(0, -4, 3.2, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// DD:constructor 委托给 init(),配合下面的 Pool 复用实例(无尽模式长时间跑,减少高频 new 的 GC 压力)
+class PlayerBullet {
+  constructor(x, y, vx, vy) { this.init(x, y, vx, vy); }
+  init(x, y, vx, vy) { this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.radius = CONFIG.bullet.radius; this.dead = false; }
+  update(dt) { this.x += this.vx * dt; this.y += this.vy * dt; if (this.y < -20 || this.x < -20 || this.x > CONFIG.WIDTH + 20) this.dead = true; }
+  // QQ:纯色改渐变(弹头亮白、弹尾橙),做出"能量弹"质感;不用 shadowBlur(子弹多,省性能)
+  draw(ctx) {
+    const g = ctx.createLinearGradient(this.x, this.y - 8, this.x, this.y + 4);
+    g.addColorStop(0, "#fff9db"); g.addColorStop(1, "#ffa94d");
+    ctx.fillStyle = g; ctx.fillRect(this.x - 2, this.y - 8, 4, 12);
+  }
+}
+
+class EnemyBullet {
+  constructor(x, y, vx, vy, damage) { this.init(x, y, vx, vy, damage); }
+  init(x, y, vx, vy, damage) { this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.damage = damage; this.radius = CONFIG.enemyBullet.radius; this.dead = false; }
+  update(dt) { this.x += this.vx * dt; this.y += this.vy * dt; if (this.y > CONFIG.HEIGHT + 20 || this.y < -20 || this.x < -20 || this.x > CONFIG.WIDTH + 20) this.dead = true; }
+  // QQ:双色平涂改一个径向渐变(白热核心→暗红边缘),一次 fill 顺带比原来两次 fill 还省一点
+  draw(ctx) {
+    const g = ctx.createRadialGradient(this.x - 1, this.y - 1, 0.5, this.x, this.y, this.radius);
+    g.addColorStop(0, "#fff"); g.addColorStop(0.4, "#ff8787"); g.addColorStop(1, "#c92a2a");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+class Enemy {
+  constructor(type, x, yOffset = 0, move = "straight") { this.init(type, x, yOffset, move); }
+  init(type, x, yOffset = 0, move = "straight") {
+    const t = CONFIG.enemy[type];
+    this.type = type; this.isBoss = false; this.x = x; this.y = -t.radius - yOffset;
+    this.baseX = x; this.baseY = this.y; this.radius = t.radius; this.hp = t.hp; this.speed = t.speed; this.score = t.score; this.color = t.color; this.cfg = t;
+    this._fireTimer = 0.6 + Math.random() * 0.6; this.dead = false;
+    // 运动状态
+    this.move = move; this.mp = CONFIG.moves[move] || {}; this._mt = 0;
+    this.phase = "in"; this._ht = 0; this._aimed = false; this.vx = 0; this.vy = 0; this._flash = 0;
+    this._carrierSpawn = 0;   // W2:carrier 裂解出的僚机短暂带一圈紫色识别环,归零后就是普通敌机(池复用要清零,不然会带着上一轮的状态)
+  }
+  applyMove(dt) {
+    const W = CONFIG.WIDTH, m = this.mp;
+    if (this.move === "sine") {
+      this.y += this.speed * dt;
+      this.x = clamp(this.baseX + Math.sin(this._mt * m.freq) * m.amp, this.radius, W - this.radius);
+    } else if (this.move === "zigzag") {
+      this.y += this.speed * dt;
+      const ph = (this._mt % m.period) / m.period, tri = ph < 0.5 ? ph * 2 : 2 - ph * 2;   // 三角波 0→1→0
+      this.x = clamp(this.baseX + (tri * 2 - 1) * m.amp, this.radius, W - this.radius);
+    } else if (this.move === "swoop") {
+      if (this.phase === "in") { this.y += this.speed * dt; if (this.y >= m.holdY) this.phase = "hold"; }
+      else if (this.phase === "hold") { this._ht += dt; this.x += Math.sin(this._mt * 4) * 60 * dt; if (this._ht >= m.hold) { this.phase = "dive"; this.vy = this.speed * m.diveVy; this.vx = clamp((game.player ? game.player.x - this.x : 0), -120, 120); } }
+      else { this.x += this.vx * dt; this.y += this.vy * dt; }
+    } else if (this.move === "dive") {
+      if (!this._aimed) { this.y += this.speed * dt; if (this.y > CONFIG.HEIGHT * m.triggerY && game.player) { const a = Math.atan2(game.player.y - this.y, game.player.x - this.x), sp = this.speed * m.speedMul; this.vx = Math.cos(a) * sp; this.vy = Math.sin(a) * sp; this._aimed = true; } }
+      else { this.x += this.vx * dt; this.y += this.vy * dt; }
+    } else if (this.move === "orbit") {   // Z:绕基准点公转 + 缓慢下降
+      this.baseY += this.speed * 0.5 * dt;
+      this.x = clamp(this.baseX + Math.cos(this._mt * m.speed) * m.radius, this.radius, W - this.radius);
+      this.y = this.baseY + Math.sin(this._mt * m.speed) * m.radius * 0.6;
+    } else {
+      this.y += this.speed * dt;   // straight
+    }
+  }
+  update(dt) {
+    this._mt += dt;
+    if (this._flash > 0) this._flash -= dt;
+    if (this._carrierSpawn > 0) this._carrierSpawn -= dt;
+    this.applyMove(dt);
+    if (this.y > CONFIG.HEIGHT + this.radius || this.x < -70 || this.x > CONFIG.WIDTH + 70) this.dead = true;
+    if (this.cfg.fireInterval > 0 && this.y > 0 && this.y < CONFIG.HEIGHT * 0.7 && game.player) {
+      this._fireTimer -= dt;
+      if (this._fireTimer <= 0) { this._fireTimer = this.cfg.fireInterval * game.activeDiff.fireMult; const aim = Math.atan2(game.player.y - this.y, game.player.x - this.x); game.fireFan(this.x, this.y, aim, 22 * DEG, this.cfg.shots, this.cfg.bulletSpeed, this.cfg.damage); }
+    }
+  }
+  damage(d) { this.hp -= d; this._flash = 0.06; if (this.hp <= 0) { this.dead = true; return true; } return false; }
+  // QQ:主体色改渐变(受光面亮/边缘暗)+ 整体加柔和投影,取代纯色平涂,读起来更有质感
+  draw(ctx) {
+    const x = this.x, y = this.y, r = this.radius, t = this.type;
+    let c;
+    if (this._flash > 0) c = "#fff";
+    else { c = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r); c.addColorStop(0, UI.shade(this.color, 0.4)); c.addColorStop(1, UI.shade(this.color, -0.25)); }
+    ctx.save(); ctx.shadowColor = "rgba(0,0,0,.35)"; ctx.shadowBlur = 5; ctx.shadowOffsetY = 3;
+    ctx.fillStyle = c;
+    if (t === "gunner") {                       // 重炮机:方形舰体 + 双炮管 + 核心
+      ctx.fillRect(x - r * 0.72, y - r * 0.5, r * 1.44, r);
+      // RR:重装装甲缝隙线 + 铆钉,区别于小型/中型的光滑机身
+      ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x - r * 0.72, y - r * 0.1); ctx.lineTo(x + r * 0.72, y - r * 0.1); ctx.stroke();
+      ctx.fillStyle = "rgba(0,0,0,.35)";
+      for (const rx of [-0.55, 0, 0.55]) { ctx.beginPath(); ctx.arc(x + rx * r, y - r * 0.35, 1.6, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = "#495057"; ctx.fillRect(x - r * 0.55, y + r * 0.35, 5, r * 0.7); ctx.fillRect(x + r * 0.55 - 5, y + r * 0.35, 5, r * 0.7);
+      ctx.fillStyle = "#dfe6f0"; ctx.beginPath(); ctx.arc(x, y, r * 0.3, 0, Math.PI * 2); ctx.fill();
+    } else if (t === "splitter") {              // 分裂机:三段连体
+      ctx.fillStyle = "#0b3b2e"; ctx.fillRect(x - r * 0.75, y - 3, r * 1.5, 6);
+      for (let k = -1; k <= 1; k++) { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x + k * r * 0.55, y, r * 0.42, 0, Math.PI * 2); ctx.fill(); }
+    } else if (t === "large") {                 // 大型:重装机 + 侧舱 + 座舱
+      ctx.beginPath(); ctx.moveTo(x, y + r); ctx.lineTo(x - r, y - r * 0.5); ctx.lineTo(x - r * 0.4, y - r); ctx.lineTo(x + r * 0.4, y - r); ctx.lineTo(x + r, y - r * 0.5); ctx.closePath(); ctx.fill();
+      // RR:装甲板缝隙线,呼应 BOSS 的装甲纹理,做出"重装"辨识度
+      ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x - r * 0.5, y - r * 0.1); ctx.lineTo(x + r * 0.5, y - r * 0.1); ctx.moveTo(x, y - r * 0.6); ctx.lineTo(x, y + r * 0.6); ctx.stroke();
+      ctx.fillStyle = "#7a2b45"; ctx.fillRect(x - r * 0.78, y - r * 0.2, r * 0.32, r * 0.6); ctx.fillRect(x + r * 0.46, y - r * 0.2, r * 0.32, r * 0.6);
+      ctx.fillStyle = "#ffe3ef"; ctx.beginPath(); ctx.arc(x, y - r * 0.2, r * 0.22, 0, Math.PI * 2); ctx.fill();
+    } else if (t === "medium") {                // 中型:双尾翼战机
+      ctx.beginPath(); ctx.moveTo(x, y + r); ctx.lineTo(x - r, y - r * 0.7); ctx.lineTo(x, y - r); ctx.lineTo(x + r, y - r * 0.7); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#7a4a12"; ctx.beginPath(); ctx.arc(x, y - r * 0.1, r * 0.25, 0, Math.PI * 2); ctx.fill();
+    } else if (t === "sniper") {                // Z:狙击机:细长机身 + 长瞄准管
+      ctx.beginPath(); ctx.moveTo(x, y + r); ctx.lineTo(x - r * 0.5, y - r * 0.3); ctx.lineTo(x, y - r); ctx.lineTo(x + r * 0.5, y - r * 0.3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#495057"; ctx.fillRect(x - 2, y - r - 10, 4, 12);
+    } else if (t === "detonator") {              // Z:雷机:圆形弹体 + 警示十字
+      ctx.beginPath(); ctx.arc(x, y, r * 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x - r * 0.5, y); ctx.lineTo(x + r * 0.5, y); ctx.moveTo(x, y - r * 0.5); ctx.lineTo(x, y + r * 0.5); ctx.stroke();
+    } else if (t === "phantom") {                // V:幻影机:细窄机身 + 双侧刃翼
+      ctx.beginPath(); ctx.moveTo(x, y + r); ctx.lineTo(x - r * 0.35, y - r * 0.2); ctx.lineTo(x, y - r); ctx.lineTo(x + r * 0.35, y - r * 0.2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = UI.shade(this.color, -0.35);
+      ctx.beginPath(); ctx.moveTo(x - r * 0.3, y + r * 0.1); ctx.lineTo(x - r, y - r * 0.35); ctx.lineTo(x - r * 0.55, y + r * 0.25); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + r * 0.3, y + r * 0.1); ctx.lineTo(x + r, y - r * 0.35); ctx.lineTo(x + r * 0.55, y + r * 0.25); ctx.closePath(); ctx.fill();
+    } else if (t === "carrier") {                // V:母舰机:厚重舰体 + 双侧发射舱(呼应死亡裂出僚机)
+      ctx.beginPath(); ctx.moveTo(x - r * 0.85, y - r * 0.2); ctx.lineTo(x - r * 0.5, y - r * 0.7); ctx.lineTo(x + r * 0.5, y - r * 0.7); ctx.lineTo(x + r * 0.85, y - r * 0.2); ctx.lineTo(x + r * 0.6, y + r * 0.6); ctx.lineTo(x - r * 0.6, y + r * 0.6); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x - r * 0.7, y); ctx.lineTo(x + r * 0.7, y); ctx.stroke();
+      ctx.fillStyle = "#2b1a4a"; ctx.beginPath(); ctx.arc(x - r * 0.55, y + r * 0.15, r * 0.18, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + r * 0.55, y + r * 0.15, r * 0.18, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#e5dbff"; ctx.beginPath(); ctx.arc(x, y - r * 0.15, r * 0.24, 0, Math.PI * 2); ctx.fill();
+    } else {                                    // 小型:轻型截击机
+      ctx.beginPath(); ctx.moveTo(x, y + r); ctx.lineTo(x - r, y - r * 0.8); ctx.lineTo(x, y - r * 0.35); ctx.lineTo(x + r, y - r * 0.8); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+    // W2:carrier 裂解出的僚机短暂带一圈脉动紫环,提示玩家"这是母舰刚炸出来的",1秒后自然消失,不需要额外状态清理
+    if (this._carrierSpawn > 0) {
+      ctx.save(); ctx.globalAlpha = clamp(this._carrierSpawn, 0, 1) * 0.8;
+      ctx.strokeStyle = "#9775fa"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, r + 5 + Math.sin(this._mt * 14) * 2, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
+// 弹幕库:BOSS 攻击的统一执行器(供各 BOSS 的 phases.attacks 引用)
+// Y:laser 有独立冷却(atk.cd,默认3秒),不跟随 phase.cd 高频触发(避免和 spiral 等快速 tick 撞在一起刷屏)
+function runBossAttack(b, atk) {
+  const g = game, dmg = b.bulletDamage;
+  if (atk.type === "fanDown") g.fireFan(b.x, b.y + b.radius, Math.PI / 2, atk.spread * DEG, atk.count, atk.speed, dmg);
+  else if (atk.type === "aimed") { const a = Math.atan2(g.player.y - b.y, g.player.x - b.x); g.fireFan(b.x, b.y, a, atk.spread * DEG, atk.count, atk.speed, dmg); }
+  else if (atk.type === "ring") g.fireRing(b.x, b.y, atk.count, atk.speed, dmg);
+  else if (atk.type === "spiral") { b._spiral += atk.step * DEG; for (let i = 0; i < atk.arms; i++) { const a = b._spiral + i * (Math.PI * 2 / atk.arms); g.spawnEnemyBullet(b.x, b.y, Math.cos(a) * atk.speed, Math.sin(a) * atk.speed, dmg); } }
+  else if (atk.type === "wall") { const gapX = g.player.x; for (let x = 24; x < CONFIG.WIDTH - 24; x += atk.spacing) { if (Math.abs(x - gapX) < atk.gap) continue; g.spawnEnemyBullet(x, b.y + b.radius * 0.4, 0, atk.speed, dmg); } }
+  else if (atk.type === "laser") { if (b._laserCd <= 0) { g.spawnBossLaser(atk.aimed ? g.player.x : b.x, atk.warn || 0.6, atk.dur || 0.8, atk.width || 46, dmg); b._laserCd = atk.cd || 3.0; } }
+}
+
+// Y:BOSS 造型剪影(供 Boss.draw 与首页图鉴共用)
+// QQ:纯色改渐变(受光面亮/边缘暗),给BOSS舰体加立体感;供 Boss.draw 与首页图鉴共用
+function fillBossShape(ctx, x, y, r, shape, color) {
+  const grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.15, x, y, r);
+  grad.addColorStop(0, UI.shade(color, 0.35)); grad.addColorStop(1, UI.shade(color, -0.3));
+  ctx.fillStyle = grad;
+  if (shape === "cross") { ctx.fillRect(x - r, y - r * 0.4, 2 * r, r * 0.8); ctx.fillRect(x - r * 0.4, y - r, r * 0.8, 2 * r); return; }
+  ctx.beginPath();
+  if (shape === "hex") { for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + i * Math.PI / 3, px = x + Math.cos(a) * r, py = y + Math.sin(a) * r; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } }
+  else if (shape === "star") { for (let i = 0; i < 10; i++) { const rad = i % 2 === 0 ? r : r * 0.5, a = -Math.PI / 2 + i * Math.PI / 5, px = x + Math.cos(a) * rad, py = y + Math.sin(a) * rad; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } }
+  // V:世界5 最终BOSS 造型 —— 正八边形,比六边形更"重",比星形更"沉稳/邪异"
+  else if (shape === "octagon") { for (let i = 0; i < 8; i++) { const a = Math.PI / 8 + i * Math.PI / 4, px = x + Math.cos(a) * r, py = y + Math.sin(a) * r; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } }
+  else { ctx.moveTo(x, y + r); ctx.lineTo(x - r, y - r * 0.6); ctx.lineTo(x - r * 0.5, y - r); ctx.lineTo(x + r * 0.5, y - r); ctx.lineTo(x + r, y - r * 0.6); }
+  ctx.closePath(); ctx.fill();
+}
+
+class Boss {
+  constructor(defIndex) {
+    const def = CONFIG.bosses[defIndex % CONFIG.bosses.length];
+    this.def = def; this.isBoss = true;
+    this.x = CONFIG.WIDTH / 2; this.y = -def.radius; this.radius = def.radius;
+    this.maxHp = Math.round(def.hp * game.activeDiff.bossHpMult); this.hp = this.maxHp;
+    this.bulletDamage = def.damage; this.score = def.score;   // 注意:不能叫 this.damage,会覆盖 damage() 方法
+    this._fireScale = game.activeDiff.fireMult;              // 难度射速
+    this.dead = false; this._t = 0; this._moveT = 0; this._entered = false; this._flash = 0;
+    this._fireTimer = 1.2; this._spiral = 0; this._targetX = this.x;
+    this._enraged = false; this._laserCd = 0;   // Y:狂暴阶段 / 镭射独立冷却
+    this.defIndex = defIndex % CONFIG.bosses.length;   // W2:记下具体是哪个BOSS,给"击败特定BOSS"成就用
+  }
+  get phaseIndex() { const r = this.hp / this.maxHp, ph = this.def.phases; for (let i = 0; i < ph.length; i++) if (r > ph[i].until) return i; return ph.length - 1; }
+  get phase() { return this.phaseIndex + 1; }         // 兼容旧引用
+  move(dt) {
+    const def = this.def, cx = CONFIG.WIDTH / 2;
+    if (def.movement === "sweep") this.x = cx + Math.sin(this._t * def.moveSpeed) * def.moveRange;
+    else if (def.movement === "figure8") { this.x = cx + Math.sin(this._t * def.moveSpeed) * def.moveRange; this.y = def.enterY + Math.sin(this._t * def.moveSpeed * 2) * 40; }
+    else if (def.movement === "dart") {
+      this.x += (this._targetX - this.x) * 0.06;
+      if (this._moveT > (def.dartEvery || 2)) { this._moveT = 0; const m = def.radius + 40; this._targetX = m + Math.random() * (CONFIG.WIDTH - 2 * m); }
+    }
+  }
+  update(dt) {
+    const def = this.def;
+    if (!this._entered) { this.y += 90 * dt; if (this.y >= def.enterY) { this.y = def.enterY; this._entered = true; } return; }
+    this._t += dt; this._moveT += dt; if (this._flash > 0) this._flash -= dt; if (this._laserCd > 0) this._laserCd -= dt; this.move(dt);
+    // Y:血量 <=20% 时触发一次狂暴,此后攻击频率永久提升
+    if (!this._enraged && this.hp / this.maxHp <= 0.2) { this._enraged = true; this._fireScale *= 0.7; game.onBossEnrage(this); }
+    const phase = def.phases[this.phaseIndex];
+    this._fireTimer -= dt;
+    if (this._fireTimer <= 0) { this._fireTimer = phase.cd * this._fireScale; for (const atk of phase.attacks) runBossAttack(this, atk); }
+  }
+  damage(d) { this.hp -= d; this._flash = 0.05; if (this.hp <= 0) { this.dead = true; return true; } return false; }
+  draw(ctx) {
+    const flash = this._flash > 0, color = flash ? "#fff" : this.def.colors[this.phaseIndex], r = this.radius, x = this.x, y = this.y;
+    // Y:狂暴态外圈红色脉动光晕
+    if (this._enraged) { const gr = r + 14 + Math.sin(this._t * 6) * 4; ctx.fillStyle = "rgba(255,40,40,.22)"; ctx.beginPath(); ctx.arc(x, y, gr, 0, Math.PI * 2); ctx.fill(); }
+    // 侧翼炮塔
+    ctx.fillStyle = "#2b3038"; ctx.fillRect(x - r - 7, y - 8, 12, 26); ctx.fillRect(x + r - 5, y - 8, 12, 26);
+    ctx.fillStyle = "#495057"; ctx.fillRect(x - r - 3, y + 16, 4, 8); ctx.fillRect(x + r - 1, y + 16, 4, 8);
+    // 舰体(剪影逻辑抽到 fillBossShape,供图鉴复用)
+    fillBossShape(ctx, x, y, r, this.def.shape, color);
+    // 装甲板线 + RR:铆钉点缀,强化"重型装甲"金属质感
+    ctx.strokeStyle = "rgba(0,0,0,.28)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x - r * 0.6, y - r * 0.2); ctx.lineTo(x + r * 0.6, y - r * 0.2); ctx.moveTo(x, y - r * 0.6); ctx.lineTo(x, y + r * 0.5); ctx.stroke();
+    ctx.fillStyle = "rgba(0,0,0,.3)";
+    for (const [rx, ry] of [[-0.6, -0.2], [0.6, -0.2], [0, -0.6], [0, 0.5]]) { ctx.beginPath(); ctx.arc(x + rx * r, y + ry * r, 2, 0, Math.PI * 2); ctx.fill(); }
+    // 脉动核心(发光)—— QQ:加 shadowBlur 做真正的辉光,而不只是纯色圆点
+    const pr = 11 + Math.sin(this._t * 4) * 3, coreCol = ["#845ef7", "#e64980", "#f03e3e"][this.phaseIndex];
+    ctx.save(); ctx.shadowColor = flash ? "#fff" : coreCol; ctx.shadowBlur = 16;
+    ctx.fillStyle = flash ? "#fff" : "#ffe3e3"; ctx.beginPath(); ctx.arc(x, y - 6, pr, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = coreCol; ctx.beginPath(); ctx.arc(x, y - 6, pr * 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+class PowerUp {
+  constructor(x, y, kind) { this.x = x; this.y = y; this.kind = kind; this.radius = CONFIG.powerup.radius; this.dead = false; }
+  update(dt) { this.y += CONFIG.powerup.speed * dt; if (this.y > CONFIG.HEIGHT + this.radius) this.dead = true; }
+  draw(ctx) {
+    const x = this.x, y = this.y, r = this.radius;
+    // 底板 + 白框(不同功能不同底色,一眼可辨)
+    const bg = { heal: "#e03131", power: "#2f9e44", bomb: "#5f3dc4", wing: "#495057" }[this.kind];
+    ctx.fillStyle = bg; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    ctx.strokeStyle = "rgba(255,255,255,.92)"; ctx.lineWidth = 2; ctx.strokeRect(x - r + 1.5, y - r + 1.5, r * 2 - 3, r * 2 - 3);
+    ctx.fillStyle = "#fff";
+    if (this.kind === "heal") {           // 血包:白色十字
+      ctx.fillRect(x - 3, y - 8, 6, 16); ctx.fillRect(x - 8, y - 3, 16, 6);
+    } else if (this.kind === "power") {   // 火力:白色双上箭头
+      for (let k = 0; k < 2; k++) { const oy = k * 8 - 4; ctx.beginPath(); ctx.moveTo(x, y + oy - 4); ctx.lineTo(x - 7, y + oy + 4); ctx.lineTo(x + 7, y + oy + 4); ctx.closePath(); ctx.fill(); }
+    } else if (this.kind === "bomb") {     // 炸弹:圆弹体 + 引线 + 火星
+      ctx.beginPath(); ctx.arc(x, y + 2, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x + 8, y - 9); ctx.stroke();
+      ctx.fillStyle = "#ffd43b"; ctx.beginPath(); ctx.arc(x + 9, y - 10, 2.6, 0, Math.PI * 2); ctx.fill();
+    } else {                              // 僚机:两片小机翼
+      ctx.beginPath(); ctx.moveTo(x - 2, y - 8); ctx.lineTo(x - 11, y + 6); ctx.lineTo(x - 2, y + 3); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 2, y - 8); ctx.lineTo(x + 11, y + 6); ctx.lineTo(x + 2, y + 3); ctx.closePath(); ctx.fill();
+    }
+  }
+}
+
+class Particle {
+  constructor(x, y, vx, vy, color) { this.init(x, y, vx, vy, color); }
+  init(x, y, vx, vy, color) { this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.color = color; this.life = 0.4 + Math.random() * 0.4; this.maxLife = this.life; this.size = 2 + Math.random() * 3; this.dead = false; }
+  update(dt) { this.x += this.vx * dt; this.y += this.vy * dt; this.vx *= 0.92; this.vy *= 0.92; this.life -= dt; if (this.life <= 0) this.dead = true; }
+  // RR:叠一个小号白热核心(而不是每个粒子都建渐变——粒子量大,渐变对象分配比多画一次fillRect贵)
+  draw(ctx) {
+    ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
+    ctx.fillStyle = this.color; ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+    ctx.fillStyle = "rgba(255,255,255,.55)"; const hs = this.size * 0.42; ctx.fillRect(this.x - hs / 2, this.y - hs / 2, hs, hs);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// CC:冲击波圆环(击杀反馈)—— 从小圈快速扩散到 maxR 并淡出
+class Shockwave {
+  constructor(x, y, maxR, color) { this.x = x; this.y = y; this.maxR = maxR; this.color = color; this.r = maxR * 0.15; this.life = 0.4; this.maxLife = 0.4; this.dead = false; }
+  update(dt) { this.life -= dt; if (this.life <= 0) { this.dead = true; return; } const t = 1 - this.life / this.maxLife; this.r = this.maxR * (0.15 + 0.85 * t); }
+  // II:save/restore 包起来,不留 lineWidth/strokeStyle 尾巴(审计发现的同类隐患,目前无可见影响但顺手加固)
+  // RR:描边改渐变(内侧亮白外侧渐隐到底色),比纯色圆环更有"能量冲击波"的质感
+  draw(ctx) {
+    ctx.save(); const t = 1 - this.life / this.maxLife; ctx.globalAlpha = Math.max(0, 1 - t) * 0.65;
+    const g = ctx.createRadialGradient(this.x, this.y, Math.max(0, this.r - 6), this.x, this.y, this.r);
+    g.addColorStop(0, "rgba(255,255,255,.9)"); g.addColorStop(1, this.color);
+    ctx.strokeStyle = g; ctx.lineWidth = 3 * (1 - t) + 1; ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+  }
+}
+
+// X4:平衡型必杀"破阵冲击波"——从玩家位置向上发射的弧形能量波,随行进逐渐变宽,清除沿途弹幕并对扫到的敌机造成一次伤害。
+// 只在使用必杀时生成(低频事件),不进对象池,和 Shockwave 同样直接 new/丢弃。
+class SpecialWave {
+  constructor(x, y, color) { this.init(x, y, color); }
+  init(x, y, color) {
+    this.x = x; this.y = y; this.color = color || "#4dabf7";
+    this.width = 70; this.thickness = 40; this.vy = -560; this.t = 0; this.dead = false; this.hitEnemies = new Set();
+  }
+  update(dt) { this.t += dt; this.y += this.vy * dt; this.width += 240 * dt; if (this.y < -this.thickness) this.dead = true; }
+  // RR:三层叠加做出"精致"感——半透明扇形尾迹(残留能量)+ 渐变亮边(波前轮廓)+ 中心辉光描边(能量核心)
+  draw(ctx) {
+    const alpha = clamp(1 - this.t / 0.9, 0, 1), halfW = this.width / 2;
+    if (alpha <= 0) return;
+    ctx.save(); ctx.globalAlpha = alpha * 0.9;
+    const trailG = ctx.createLinearGradient(this.x, this.y, this.x, this.y + this.thickness * 1.8);
+    trailG.addColorStop(0, UI.rgba(this.color, .35)); trailG.addColorStop(1, UI.rgba(this.color, 0));
+    ctx.fillStyle = trailG;
+    ctx.beginPath(); ctx.moveTo(this.x - halfW, this.y + this.thickness * 1.8); ctx.quadraticCurveTo(this.x, this.y - this.thickness * 0.3, this.x + halfW, this.y + this.thickness * 1.8); ctx.closePath(); ctx.fill();
+    const edgeG = ctx.createLinearGradient(this.x - halfW, 0, this.x + halfW, 0);
+    edgeG.addColorStop(0, UI.rgba(this.color, 0)); edgeG.addColorStop(0.5, "#fff"); edgeG.addColorStop(1, UI.rgba(this.color, 0));
+    ctx.strokeStyle = edgeG; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(this.x - halfW, this.y + this.thickness * 0.5); ctx.quadraticCurveTo(this.x, this.y - this.thickness * 0.5, this.x + halfW, this.y + this.thickness * 0.5); ctx.stroke();
+    ctx.globalAlpha = alpha * 0.75; ctx.shadowColor = this.color; ctx.shadowBlur = 16;
+    ctx.strokeStyle = this.color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(this.x - halfW * 0.7, this.y + this.thickness * 0.5); ctx.quadraticCurveTo(this.x, this.y - this.thickness * 0.3, this.x + halfW * 0.7, this.y + this.thickness * 0.5); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// DD:对象池 —— 高频 new/丢弃的四种对象(子弹×2/敌机/粒子)改为复用实例,减少无尽模式长时间运行的 GC 压力。
+// 用法:pools.x.get(...同构造函数参数) 取一个(池里没有就 new 一个),对象标记 dead 后在 filter 之前 pools.x.release(o) 还回去。
+class Pool {
+  constructor(Ctor) { this.Ctor = Ctor; this.free = []; }
+  get(...args) { const o = this.free.pop(); if (o) { o.init(...args); return o; } return new this.Ctor(...args); }
+  release(o) { this.free.push(o); }
+}
+const pools = {
+  playerBullet: new Pool(PlayerBullet),
+  enemyBullet: new Pool(EnemyBullet),
+  enemy: new Pool(Enemy),
+  particle: new Pool(Particle),
+};
+
+class FloatText {
+  constructor(x, y, text, color) { this.x = x; this.y = y; this.text = text; this.color = color; this.life = 0.8; this.dead = false; }
+  update(dt) { this.y -= 32 * dt; this.life -= dt; if (this.life <= 0) this.dead = true; }
+  draw(ctx) { ctx.globalAlpha = clamp(this.life / 0.8, 0, 1); ctx.fillStyle = this.color; ctx.font = "bold 15px sans-serif"; ctx.textAlign = "center"; ctx.fillText(this.text, this.x, this.y); ctx.textAlign = "left"; ctx.globalAlpha = 1; }
+}
+
+/* =====================================================================
+ * 6) 关卡波次表
+ * ===================================================================== */
+// 关卡结构:世界-小关(1-1…3-3),先易后难,每关多波次。
+// 波次步:spawn/wait/powerup;boss:<索引> 触发对应 BOSS;clear 结算过关。
+// move: straight(默认) | sine 蛇行 | zigzag 锯齿 | swoop 俯冲驻留 | dive 瞄准直冲
+const LEVELS = [
+  // 世界1:开局用大 gap + 分组投放,同屏小怪很少,给玩家发育空间
+  { id: "1-1", world: 1, sub: 1, script: [
+    { wait: 1.0 }, { spawn: "small", count: 4, formation: "line", gap: 0.45 }, { wait: 1.8 },
+    { spawn: "small", count: 5, formation: "arc", gap: 0.4, move: "sine" }, { powerup: "power" }, { wait: 1.6 },
+    { spawn: "small", count: 6, formation: "line", gap: 0.4, move: "orbit" }, { wait: 1.4 }, { clear: true },
+  ] },
+  { id: "1-2", world: 1, sub: 2, script: [
+    { wait: 0.9 }, { spawn: "small", count: 6, formation: "line", gap: 0.32, move: "sine" }, { wait: 1.3 },
+    { spawn: "medium", count: 3, formation: "vee", gap: 0.4, move: "sine" }, { powerup: "power" }, { wait: 1.2 },
+    { spawnMix: [ { type: "small", count: 5 }, { type: "medium", count: 2 } ], formation: "arc", gap: 0.3, move: "zigzag" }, { wait: 1.1 },
+    { spawn: "large", count: 2, formation: "line" }, { spawn: "small", count: 5, formation: "line", gap: 0.3 }, { wait: 1.0 }, { clear: true },
+  ] },
+  // X3:preBoss:true 标记的波次数量会按 game.activeDiff.preBossMobMult 缩放(简单更少/困难更多)
+  { id: "1-3", world: 1, sub: 3, script: [   // 压轴:BOSS 前小怪 ×3,充分发育
+    { wait: 0.9 }, { spawn: "medium", count: 4, formation: "line", gap: 0.32, move: "sine" }, { wait: 1.0 },
+    { spawn: "small", count: 30, formation: "line", gap: 0.22, move: "zigzag", preBoss: true }, { powerup: "heal" }, { wait: 1.0 },
+    { spawn: "small", count: 30, formation: "vee", gap: 0.22, move: "sine", preBoss: true }, { powerup: "power" }, { wait: 0.9 },
+    { spawn: "large", count: 4, formation: "line", gap: 0.35, preBoss: true }, { spawn: "small", count: 16, formation: "line", gap: 0.24, preBoss: true }, { powerup: "power" }, { wait: 1.0 },
+    { boss: 0 }, { clear: true },
+  ] },
+  { id: "2-1", world: 2, sub: 1, script: [
+    { wait: 0.9 }, { spawn: "small", count: 7, formation: "arc", gap: 0.24, move: "sine" }, { wait: 0.9 },
+    { spawn: "medium", count: 3, formation: "vee", gap: 0.35, move: "zigzag" }, { powerup: "power" }, { wait: 0.9 },
+    { spawnMix: [ { type: "small", count: 6 }, { type: "medium", count: 2 } ], formation: "line", gap: 0.22, move: "zigzag" }, { wait: 0.8 },
+    { spawn: "large", count: 2, formation: "line", move: "orbit" }, { spawn: "small", count: 5, formation: "line", gap: 0.24, move: "sine" }, { wait: 1.0 }, { clear: true },
+  ] },
+  { id: "2-2", world: 2, sub: 2, script: [
+    { wait: 0.9 }, { spawn: "small", count: 9, formation: "line", gap: 0.2, move: "dive" }, { powerup: "bomb" }, { wait: 0.9 },
+    { spawn: "large", count: 3, formation: "line", gap: 0.45, move: "orbit" }, { spawn: "medium", count: 3, formation: "line", gap: 0.28, move: "zigzag" }, { wait: 0.9 },
+    { spawnMix: [ { type: "small", count: 7 }, { type: "gunner", count: 2 } ], formation: "arc", gap: 0.2, move: "zigzag" }, { wait: 0.8 },
+    { spawn: "gunner", count: 2, formation: "line", gap: 0.5, move: "sine" }, { powerup: "power" }, { wait: 1.0 }, { clear: true },
+  ] },
+  { id: "2-3", world: 2, sub: 3, script: [   // 压轴:双 BOSS · BOSS 前小怪 ×3,充分发育
+    { wait: 0.9 }, { spawn: "large", count: 3, formation: "line" }, { spawn: "medium", count: 4, formation: "vee", gap: 0.25, move: "sine" }, { powerup: "power" }, { wait: 0.9 },
+    { spawn: "small", count: 40, formation: "line", gap: 0.16, move: "zigzag", preBoss: true }, { wait: 0.9 },
+    { spawn: "small", count: 34, formation: "vee", gap: 0.18, move: "dive", preBoss: true }, { powerup: "heal" }, { wait: 1.0 },
+    { boss: 1 }, { powerup: "heal" }, { wait: 0.8 }, { boss: 2 }, { clear: true },
+  ] },
+  // W2:3-1/3-2 二次加量 —— 上一版只加了数量,但填充的多是不开火的 small/splitter,实战里"两个炸弹就能轻松过",
+  //   这次把配方换成以 large/medium/gunner 等真正开火的机型为主,filler 压到最低,wait 也整体收紧,让场上随时保持有效弹幕压力
+  { id: "3-1", world: 3, sub: 1, script: [
+    { wait: 0.6 }, { spawn: "large", count: 4, formation: "line", gap: 0.24, move: "sine" }, { spawn: "gunner", count: 3, formation: "arc", gap: 0.3, move: "sine" }, { powerup: "power" }, { wait: 0.5 },
+    { spawnMix: [ { type: "medium", count: 6 }, { type: "splitter", count: 4 } ], formation: "vee", gap: 0.15, move: "dive" }, { wait: 0.5 },
+    { spawnMix: [ { type: "gunner", count: 4 }, { type: "medium", count: 5 } ], formation: "line", gap: 0.16, move: "sine" }, { powerup: "bomb" }, { wait: 0.45 },
+    { spawn: "large", count: 4, formation: "arc", gap: 0.26, move: "zigzag" }, { spawn: "gunner", count: 3, formation: "line", gap: 0.32, move: "orbit" }, { powerup: "power" }, { wait: 0.9 }, { clear: true },
+  ] },
+  { id: "3-2", world: 3, sub: 2, script: [
+    { wait: 0.6 }, { spawnMix: [ { type: "large", count: 4 }, { type: "medium", count: 7 } ], formation: "arc", gap: 0.18, move: "sine" }, { powerup: "power" }, { wait: 0.5 },
+    { spawnMix: [ { type: "medium", count: 6 }, { type: "gunner", count: 4 } ], formation: "line", gap: 0.14, move: "zigzag" }, { powerup: "heal" }, { wait: 0.5 },
+    { spawn: "large", count: 5, formation: "line", gap: 0.24, move: "swoop" }, { spawn: "splitter", count: 3, formation: "arc", gap: 0.3, move: "sine" }, { powerup: "power" }, { wait: 0.45 },
+    { spawnMix: [ { type: "medium", count: 6 }, { type: "gunner", count: 4 } ], formation: "line", gap: 0.14, move: "zigzag" }, { powerup: "bomb" }, { wait: 0.9 }, { clear: true },
+  ] },
+  { id: "3-3", world: 3, sub: 3, script: [   // 最终压轴:三 BOSS 车轮战 · BOSS 前小怪 ×3,充分发育
+    { wait: 0.9 }, { spawn: "medium", count: 6, formation: "vee", gap: 0.15, move: "zigzag" }, { spawn: "large", count: 3, formation: "line", gap: 0.3, move: "sine" }, { powerup: "power" }, { wait: 0.9 },
+    { spawn: "small", count: 42, formation: "line", gap: 0.12, move: "dive", preBoss: true }, { wait: 0.8 },
+    { spawn: "small", count: 36, formation: "vee", gap: 0.13, move: "zigzag", preBoss: true }, { powerup: "bomb" }, { powerup: "heal" }, { wait: 1.0 },
+    { boss: 2 }, { powerup: "heal" }, { wait: 0.8 }, { boss: 3 }, { powerup: "heal" }, { wait: 0.8 }, { boss: 4 }, { clear: true },
+  ] },
+  // Z:世界4"深渊禁地" —— 引入 sniper(狙击机)/detonator(雷机),终章"深渊君王"以镭射机制收尾
+  // W2:4-1/4-2 二次加量,理由同 3-1/3-2 —— 拉高开火机型占比、压缩 wait/gap,不再靠不开火的 small 凑数量充数
+  { id: "4-1", world: 4, sub: 1, script: [
+    { wait: 0.6 }, { spawn: "sniper", count: 4, formation: "line", gap: 0.35, move: "straight" }, { spawn: "gunner", count: 2, formation: "vee", gap: 0.4, move: "sine" }, { powerup: "power" }, { wait: 0.5 },
+    { spawnMix: [ { type: "medium", count: 6 }, { type: "sniper", count: 4 } ], formation: "line", gap: 0.14, move: "zigzag" }, { wait: 0.5 },
+    { spawn: "gunner", count: 5, formation: "vee", gap: 0.28, move: "orbit" }, { spawn: "small", count: 8, formation: "line", gap: 0.16 }, { powerup: "bomb" }, { wait: 0.5 },
+    { spawnMix: [ { type: "medium", count: 6 }, { type: "gunner", count: 3 }, { type: "sniper", count: 3 } ], formation: "arc", gap: 0.16, move: "sine" }, { wait: 0.45 },
+    { spawn: "sniper", count: 5, formation: "line", gap: 0.3, move: "straight" }, { spawn: "small", count: 10, formation: "arc", gap: 0.16, move: "dive" }, { powerup: "power" }, { wait: 0.9 }, { clear: true },
+  ] },
+  { id: "4-2", world: 4, sub: 2, script: [
+    { wait: 0.6 }, { spawn: "detonator", count: 5, formation: "line", gap: 0.32, move: "sine" }, { spawn: "medium", count: 4, formation: "arc", gap: 0.22, move: "zigzag" }, { powerup: "power" }, { wait: 0.5 },
+    { spawnMix: [ { type: "medium", count: 6 }, { type: "detonator", count: 4 } ], formation: "vee", gap: 0.18, move: "sine" }, { powerup: "heal" }, { wait: 0.5 },
+    { spawn: "sniper", count: 5, formation: "line", gap: 0.3, move: "straight" }, { spawn: "large", count: 4, formation: "line", gap: 0.26, move: "swoop" }, { powerup: "power" }, { wait: 0.45 },
+    { spawnMix: [ { type: "gunner", count: 4 }, { type: "sniper", count: 3 }, { type: "medium", count: 4 } ], formation: "line", gap: 0.16, move: "zigzag" }, { spawn: "detonator", count: 3, formation: "arc", gap: 0.35, move: "sine" }, { powerup: "bomb" }, { wait: 0.9 }, { clear: true },
+  ] },
+  { id: "4-3", world: 4, sub: 3, script: [   // 最终关:三 BOSS 车轮战(收官:深渊君王)· BOSS 前小怪 ×3
+    { wait: 0.9 }, { spawn: "gunner", count: 4, formation: "vee", gap: 0.25, move: "sine" }, { spawn: "sniper", count: 3, formation: "line", gap: 0.4, move: "straight" }, { powerup: "power" }, { wait: 0.9 },
+    { spawn: "small", count: 42, formation: "arc", gap: 0.12, move: "dive", preBoss: true }, { wait: 0.8 },
+    { spawnMix: [ { type: "small", count: 18 }, { type: "detonator", count: 5 } ], formation: "line", gap: 0.16, move: "zigzag", preBoss: true }, { powerup: "bomb" }, { powerup: "heal" }, { wait: 1.0 },
+    { boss: 3 }, { powerup: "heal" }, { wait: 0.8 }, { boss: 4 }, { powerup: "heal" }, { wait: 0.8 }, { boss: 5 }, { clear: true },
+  ] },
+  // V:世界5"虚空回廊" —— 引入 phantom(幻影机)/carrier(母舰机),终章三 BOSS 车轮战,以全新"虚空吞噬者"收官
+  // W2:5-1/5-2 二次加量,理由同 3-1/3-2/4-1/4-2 —— phantom 本身就会开火,直接堆高它的占比比堆 small 更有效
+  // X3:5-1/5-2 三次加量 —— 用户实际打过后反馈还是太轻松,在已经拉高开火占比的基础上再加一整个波次,拉长关卡时长/可获得分数
+  { id: "5-1", world: 5, sub: 1, script: [
+    { wait: 0.6 }, { spawn: "phantom", count: 6, formation: "line", gap: 0.28, move: "zigzag" }, { spawn: "gunner", count: 2, formation: "vee", gap: 0.4, move: "sine" }, { powerup: "power" }, { wait: 0.5 },
+    { spawnMix: [ { type: "phantom", count: 8 }, { type: "sniper", count: 3 } ], formation: "line", gap: 0.14, move: "sine" }, { wait: 0.5 },
+    { spawn: "gunner", count: 4, formation: "vee", gap: 0.3, move: "orbit" }, { spawn: "phantom", count: 5, formation: "line", gap: 0.22, move: "zigzag" }, { powerup: "bomb" }, { wait: 0.45 },
+    { spawnMix: [ { type: "phantom", count: 10 }, { type: "gunner", count: 4 } ], formation: "arc", gap: 0.13, move: "zigzag" }, { powerup: "heal" }, { wait: 0.45 },
+    { spawnMix: [ { type: "phantom", count: 8 }, { type: "gunner", count: 3 }, { type: "sniper", count: 3 } ], formation: "arc", gap: 0.14, move: "sine" }, { spawn: "small", count: 6, formation: "line", gap: 0.2 }, { powerup: "power" }, { wait: 0.9 }, { clear: true },
+  ] },
+  { id: "5-2", world: 5, sub: 2, script: [
+    { wait: 0.6 }, { spawn: "carrier", count: 3, formation: "line", gap: 0.45, move: "sine" }, { spawn: "phantom", count: 5, formation: "arc", gap: 0.2, move: "zigzag" }, { powerup: "power" }, { wait: 0.5 },
+    { spawnMix: [ { type: "phantom", count: 6 }, { type: "detonator", count: 4 } ], formation: "line", gap: 0.14, move: "sine" }, { powerup: "heal" }, { wait: 0.5 },
+    { spawn: "carrier", count: 3, formation: "vee", gap: 0.4, move: "swoop" }, { spawn: "sniper", count: 5, formation: "line", gap: 0.26, move: "straight" }, { powerup: "power" }, { wait: 0.45 },
+    { spawn: "carrier", count: 3, formation: "vee", gap: 0.38, move: "orbit" }, { spawn: "phantom", count: 8, formation: "line", gap: 0.14, move: "sine" }, { powerup: "heal" }, { wait: 0.45 },
+    { spawnMix: [ { type: "gunner", count: 4 }, { type: "phantom", count: 8 }, { type: "sniper", count: 4 } ], formation: "line", gap: 0.13, move: "zigzag" }, { spawn: "carrier", count: 2, formation: "arc", gap: 0.5, move: "sine" }, { powerup: "bomb" }, { wait: 0.9 }, { clear: true },
+  ] },
+  { id: "5-3", world: 5, sub: 3, script: [   // 终章:三 BOSS 车轮战(收官:虚空吞噬者)· BOSS 前小怪 ×3
+    { wait: 0.9 }, { spawn: "carrier", count: 3, formation: "vee", gap: 0.3, move: "sine" }, { spawn: "phantom", count: 5, formation: "line", gap: 0.3, move: "zigzag" }, { powerup: "power" }, { wait: 0.9 },
+    { spawn: "small", count: 46, formation: "arc", gap: 0.11, move: "dive", preBoss: true }, { wait: 0.8 },
+    { spawnMix: [ { type: "phantom", count: 20 }, { type: "carrier", count: 5 } ], formation: "line", gap: 0.14, move: "zigzag", preBoss: true }, { powerup: "bomb" }, { powerup: "heal" }, { wait: 1.0 },
+    { boss: 4 }, { powerup: "heal" }, { wait: 0.8 }, { boss: 5 }, { powerup: "heal" }, { wait: 0.8 }, { boss: 6 }, { clear: true },
+  ] },
+];
+
+// Z:反查某个 BOSS 索引出现在哪些关卡(供首页图鉴展示)
+function bossLevelIds(defIndex) {
+  return LEVELS.filter(L => L.script.some(s => s.boss === defIndex)).map(L => L.id);
+}
+
+function formationX(formation, i, count, radius) {
+  const W = CONFIG.WIDTH, m = radius + 20;
+  if (formation === "center") return W / 2;
+  if (formation === "random") return m + Math.random() * (W - 2 * m);
+  return count <= 1 ? W / 2 : m + i * (W - 2 * m) / (count - 1);
+}
+function formationYOffset(formation, i, count) {
+  if (formation === "vee") return Math.abs(i - (count - 1) / 2) * 45;
+  if (formation === "arc") { const t = count <= 1 ? 0 : (i / (count - 1)) * 2 - 1; return (1 - t * t) * -60; }   // Z:弧形站位,中间提前出场、两端靠后
+  return 0;
+}
+// Z:把多种敌机类型按数量交错排成一份出场序列(轮转分配,而非先出完A类再出B类)
+// X3:mult 给 preBoss 波次按难度放大数量用;向上取整避免难度系数把个位数怪缩没了
+function buildMixPlan(mix, mult = 1) {
+  const pools = mix.map(m => ({ type: m.type, left: Math.max(1, Math.round(m.count * mult)) })), plan = [];
+  let any = true;
+  while (any) {
+    any = false;
+    for (const p of pools) { if (p.left > 0) { plan.push(p.type); p.left--; any = true; } }
+  }
+  return plan;
+}
+
+const director = {
+  script: null, cursor: 0, started: false, timer: 0, left: 0, spawnTotal: 0, bossRef: null, mixPlan: null, mixLeft: 0,
+  begin(script) { this.script = script; this.cursor = 0; this.started = false; this.timer = 0; this.left = 0; this.spawnTotal = 0; this.bossRef = null; this.mixPlan = null; this.mixLeft = 0; },
+  // X3:preBoss 步骤按 game.activeDiff.preBossMobMult 放大数量(简单更少/困难更多),不直接改 s.count(那是 LEVELS 里的共享数据,
+  //   改了会在下一次进同一关时继续叠加/污染),而是把放大后的数量单独存在 director 自己的状态里(spawnTotal / mixPlan.length)。
+  beginStep(s) {
+    const mult = s.preBoss ? game.activeDiff.preBossMobMult : 1;
+    if (s.wait != null) this.timer = s.wait;
+    else if (s.spawn) { this.spawnTotal = Math.max(1, Math.round(s.count * mult)); this.left = this.spawnTotal; this.timer = 0; }
+    else if (s.spawnMix) { this.mixPlan = buildMixPlan(s.spawnMix, mult); this.mixLeft = this.mixPlan.length; this.timer = 0; }   // Z:单波次混合多种敌机,轮转出场
+    else if (s.powerup) { if (game.canDrop(s.powerup)) game.spawnPowerUp(CONFIG.WIDTH / 2, s.powerup); }
+    else if (s.boss != null) this.bossRef = game.spawnBoss(s.boss);   // 注意 != null:BOSS 索引可为 0
+    // clear 步不在进入时立即结束,而是在 update 里等屏幕清空
+  },
+  next() { this.cursor++; this.started = false; },
+  update(dt) {
+    if (!this.script || this.cursor >= this.script.length) return;
+    const s = this.script[this.cursor];
+    if (!this.started) { this.started = true; this.beginStep(s); }
+    if (s.wait != null) { this.timer -= dt; if (this.timer <= 0) this.next(); }
+    else if (s.spawn) {
+      if (this.left > 0) { this.timer -= dt; if (this.timer <= 0) { const total = this.spawnTotal, i = total - this.left, r = CONFIG.enemy[s.spawn].radius; game.enemies.push(pools.enemy.get(s.spawn, formationX(s.formation, i, total, r), formationYOffset(s.formation, i, total), s.move)); this.left--; this.timer = s.gap || 0; } }
+      if (this.left <= 0) this.next();
+    }
+    else if (s.spawnMix) {
+      if (this.mixLeft > 0) { this.timer -= dt; if (this.timer <= 0) { const total = this.mixPlan.length, idx = total - this.mixLeft, type = this.mixPlan[idx], r = CONFIG.enemy[type].radius; game.enemies.push(pools.enemy.get(type, formationX(s.formation, idx, total, r), formationYOffset(s.formation, idx, total), s.move)); this.mixLeft--; this.timer = s.gap || 0; } }
+      if (this.mixLeft <= 0) this.next();
+    }
+    else if (s.powerup) this.next();
+    else if (s.boss != null) { if (this.bossRef && this.bossRef.dead) this.next(); }
+    else if (s.clear) { if (game.enemies.length === 0) game.reachTarget(); }   // 等固定数量的怪全部清空
+  },
+};
+
+/* =====================================================================
+ * 7) 游戏主体(状态:title | playing | gameover | win)
+ * ===================================================================== */
+const game = {
+  state: "title", diff: CONFIG.difficulties.normal, ship: CONFIG.ships.balanced, currentLevel: 0, world: 1, player: null, boss: null,
+  playerBullets: [], enemyBullets: [], enemies: [], powerups: [], particles: [], floats: [], lasers: [], shockwaves: [], specialWaves: [],
+  score: 0, combo: 0, comboTimer: 0, maxCombo: 0,
+  flashTimer: 0, bannerText: "", bannerSub: "", bannerTimer: 0, warningTimer: 0, titleT: 0, _sliderDrag: false,
+  dlgName: "", dlgText: "", dlgTimer: 0,   // P:BOSS 台词
+  topScores: [], _recorded: false,
+  farming: false, _reached: false, _farmTimer: 0, _farmWaveN: 0, _clearScore: 0, settleResult: null, _resetArmed: false,
+  _itemSpawnTimer: 0,   // Q:常规关卡(非无尽)每隔 CONFIG.powerup.autoInterval 秒自动刷新一个道具
+  _bombsUsedThisLevel: 0,   // OO:本关用了几个炸弹(给"轻装上阵"成就用)
+  _shipIdx: 0, _shipDragStartX: 0, _shipDragging: false,   // R:首页机型选择(左右滑动)
+  _hpTrailRatio: 1,   // AA:血条"残影"—— 掉血后缓慢跟随下降,做视觉反馈
+  _lastState: "title", _stateFadeT: 1,   // BB:菜单/覆盖层统一淡入(状态一变就重置为0,0.3秒淡到1)
+  _settleAnimT: 0,   // BB:结算类数字滚动动画计时
+  _codexBossIdx: 0, _codexDragStartX: 0, _codexDragging: false, _codexTab: "guide",   // Z:首页图鉴(关卡预览+BOSS轮播)+ OO:成就标签
+  _tutorialPage: 0, _tutorialDragStartX: 0, _tutorialDragging: false,   // FF:新手引导翻页
+  // MM:地图纵向滚动(为世界数超过一屏做准备)+ 拖动/点击手势区分
+  _mapScrollY: 0, _mapDragStartX: 0, _mapDragStartY: 0, _mapDragStartScrollY: 0, _mapDragging: false, _mapDragMoved: false,
+  _mapHighlightId: null, _mapHighlightT: 0,   // MM:从图鉴跳转过来时高亮提示的关卡
+  _levelTransX: 0, _levelTransY: 0, _levelTransT: 0,   // NN:进入关卡的聚焦扩散过渡(从点击处展开)
+  autoNext: true, endless: false, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0,
+  _shake: 0, _shakeT: 0, _hitStopT: 0,   // N:打击感
+  // 触控按钮放大,便于拇指操作
+  bombBtn: { x: 58, y: CONFIG.HEIGHT - 70, r: 42 },
+  pauseBtn: { x: CONFIG.WIDTH - 58, y: CONFIG.HEIGHT - 70, r: 38 },
+  settleBtn: { x: CONFIG.WIDTH / 2, y: CONFIG.HEIGHT - 70, r: 34 },
+  specialBtn: { x: 150, y: CONFIG.HEIGHT - 70, r: 34 },
+
+  // ── 流程 ──
+  levelDef() { return LEVELS[this.currentLevel]; },
+  // X3:BOSS 关卡(脚本里有 boss 步骤)自动掉落间隔按难度拉长,难度越高白捡的道具越少
+  isBossLevel() { return this.levelDef().script.some(s => s.boss != null); },
+  itemAutoInterval() { return CONFIG.powerup.autoInterval * (this.isBossLevel() ? this.activeDiff.itemDropMult : 1); },
+  // T:无尽模式统一使用固定难度(不受地图选择影响);常规关卡仍用地图选的 this.diff
+  get activeDiff() { return this.endless ? CONFIG.difficulties[CONFIG.endless.diffKey] : this.diff; },
+  toTitle() { this.state = "title"; },
+  toMap() { this.state = "map"; },
+  // 某关是否解锁:首关或前一关已通关
+  isUnlocked(i) { return i === 0 || Progress.isCleared(LEVELS[i - 1].id); },
+  setDiff(diffKey) { this.diff = CONFIG.difficulties[diffKey]; Settings.set("diff", diffKey); },
+  setShip(shipKey) { this.ship = CONFIG.ships[shipKey]; Settings.set("ship", shipKey); },
+  // R:首页机型选择(左右滑动的卡片页,关卡地图的机型选项保留不变)
+  shipSelectOrder() { return CONFIG.shipOrder; },
+  toShipSelect() { this.state = "shipselect"; const order = this.shipSelectOrder(), i = order.indexOf(this.ship.key); this._shipIdx = i >= 0 ? i : 0; },
+  shipSelectBackRect() { return { x: 20, y: 28, w: 90, h: 36 }; },
+  shipSelectArrowRect(dir) { const y = 150 + 210 / 2 - 24; return dir < 0 ? { x: 26, y, w: 56, h: 48 } : { x: CONFIG.WIDTH - 82, y, w: 56, h: 48 }; },   // 与卡片(cardY150/cardH210)垂直居中对齐
+  shipSelectConfirmRect() { return { x: CONFIG.WIDTH / 2 - 130, y: CONFIG.HEIGHT - 100, w: 260, h: 54 }; },
+  shipSelectPointerDown(px, py) {
+    const inR = (r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h, order = this.shipSelectOrder();
+    if (inR(this.shipSelectBackRect())) { this.toTitle(); return; }
+    if (inR(this.shipSelectArrowRect(-1))) { this._shipIdx = (this._shipIdx - 1 + order.length) % order.length; return; }
+    if (inR(this.shipSelectArrowRect(1))) { this._shipIdx = (this._shipIdx + 1) % order.length; return; }
+    if (inR(this.shipSelectConfirmRect())) { this.setShip(order[this._shipIdx]); return; }
+    this._shipDragStartX = px; this._shipDragging = true;
+  },
+  // 松手时按滑动距离切换机型(左滑下一个 / 右滑上一个)
+  shipSelectSwipe(px) {
+    const order = this.shipSelectOrder(), dx = px - this._shipDragStartX;
+    if (dx < -40) this._shipIdx = (this._shipIdx + 1) % order.length;
+    else if (dx > 40) this._shipIdx = (this._shipIdx - 1 + order.length) % order.length;
+  },
+
+  // ── Z:首页图鉴(关卡预览网格 + BOSS轮播 + OO:成就标签页,独立于机型选择页的拖拽状态)──
+  toCodex() { this.state = "codex"; this._codexBossIdx = 0; this._codexTab = "guide"; },
+  codexBackRect() { return { x: 20, y: 28, w: 90, h: 36 }; },
+  codexTabRect(i) { const w = 140, gap = 12, total = 2 * w + gap, x0 = (CONFIG.WIDTH - total) / 2; return { x: x0 + i * (w + gap), y: 70, w, h: 36 }; },
+  // OO:加了标签页之后网格/BOSS卡片整体下移,这里是唯一算 BOSS 卡片顶部 y 的地方,箭头/点击区/drawCodex 都从这取,不要各自硬编数字
+  // WW:行数原来硬编码成3(对应12关/4列正好3行),第5世界加进来后关卡数变15,网格变成4行,
+  //   硬编码3还按老高度算的话 BOSS 区域会往上盖住网格第4行——改成按 LEVELS.length 动态算行数。
+  codexLevelGridRows() { return Math.ceil(LEVELS.length / 4); },
+  codexBossCardY() { return 138 + this.codexLevelGridRows() * 64 + (this.codexLevelGridRows() - 1) * 10 + 30; },
+  // X6:卡片加了攻击图标行,cardH 从220涨到246,箭头垂直居中/"出场关卡"点击区跟着同步下移
+  codexArrowRect(dir) { const y = this.codexBossCardY() + 246 / 2 - 24; return dir < 0 ? { x: 26, y, w: 56, h: 48 } : { x: CONFIG.WIDTH - 82, y, w: 56, h: 48 }; },
+  // MM:"出场关卡"这行文字的点击区域(点了跳到地图并高亮第一个出场关卡)
+  codexAppearRect() { const cx = CONFIG.WIDTH / 2, cardW = 320; return { x: cx - cardW / 2 + 10, y: this.codexBossCardY() + 169, w: cardW - 20, h: 20 }; },
+  codexPointerDown(px, py) {
+    const inR = (r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+    if (inR(this.codexBackRect())) { this.toTitle(); return; }
+    if (inR(this.codexTabRect(0))) { this._codexTab = "guide"; return; }
+    if (inR(this.codexTabRect(1))) { this._codexTab = "achievements"; return; }
+    if (this._codexTab !== "guide") return;   // OO:成就页没有左右滑动/箭头这些交互
+    if (inR(this.codexArrowRect(-1))) { this._codexBossIdx = (this._codexBossIdx - 1 + CONFIG.bosses.length) % CONFIG.bosses.length; return; }
+    if (inR(this.codexArrowRect(1))) { this._codexBossIdx = (this._codexBossIdx + 1) % CONFIG.bosses.length; return; }
+    if (inR(this.codexAppearRect()) && bossLevelIds(this._codexBossIdx).length) { this.jumpToLevelFromCodex(this._codexBossIdx); return; }
+    this._codexDragStartX = px; this._codexDragging = true;
+  },
+  codexSwipe(px) {
+    if (this._codexTab !== "guide") return;
+    const dx = px - this._codexDragStartX, n = CONFIG.bosses.length;
+    if (dx < -40) this._codexBossIdx = (this._codexBossIdx + 1) % n;
+    else if (dx > 40) this._codexBossIdx = (this._codexBossIdx - 1 + n) % n;
+  },
+
+  // ── FF:新手引导(首次启动自动展示,首页"？帮助"可重看;左右滑动/箭头翻页,同一套交互模式)──
+  toTutorial() { this.state = "tutorial"; this._tutorialPage = 0; },
+  closeTutorial() { Settings.set("seenTutorial", true); this.toTitle(); },
+  tutorialSkipRect() { return { x: 20, y: 28, w: 100, h: 36 }; },
+  tutorialArrowRect(dir) { const y = CONFIG.HEIGHT / 2 - 24; return dir < 0 ? { x: 26, y, w: 56, h: 48 } : { x: CONFIG.WIDTH - 82, y, w: 56, h: 48 }; },
+  tutorialNextRect() { return { x: CONFIG.WIDTH / 2 - 130, y: CONFIG.HEIGHT - 100, w: 260, h: 54 }; },
+  tutorialPointerDown(px, py) {
+    const inR = (r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h, n = TUTORIAL_PAGES.length;
+    if (inR(this.tutorialSkipRect())) { this.closeTutorial(); return; }
+    if (inR(this.tutorialArrowRect(-1))) { this._tutorialPage = (this._tutorialPage - 1 + n) % n; return; }
+    if (inR(this.tutorialArrowRect(1))) { this._tutorialPage = (this._tutorialPage + 1) % n; return; }
+    if (inR(this.tutorialNextRect())) { if (this._tutorialPage >= n - 1) this.closeTutorial(); else this._tutorialPage++; return; }
+    this._tutorialDragStartX = px; this._tutorialDragging = true;
+  },
+  tutorialSwipe(px) {
+    const dx = px - this._tutorialDragStartX, n = TUTORIAL_PAGES.length;
+    if (dx < -40) this._tutorialPage = (this._tutorialPage + 1) % n;
+    else if (dx > 40) this._tutorialPage = (this._tutorialPage - 1 + n) % n;
+  },
+
+  pause()  { if (this.state === "playing") { this.state = "paused"; input.dragging = false; } },
+  resume() { if (this.state === "paused") this.state = "playing"; },
+  togglePause() { if (this.state === "playing") this.pause(); else if (this.state === "paused") this.resume(); },
+  // 暂停菜单按钮:0=继续 1=返回首页
+  pauseMenuRect(i) { const w = 240, h = 54, x = (CONFIG.WIDTH - w) / 2, y = 440 + i * 74; return { x, y, w, h }; },
+  pauseMenuHit(px, py) { for (let i = 0; i < 2; i++) { const r = this.pauseMenuRect(i); if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return i; } return -1; },
+  pauseButtonHit(x, y) { const b = this.pauseBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
+  // 开始某一关(索引)
+  startLevel(i) {
+    this.currentLevel = i; this.world = LEVELS[i].world; this.endless = false;
+    this.state = "playing";
+    this.player = new Player(); this.boss = null;
+    this.playerBullets = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.floats = []; this.lasers = []; this.shockwaves = []; this.specialWaves = [];
+    this.score = 0; this.combo = 0; this.comboTimer = 0; this.maxCombo = 0;
+    this.flashTimer = 0; this.warningTimer = 0; this._recorded = false;
+    this.farming = false; this._reached = false; this._farmTimer = 0; this._farmWaveN = 0; this.settleResult = null;
+    this._itemSpawnTimer = this.itemAutoInterval(); this._hpTrailRatio = 1; this._bombsUsedThisLevel = 0;
+    director.begin(LEVELS[i].script);
+    input.targetX = CONFIG.player.startX; input.targetY = CONFIG.player.startY;
+    Sound.start(); Music.play(); this.banner("STAGE " + LEVELS[i].id, CONFIG.worldIntro[(LEVELS[i].world - 1) % CONFIG.worldIntro.length]);
+    this.dlgTimer = 0;
+    Achievements.trackShipUse(this.ship.key);   // OO
+  },
+  // 达标(固定波次全灭 + 屏幕清空)→ 弹出「结算 / 继续刷分」
+  reachTarget() {
+    if (this._reached) return;
+    this._reached = true; this._clearScore = this.score;   // 通关时得分 → 刷分上限基准
+    this.state = "cleared"; this.flashTimer = 0.4; Sound.bossDefeat();
+  },
+  // 继续刷分:回到对局,开启受上限约束的额外波次
+  startFarm() { this.farming = true; this.state = "playing"; this._farmTimer = 1.0; if (director.script) director.cursor = director.script.length; },
+
+  // F:无尽生存模式
+  startEndless() {
+    this.endless = true; this.farming = false; this._reached = false; this.currentLevel = 0; this.world = 1;
+    this.state = "playing";
+    this.player = new Player(); this.boss = null;
+    this.playerBullets = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.floats = []; this.lasers = []; this.shockwaves = []; this.specialWaves = [];
+    this.score = 0; this.combo = 0; this.comboTimer = 0; this.maxCombo = 0;
+    this.flashTimer = 0; this.warningTimer = 0; this._hpTrailRatio = 1;
+    this._endlessT = 0; this._endlessSpawnT = 1.0; this._endlessBossT = 30; this._endlessBossN = 0;
+    director.begin(null);
+    input.targetX = CONFIG.player.startX; input.targetY = CONFIG.player.startY;
+    Sound.start(); Music.play(); this.banner("无尽模式");
+    Achievements.trackShipUse(this.ship.key);   // OO
+  },
+  updateEndless(dt) {
+    this._endlessT += dt;
+    this.world = 1 + (Math.floor(this._endlessT / 40) % CONFIG.themes.length);   // 背景随时间轮换
+    this._endlessSpawnT -= dt;
+    if (this._endlessSpawnT <= 0 && this.enemies.length < CONFIG.endless.maxEnemies) {
+      const t = this._endlessT;
+      this._endlessSpawnT = Math.max(0.8, 1.8 - t * 0.008);
+      const n = Math.min(2 + Math.min(5, Math.floor(t / 15)), CONFIG.endless.maxEnemies - this.enemies.length);   // 不超同屏上限
+      // W2:t>=250 再加一档,carrier 权重继续往上提,长线存活的玩家会越来越常遇到"一炸一窝"的母舰,难度持续爬坡而不是160秒后封顶
+      const pool = t < 20 ? ["small", "small", "medium"] : t < 50 ? ["small", "medium", "medium", "large", "gunner"] : t < 100 ? ["small", "medium", "large", "gunner", "splitter"] : t < 160 ? ["small", "medium", "large", "gunner", "splitter", "sniper", "detonator"] : t < 250 ? ["small", "medium", "large", "gunner", "splitter", "sniper", "detonator", "phantom", "phantom", "carrier"] : ["small", "medium", "large", "gunner", "splitter", "sniper", "detonator", "phantom", "phantom", "carrier", "carrier", "carrier"];
+      const moves = ["sine", "zigzag", "dive", "straight", "swoop", "orbit"];
+      for (let i = 0; i < n; i++) { const type = pool[(Math.random() * pool.length) | 0], r = CONFIG.enemy[type].radius; this.enemies.push(pools.enemy.get(type, r + 20 + Math.random() * (CONFIG.WIDTH - 2 * (r + 20)), 0, moves[(Math.random() * moves.length) | 0])); }
+      if (Math.random() < 0.12) this.spawnPowerUp(30 + Math.random() * (CONFIG.WIDTH - 60), this.chooseDrop());
+    }
+    this._endlessBossT -= dt;
+    if (this._endlessBossT <= 0 && !this.boss) { this._endlessBossT = 35; this.spawnBoss(this._endlessBossN % CONFIG.bosses.length); this._endlessBossN++; }
+  },
+  settleEndless() {
+    const final = Math.round(this.score * this.activeDiff.scoreMult);
+    this.endlessResult = { base: this.score, diffFactor: this.activeDiff.scoreMult, time: Math.floor(this._endlessT), final, maxCombo: this.maxCombo };
+    this.endlessTop = EndlessBoard.submit(final);
+    this.state = "endlessover";
+    Achievements.checkEndlessEnd({ time: this._endlessT, maxCombo: this.maxCombo });   // OO
+  },
+  // 结算:按血量系数 + 关卡难度系数算最终分,记录进度/排行
+  computeFinal() {
+    const s = CONFIG.scoring, hpRatio = this.player ? clamp(this.player.hp / this.player.maxHp, 0, 1) : 0;
+    const hpFactor = 1 + hpRatio * s.hpCoeff;
+    const diffFactor = this.diff.scoreMult;   // 难度系数分(简单0.5 / 普通1.0 / 困难3.0)
+    return { base: this.score, hpRatio, hpFactor, diffName: this.diff.name.split(" ")[0], diffFactor, final: Math.round(this.score * hpFactor * diffFactor) };
+  },
+  settle(advance = false) {
+    const r = this.computeFinal(); this.settleResult = r;
+    Progress.record(this.levelDef().id, r.final, this.diff.key, this.diff.rank);
+    this.topScores = Leaderboard.submit(this.levelDef().id, r.final);
+    Achievements.checkLevelClear({ hpRatio: r.hpRatio, bombsUsed: this._bombsUsedThisLevel, maxCombo: this.maxCombo });   // OO
+    this.farming = false;
+    // ②勾选自动进入下一关:同难度、同机型、新初始配置直接开下一关
+    if (advance && this.currentLevel < LEVELS.length - 1) this.startLevel(this.currentLevel + 1);
+    else this.state = "settle";
+  },
+  spawnFarmWave() {
+    this._farmWaveN++;
+    const room = CONFIG.scoring.farmMaxEnemies - this.enemies.length;                   // 在场敌人上限内才补
+    const n = Math.min(4 + Math.min(this._farmWaveN, 6), room);
+    if (n <= 0) return;
+    const types = ["small", "small", "medium", "large"], moves = ["sine", "zigzag", "dive", "straight"];
+    for (let i = 0; i < n; i++) {
+      const type = types[(Math.random() * types.length) | 0], r = CONFIG.enemy[type].radius;
+      this.enemies.push(pools.enemy.get(type, r + 20 + Math.random() * (CONFIG.WIDTH - 2 * (r + 20)), 0, moves[(Math.random() * moves.length) | 0]));
+    }
+  },
+  settleButtonHit(x, y) { const b = this.settleBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
+  clearedMenuRect(i) { const w = 240, h = 54, x = (CONFIG.WIDTH - w) / 2, y = 470 + i * 74; return { x, y, w, h }; },
+  clearedMenuHit(px, py) { for (let i = 0; i < 2; i++) { const r = this.clearedMenuRect(i); if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return i; } return -1; },
+  clearedCheckRect() { return { x: CONFIG.WIDTH / 2 - 140, y: 410, w: 280, h: 36 }; },
+  clearedCheckHit(px, py) { const r = this.clearedCheckRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  banner(text, sub) { this.bannerText = text; this.bannerSub = sub || ""; this.bannerTimer = 2.2; },
+  showDialogue(name, text, dur) { this.dlgName = name; this.dlgText = text || ""; this.dlgTimer = dur || 3.5; },   // P
+  addShake(mag, t) { this._shake = Math.max(this._shake, mag); this._shakeT = Math.max(this._shakeT, t); },   // N
+  hitStop(t) { this._hitStopT = Math.max(this._hitStopT, t); },
+
+  spawnPlayerBullet(x, y, vx, vy) { this.playerBullets.push(pools.playerBullet.get(x, y, vx, vy)); },
+  spawnPowerUp(x, kind) { this.powerups.push(new PowerUp(x, -20, kind)); },
+  // W2:无尽模式 BOSS 血量按已刷出过的 BOSS 场次数递增(每场 +8%,封顶12场即+96%),让长线存活不会一直打同样血量的 BOSS 车轮战
+  spawnBoss(defIndex) {
+    const b = new Boss(defIndex);
+    if (this.endless) { const mult = 1 + Math.min(this._endlessBossN, 12) * 0.08; b.maxHp = Math.round(b.maxHp * mult); b.hp = b.maxHp; }
+    this.enemies.push(b); this.boss = b; this.warningTimer = 2.2; this.showDialogue(b.def.name, b.def.taunt, 3.8); return b;
+  },
+  // Y:BOSS 狂暴触发提示(HP<=20% 时一次性)
+  onBossEnrage(b) { this.showDialogue(b.def.name, "狂暴!攻击频率大幅提升!", 3.0); this.addShake(6, 0.28); Sound.hit(); Haptics.bomb(); },
+  // Y:镭射攻击 —— warn 秒预警(半透明红条)后进入 dur 秒的伤害柱,期间站在范围内会持续受伤(复用玩家受击无敌帧天然限制伤害频率)
+  spawnBossLaser(x, warn, dur, width, dmg) { this.lasers.push({ x, warn, dur, width, dmg, t: 0, phase: "warn", dead: false }); },
+  updateLasers(dt) {
+    for (const l of this.lasers) {
+      l.t += dt;
+      if (l.phase === "warn") { if (l.t >= l.warn) { l.phase = "fire"; l.t = 0; } }
+      else {
+        if (this.player && Math.abs(this.player.x - l.x) <= l.width / 2) this.player.takeDamage(l.dmg);
+        if (l.t >= l.dur) l.dead = true;
+      }
+    }
+    this.lasers = this.lasers.filter(l => !l.dead);
+  },
+  drawLasers(ctx) {
+    for (const l of this.lasers) {
+      if (l.phase === "warn") { ctx.fillStyle = "rgba(255,50,50," + (0.15 + 0.15 * Math.sin(l.t * 20)) + ")"; ctx.fillRect(l.x - l.width / 2, 0, l.width, CONFIG.HEIGHT); }
+      else { ctx.fillStyle = "rgba(255,60,60,.55)"; ctx.fillRect(l.x - l.width / 2, 0, l.width, CONFIG.HEIGHT); ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillRect(l.x - l.width * 0.18, 0, l.width * 0.36, CONFIG.HEIGHT); }
+    }
+  },
+  // 所有敌弹的唯一出口:统一按难度缩放伤害
+  // W:无尽模式敌弹伤害随存活时间线性爬升,300 秒时封顶 3 倍(非无尽恒为 1)
+  endlessBulletDmgMult() {
+    if (!this.endless) return 1;
+    const e = CONFIG.endless;
+    return 1 + Math.min(this._endlessT / e.dmgRampTime, 1) * (e.dmgRampMult - 1);
+  },
+  spawnEnemyBullet(x, y, vx, vy, baseDamage) { this.enemyBullets.push(pools.enemyBullet.get(x, y, vx, vy, baseDamage * this.activeDiff.dmgMult * this.endlessBulletDmgMult())); },
+  fireFan(x, y, baseAngle, spread, count, speed, damage) { for (let i = 0; i < count; i++) { const a = count === 1 ? baseAngle : baseAngle - spread / 2 + spread * (i / (count - 1)); this.spawnEnemyBullet(x, y, Math.cos(a) * speed, Math.sin(a) * speed, damage); } },
+  fireRing(x, y, count, speed, damage) { for (let i = 0; i < count; i++) { const a = (i / count) * Math.PI * 2; this.spawnEnemyBullet(x, y, Math.cos(a) * speed, Math.sin(a) * speed, damage); } },
+  burst(x, y, color, count, speed) { for (let i = 0; i < count; i++) { const a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random() * 0.7); this.particles.push(pools.particle.get(x, y, Math.cos(a) * s, Math.sin(a) * s, color)); } },
+  // CC:打击感 —— 冲击波圆环(击杀反馈)+ 命中火花(不论是否致命,每次子弹命中都给一点回馈)
+  spawnShockwave(x, y, maxR, color) { this.shockwaves.push(new Shockwave(x, y, maxR, color)); },
+  spawnHitSpark(x, y) { for (let i = 0; i < 3; i++) { const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 60; this.particles.push(pools.particle.get(x, y, Math.cos(a) * s, Math.sin(a) * s, "#fff9db")); } },
+  // X4:护盾格挡反馈——比普通命中火花更"硬"、更冷色,提示"这下是盾挡的,不是肉扛的"
+  spawnShieldHitSpark(x, y) { for (let i = 0; i < 5; i++) { const a = Math.random() * Math.PI * 2, s = 90 + Math.random() * 90; this.particles.push(pools.particle.get(x, y, Math.cos(a) * s, Math.sin(a) * s, "#99e9f2")); } },
+  // RR:引擎尾焰拖尾粒子 —— 比爆炸粒子小、寿命短,从对象池取完后覆盖 life/size,做出持续喷射的拖尾感
+  spawnEngineFlame(x, y) {
+    const p = pools.particle.get(x + (Math.random() - 0.5) * 4, y, (Math.random() - 0.5) * 20, 60 + Math.random() * 50, Math.random() < 0.5 ? "#ffe066" : "#ff922b");
+    p.life = 0.16 + Math.random() * 0.1; p.maxLife = p.life; p.size = 2 + Math.random() * 1.5;
+    this.particles.push(p);
+  },
+
+  comboMult() { return clamp(1 + this.combo * CONFIG.combo.scoreStep, 1, CONFIG.combo.maxMult); },
+  breakCombo() { this.combo = 0; this.comboTimer = 0; },
+
+  bombButtonHit(x, y) { const b = this.bombBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
+  useBomb() {
+    if (!this.player || this.player.bombs <= 0) return;
+    this.player.bombs--; this._bombsUsedThisLevel++; Sound.bomb(); Haptics.bomb(); this.addShake(6, 0.2); this.hitStop(0.04);
+    this.flashTimer = CONFIG.bomb.flash;
+    this.player.invulnTimer = Math.max(this.player.invulnTimer, CONFIG.player.bombInvuln);
+    for (const b of this.enemyBullets) this.burst(b.x, b.y, "#ff8787", 3, 120);
+    this.enemyBullets = [];
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      if (e.isBoss) { this.burst(e.x, e.y, "#fff", 24, 240); if (e.damage(CONFIG.bomb.bossDamage * (this.player.ship.bombDmgMult || 1))) this.onEnemyKilled(e, false, true); }
+      else if (e.damage(9999)) this.onEnemyKilled(e, false, true);
+    }
+  },
+
+  // B:必杀 —— 能量满 + 冷却结束才可释放。X4:效果按机型分派(specialType),不再是所有机型统一的全屏重伤:
+  //   攻击型 nuke(全屏重伤+短暂无敌,原效果保留)/防御型 shield(回血+护盾)/侦查型 stealth(长时间隐身)/平衡型 wave(冲击波抵消弹幕)
+  // YY:BUG修复——原来这里还判了"能量满+冷却好"才算命中,必杀没准备好时点按钮的坐标判定会直接落空,
+  //   落空后 pointerdown 会继续往下走到"设置移动目标"那一步,飞机就被拖去了按钮所在位置。
+  //   改成纯几何命中(和 bombButtonHit/pauseButtonHit 一致),是否真的能放交给 useSpecial() 内部自己判断并静默 no-op。
+  specialButtonHit(x, y) { const b = this.specialBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
+  useSpecial() {
+    if (!this.player || this.player.energy < 100 || this.player.specialCooldown > 0) return;
+    this.player.energy = 0; this.player.specialCooldown = CONFIG.special.cooldown * (this.player.ship.specialCooldownMult || 1); Sound.bomb(); Haptics.bomb(); this.addShake(8, 0.25); this.hitStop(0.06);
+    this.flashTimer = 0.35;
+    const type = this.player.ship.specialType || "nuke";
+    if (type === "shield") this.useSpecialShield();
+    else if (type === "stealth") this.useSpecialStealth();
+    else if (type === "wave") this.useSpecialWave();
+    else this.useSpecialNuke();
+  },
+  // 攻击型:原有的全屏重伤 + 短暂无敌,数值/行为完全不变
+  useSpecialNuke() {
+    this.flashTimer = 0.5; this.player.invulnTimer = Math.max(this.player.invulnTimer, CONFIG.special.invuln);
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      if (e.isBoss) { this.burst(e.x, e.y, "#ffd43b", 30, 320); if (e.damage(CONFIG.special.bossDamage)) this.onEnemyKilled(e, false, true); }
+      else if (e.damage(9999)) this.onEnemyKilled(e, false, true);
+    }
+  },
+  // 防御型:立即回一部分血 + 展开吸收伤害的护盾(见 Player.takeDamage / Player._drawShield)
+  useSpecialShield() {
+    const s = CONFIG.special;
+    this.player.heal(this.player.maxHp * s.healOnShield);
+    this.player.shieldHp = s.shieldHp; this.player.shieldMax = s.shieldHp; this.player.shieldTimer = s.shieldDur;
+    this.burst(this.player.x, this.player.y, "#38d9a9", 22, 220); this.spawnShockwave(this.player.x, this.player.y, this.player.radius * 2.4, "#38d9a9");
+  },
+  // 侦查型:长时间隐身免伤(见 Player.takeDamage / Player._drawStealthShimmer),不清场也不加防御,纯靠"躲开这一段"
+  useSpecialStealth() {
+    this.player.stealthTimer = CONFIG.special.stealthDur;
+    this.burst(this.player.x, this.player.y, "#ffd43b", 18, 200);
+  },
+  // 平衡型:向前(向上)发射一道会变宽的能量波,抵消沿途弹幕并对扫到的敌机造成一次伤害(见 SpecialWave / resolveSpecialWaves)
+  useSpecialWave() {
+    this.specialWaves.push(new SpecialWave(this.player.x, this.player.y - this.player.radius, this.player.ship.color));
+  },
+
+  onEnemyKilled(e, allowDrop = true, byBomb = false) {
+    let gained;
+    if (byBomb) { gained = Math.round(e.score * CONFIG.scoring.bombKillMult); }              // 炸弹/必杀清兵:不涨连击、分数打折
+    else { this.combo++; this.comboTimer = CONFIG.combo.timeout * (this.player ? this.player.ship.comboTimeoutMult : 1); this.maxCombo = Math.max(this.maxCombo, this.combo); gained = Math.round(e.score * this.comboMult()); }
+    this.score += gained;
+    if (this.player && !byBomb) this.player.addEnergy(e.isBoss ? CONFIG.special.gainBossKill : CONFIG.special.gainPerKill);   // B:攒必杀能量(炸弹/必杀击杀不攒,防循环)
+    this.floats.push(new FloatText(e.x, e.y - e.radius, "+" + gained, byBomb ? "#868e96" : (this.combo >= 5 ? "#ffd43b" : "#fff")));
+    // D:splitter 死亡裂成小型机(在死亡位置)
+    if (e.type === "splitter") { for (let k = 0; k < (e.cfg.splits || 3); k++) { const off = (k - (e.cfg.splits - 1) / 2) * 26, ne = pools.enemy.get("small", clamp(e.x + off, 20, CONFIG.WIDTH - 20), 0, "straight"); ne.y = e.y; this.enemies.push(ne); } }
+    // Z:detonator(雷机)死亡炸出一圈弹幕,击杀时需留意走位;GG 加一声尖锐"哔"区别于普通爆炸
+    if (e.type === "detonator") { this.fireRing(e.x, e.y, e.cfg.ringCount || 14, e.cfg.ringSpeed || 210, e.cfg.ringDamage || 9); Sound.tone(700, 0.12, "square", 0.15, 200); }
+    // V:carrier(母舰机)死亡裂出 spawnCount 只 spawns 类型僚机(比 splitter 更硬更重的进阶版套路)
+    // W2:裂解出的僚机加一圈紫色脉动环 + 一撮紫色粒子,让玩家能一眼看出"这只是母舰刚炸出来的",不然和场上正常刷新的同类型敌机分不清
+    if (e.type === "carrier") {
+      for (let k = 0; k < (e.cfg.spawnCount || 2); k++) {
+        const off = (k - (e.cfg.spawnCount - 1) / 2) * 30, ne = pools.enemy.get(e.cfg.spawns || "medium", clamp(e.x + off, 20, CONFIG.WIDTH - 20), 0, "sine");
+        ne.y = e.y; ne._carrierSpawn = 1.0; this.enemies.push(ne);
+      }
+      this.burst(e.x, e.y, "#9775fa", 10, 140);
+    }
+    if (e.isBoss) { for (let k = 0; k < 5; k++) this.burst(e.x + (Math.random() - 0.5) * e.radius, e.y + (Math.random() - 0.5) * e.radius, ["#ffd43b", "#ff922b", "#fff"][k % 3], 18, 260); this.spawnShockwave(e.x, e.y, e.radius * 3, "#ffd43b"); this.flashTimer = Math.max(this.flashTimer, 0.4); Sound.bossDefeat(); Haptics.bossDefeat(); this.addShake(9, 0.32); this.hitStop(0.08); Achievements.trackBossKill(e.defIndex); }
+    else { this.burst(e.x, e.y, e.color, 14, 180); this.spawnShockwave(e.x, e.y, e.radius * 2.2, e.color); Sound.explosion(e.radius >= 30 ? "large" : e.radius >= 20 ? "medium" : "small"); if (allowDrop) this.maybeDrop(e.type, e.x, e.y); }
+    // CC:连击每达 10 的倍数,弹一次居中大字里程碑特效
+    if (!byBomb && this.combo > 0 && this.combo % 10 === 0) this.comboMilestone(this.combo);
+  },
+  comboMilestone(n) {
+    // HH:按用户反馈取消了连击里程碑的震动(太频繁,叠加暂停期间的震动 BUG 感觉像屏幕一直在抖)
+    this.bannerText = n + " COMBO!"; this.bannerSub = ""; this.bannerTimer = 1.1;
+    Sound.powerup();
+  },
+  maybeDrop(type, x, y) { if (type === "small") return; if (Math.random() < CONFIG.powerup.dropChance) this.powerups.push(new PowerUp(x, y, this.chooseDrop())); },
+  // V:火力(power)/僚机(wing)已到上限时不再掉落这两种,权重让给其余种类
+  canDrop(kind) {
+    if (kind === "power") return !this.player || this.player.power < CONFIG.player.maxPower;
+    if (kind === "wing") return !this.player || this.player.wings < CONFIG.wingMax;
+    return true;
+  },
+  chooseDrop() {
+    const w = this.endless ? CONFIG.powerup.endlessWeights : CONFIG.powerup.weights;
+    const kinds = ["power", "heal", "bomb", "wing"].filter(k => this.canDrop(k));
+    const total = kinds.reduce((s, k) => s + w[k], 0);
+    if (total <= 0) return "heal";
+    let r = Math.random() * total;
+    for (const k of kinds) { if (r < w[k]) return k; r -= w[k]; }
+    return kinds[kinds.length - 1];
+  },
+
+  update(dt) {
+    // BB:菜单/覆盖层统一淡入 —— 状态一变就从 0 开始,0.3 秒淡到 1(暂停态也照常推进,让暂停面板正常淡入)
+    if (this.state !== this._lastState) { this._lastState = this.state; this._stateFadeT = 0; this._settleAnimT = 0; }
+    this._stateFadeT += dt; this._settleAnimT += dt;
+    if (this.state === "paused") return;          // 暂停:冻结一切(逻辑/粒子/计时器)
+    if (this.flashTimer > 0) this.flashTimer -= dt;
+    if (this.bannerTimer > 0) this.bannerTimer -= dt;
+    if (this.warningTimer > 0) this.warningTimer -= dt;
+    if (this._shakeT > 0) this._shakeT -= dt;
+    if (this.dlgTimer > 0) this.dlgTimer -= dt;
+    if (this._mapHighlightT > 0) this._mapHighlightT -= dt;
+    if (this._levelTransT > 0 && this._levelTransT < 0.45) this._levelTransT += dt;
+    this.particles.forEach(o => o.update(dt));
+    for (const o of this.particles) if (o.dead) pools.particle.release(o);   // DD:粒子归还对象池
+    this.particles = this.particles.filter(o => !o.dead);
+    this.floats.forEach(o => o.update(dt)); this.floats = this.floats.filter(o => !o.dead);
+    this.shockwaves.forEach(o => o.update(dt)); this.shockwaves = this.shockwaves.filter(o => !o.dead);
+    this.specialWaves.forEach(o => o.update(dt)); this.specialWaves = this.specialWaves.filter(o => !o.dead);
+
+    if (this.state !== "playing") {
+      if (this.state === "gameover" && !this._recorded) { this._recorded = true; this.topScores = Leaderboard.submit(this.levelDef().id, this.score); }
+      return;
+    }
+
+    if (this.combo > 0) { this.comboTimer -= dt; if (this.comboTimer <= 0) this.breakCombo(); }
+
+    director.update(dt);
+    if (this.endless) this.updateEndless(dt);
+    else {   // Q:常规关卡(含刷分续关)每隔固定秒数自动刷新一个道具;无尽模式不刷新(有自己的掉落节奏)
+      this._itemSpawnTimer -= dt;
+      if (this._itemSpawnTimer <= 0) { this._itemSpawnTimer = this.itemAutoInterval(); this.spawnPowerUp(30 + Math.random() * (CONFIG.WIDTH - 60), this.chooseDrop()); }
+    }
+    if (this.farming) {
+      if (this.score >= this._clearScore * CONFIG.scoring.farmScoreCapMult) { this.settle(); }   // 达刷分总分上限 → 强制结算
+      else { this._farmTimer -= dt; if (this._farmTimer <= 0 && this.enemies.length < CONFIG.scoring.farmMaxEnemies) { this._farmTimer = CONFIG.scoring.farmInterval; this.spawnFarmWave(); } }
+    }
+    this.player.update(dt);
+    this.playerBullets.forEach(o => o.update(dt));
+    this.enemyBullets.forEach(o => o.update(dt));
+    this.enemies.forEach(o => o.update(dt));
+    this.powerups.forEach(o => o.update(dt));
+    this.updateLasers(dt);
+
+    this.resolveCollisions();
+    this.resolveSpecialWaves();
+
+    // AA:血条残影 —— 掉血时缓慢跟随下降(0.5/秒),涨血瞬间跟上,营造"最近损失多少血"的反馈
+    { const ratio = clamp(this.player.hp / this.player.maxHp, 0, 1); this._hpTrailRatio = this._hpTrailRatio > ratio ? Math.max(ratio, this._hpTrailRatio - dt * 0.5) : ratio; }
+
+    // DD:死亡对象归还对象池(必须在 filter 丢弃引用之前 release,否则池子永远收不回来)
+    for (const o of this.playerBullets) if (o.dead) pools.playerBullet.release(o);
+    for (const o of this.enemyBullets) if (o.dead) pools.enemyBullet.release(o);
+    for (const o of this.enemies) if (o.dead && !o.isBoss) pools.enemy.release(o);
+    this.playerBullets = this.playerBullets.filter(o => !o.dead);
+    this.enemyBullets = this.enemyBullets.filter(o => !o.dead);
+    this.enemies = this.enemies.filter(o => !o.dead);
+    this.powerups = this.powerups.filter(o => !o.dead);
+    if (this.boss && this.boss.dead) this.boss = null;
+    if (this.player.hp <= 0) { if (this.endless) this.settleEndless(); else if (this.farming) this.settle(); else this.state = "gameover"; }   // 刷分中阵亡也进结算
+  },
+
+  resolveCollisions() {
+    for (const b of this.playerBullets) {
+      if (b.dead) continue;
+      for (const e of this.enemies) { if (e.dead) continue; if (hit(b, e)) { b.dead = true; this.spawnHitSpark(b.x, b.y); if (e.damage(CONFIG.bullet.damage)) this.onEnemyKilled(e); break; } }
+    }
+    for (const e of this.enemies) { if (e.dead) continue; if (hit(e, this.player)) { if (!e.isBoss) { e.dead = true; this.burst(e.x, e.y, e.color, 10, 160); } this.player.takeDamage(CONFIG.crashDamage * this.activeDiff.dmgMult); } }
+    for (const b of this.enemyBullets) { if (b.dead) continue; if (hit(b, this.player)) { b.dead = true; this.player.takeDamage(b.damage); } }
+    for (const p of this.powerups) {
+      if (p.dead) continue;
+      if (hit(p, this.player)) { p.dead = true; Sound.powerup(); Haptics.powerup(); if (p.kind === "power") this.player.addPower(); else if (p.kind === "bomb") this.player.addBomb(); else if (p.kind === "wing") this.player.addWing(); else this.player.heal(CONFIG.powerup.healAmount); }
+    }
+  },
+  // X4:平衡型必杀"破阵冲击波"的判定——矩形band(宽 width、厚 thickness,随波前 y 平移)扫过的敌弹直接销毁,
+  // 扫到的敌机只结算一次伤害(hitEnemies 去重,避免波前停留在慢速大型机身上时每帧重复打)
+  resolveSpecialWaves() {
+    for (const w of this.specialWaves) {
+      if (w.dead) continue;
+      const halfW = w.width / 2, halfT = w.thickness / 2;
+      for (const b of this.enemyBullets) { if (b.dead) continue; if (Math.abs(b.x - w.x) <= halfW && Math.abs(b.y - w.y) <= halfT) { b.dead = true; this.spawnHitSpark(b.x, b.y); } }
+      for (const e of this.enemies) {
+        if (e.dead || w.hitEnemies.has(e)) continue;
+        if (Math.abs(e.x - w.x) <= halfW + e.radius && Math.abs(e.y - w.y) <= halfT + e.radius) {
+          w.hitEnemies.add(e);
+          if (e.damage(CONFIG.special.waveDamage)) this.onEnemyKilled(e); else this.spawnHitSpark(e.x, e.y);
+        }
+      }
+    }
+  },
+
+  // BB:结算类画面的数字滚动动画 —— 从 0 缓动(ease-out)滚到 target,约 dur 秒,配合 _settleAnimT(状态一变就重置)
+  easedCount(target, dur = 1.0) {
+    const f = clamp(this._settleAnimT / dur, 0, 1), eased = 1 - Math.pow(1 - f, 3);
+    return Math.round(target * eased);
+  },
+  // BB:菜单/覆盖层统一淡入包装器 —— 状态刚切换的 0.3 秒内按 _stateFadeT 淡入,之后就是普通不透明绘制
+  // SS:淡入的同时叠加一个轻微的缩放弹入(94%→100%,ease-out),比纯透明度淡入更有"现代APP"的弹性感
+  _drawFaded(ctx, fn) {
+    const t = clamp(this._stateFadeT / 0.3, 0, 1);
+    if (t < 1) {
+      const eased = 1 - Math.pow(1 - t, 3), scale = 0.94 + 0.06 * eased;
+      ctx.save(); ctx.globalAlpha = eased;
+      ctx.translate(CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2); ctx.scale(scale, scale); ctx.translate(-CONFIG.WIDTH / 2, -CONFIG.HEIGHT / 2);
+      fn(); ctx.restore();
+    } else fn();
+  },
+  draw(ctx) {
+    // N:屏幕震动(仅对局态;标题/地图/设置/机型选择/图鉴 sh=0 不会 save,故其提前 return 不失衡)
+    // HH:paused 也要排除在外 —— 之前 _shakeT 在暂停时不递减(冻结),但这里没排除 paused,
+    // 导致每帧仍用 Math.random() 重新算一次抖动偏移,暂停画面就变成没完没了的随机抖动。
+    const inGame = this.state !== "title" && this.state !== "settings" && this.state !== "map" && this.state !== "shipselect" && this.state !== "codex" && this.state !== "tutorial" && this.state !== "paused";
+    const sh = (this._shakeT > 0 && inGame) ? this._shake : 0;
+    if (sh > 0) { ctx.save(); ctx.translate((Math.random() * 2 - 1) * sh, (Math.random() * 2 - 1) * sh); }
+    background.draw(ctx, this.world); stars.draw(ctx);
+    if (this.state === "title") { this._drawFaded(ctx, () => this.drawTitle(ctx)); return; }
+    if (this.state === "settings") { this._drawFaded(ctx, () => this.drawSettings(ctx)); return; }
+    if (this.state === "shipselect") { this._drawFaded(ctx, () => this.drawShipSelect(ctx)); return; }
+    if (this.state === "codex") { this._drawFaded(ctx, () => this.drawCodex(ctx)); return; }
+    if (this.state === "tutorial") { this._drawFaded(ctx, () => this.drawTutorial(ctx)); return; }
+    if (this.state === "map") { this._drawFaded(ctx, () => this.drawMap(ctx)); return; }
+    this.drawLasers(ctx);   // Y:镭射(危险柱)画在敌人/玩家之下,让玩家能看清自己是否站在范围内
+    this.powerups.forEach(o => o.draw(ctx));
+    this.enemies.forEach(o => o.draw(ctx));
+    this.enemyBullets.forEach(o => o.draw(ctx));
+    this.playerBullets.forEach(o => o.draw(ctx));
+    this.particles.forEach(o => o.draw(ctx));
+    this.shockwaves.forEach(o => o.draw(ctx));
+    this.specialWaves.forEach(o => o.draw(ctx));
+    this.floats.forEach(o => o.draw(ctx));
+    if (this.player) this.player.draw(ctx);
+    if (Settings.data.controlMode === "joystick" && this.state === "playing") this.drawJoystick(ctx);
+    this.drawHUD(ctx);
+    // NN:进入关卡的聚焦扩散过渡 —— 从地图上点击的位置展开一个圆形"洞",黑幕从这个洞外逐渐缩小到看不见
+    if (this._levelTransT > 0 && this._levelTransT < 0.45) {
+      const t = clamp(this._levelTransT / 0.45, 0, 1), r = t * Math.hypot(CONFIG.WIDTH, CONFIG.HEIGHT);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+      ctx.moveTo(this._levelTransX + r, this._levelTransY); ctx.arc(this._levelTransX, this._levelTransY, r, 0, Math.PI * 2, true);
+      ctx.fillStyle = "#000"; ctx.fill("evenodd");
+      ctx.restore();
+    }
+    if (this.flashTimer > 0) { ctx.fillStyle = "rgba(255,255,255," + (this.flashTimer / CONFIG.bomb.flash * 0.6) + ")"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT); }
+    if (this.bannerTimer > 0 && this.state === "playing") {
+      ctx.globalAlpha = clamp(this.bannerTimer, 0, 1); ctx.textAlign = "center";
+      ctx.fillStyle = "#ffd43b"; ctx.font = "bold 44px 'Segoe UI', sans-serif"; ctx.fillText(this.bannerText, CONFIG.WIDTH / 2, CONFIG.HEIGHT * 0.4);
+      if (this.bannerSub) { ctx.fillStyle = "#e9ecef"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText(this.bannerSub, CONFIG.WIDTH / 2, CONFIG.HEIGHT * 0.4 + 34); }
+      ctx.textAlign = "left"; ctx.globalAlpha = 1;
+    }
+    // P:BOSS 台词框
+    if (this.dlgTimer > 0 && this.state === "playing") {
+      const bx = 20, bw = CONFIG.WIDTH - 40, by = CONFIG.HEIGHT - 232, bh = 60;
+      ctx.globalAlpha = clamp(this.dlgTimer, 0, 1);
+      ctx.fillStyle = "rgba(10,14,20,.88)"; ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = "#f03e3e"; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, bh);
+      ctx.textAlign = "left"; ctx.fillStyle = "#ff6b6b"; ctx.font = "bold 15px 'Segoe UI', sans-serif"; ctx.fillText("◆ " + this.dlgName, bx + 14, by + 24);
+      ctx.fillStyle = "#e9ecef"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText(this.dlgText, bx + 14, by + 48);
+      ctx.globalAlpha = 1;
+    }
+    if (this.warningTimer > 0 && this.state === "playing") this.drawWarning(ctx);
+    if (this.state === "paused") this._drawFaded(ctx, () => this.drawPause(ctx));
+    if (this.state === "gameover") this._drawFaded(ctx, () => this.drawEndScreen(ctx, "战斗失败", "#ff6b6b"));
+    if (this.state === "cleared") this._drawFaded(ctx, () => this.drawCleared(ctx));
+    if (this.state === "settle") this._drawFaded(ctx, () => this.drawSettle(ctx));
+    if (this.state === "endlessover") this._drawFaded(ctx, () => this.drawEndlessOver(ctx));
+    if (sh > 0) ctx.restore();
+  },
+
+  // F:无尽结算界面
+  drawEndlessOver(ctx) {
+    const cx = CONFIG.WIDTH / 2, r = this.endlessResult || { base: this.score, diffFactor: this.activeDiff.scoreMult, time: 0, final: this.score, maxCombo: this.maxCombo };
+    const top = this.endlessTop || EndlessBoard.load();
+    ctx.fillStyle = "rgba(0,0,0,.78)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ff922b"; ctx.font = "bold 40px 'Segoe UI', sans-serif"; ctx.fillText("生存结束", cx, 250);
+    ctx.fillStyle = "#fff"; ctx.font = "22px 'Segoe UI', sans-serif"; ctx.fillText("存活 " + r.time + " 秒   最高连击 " + r.maxCombo, cx, 300);
+    ctx.fillStyle = "#dee2e6"; ctx.font = "20px 'Segoe UI', sans-serif"; ctx.fillText("得分 " + this.easedCount(r.base) + "  × 难度 " + r.diffFactor.toFixed(1), cx, 336);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 30px 'Segoe UI', sans-serif"; ctx.fillText("最终得分  " + this.easedCount(r.final, 1.3), cx, 384);
+    ctx.fillStyle = "#adb5bd"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("── 无尽榜 ──", cx, 434);
+    let hl = false;
+    top.forEach((e, i) => { const me = !hl && e.score === r.final; if (me) hl = true; ctx.fillStyle = me ? "#ffd43b" : "#dee2e6"; ctx.font = (me ? "bold " : "") + "17px 'Segoe UI', sans-serif"; ctx.fillText((i + 1) + ".   " + e.score + "   " + e.date + (me ? "  ◄" : ""), cx, 464 + i * 28); });
+    ctx.fillStyle = "#4a90d9"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("点击返回首页", cx, 464 + top.length * 28 + 30);
+    ctx.textAlign = "left";
+  },
+
+  drawPause(ctx) {
+    const cx = CONFIG.WIDTH / 2;
+    ctx.fillStyle = "rgba(0,0,0,.66)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff"; ctx.font = "bold 48px 'Segoe UI', sans-serif"; ctx.fillText("暂停", cx, 340);
+    ctx.fillStyle = "#adb5bd"; ctx.font = "16px 'Segoe UI', sans-serif"; ctx.fillText("P / Esc 键也可继续", cx, 380);
+    UI.button(ctx, this.pauseMenuRect(0), { label: "继续 RESUME", color: "#38d9a9", active: true, font: 21 });
+    UI.button(ctx, this.pauseMenuRect(1), { label: "返回首页 HOME", color: "#adb5bd", font: 21 });
+    ctx.textAlign = "left";
+  },
+
+  // ── 标题界面 ──(S:开始/无尽/机型三个大按钮同宽同高,竖向排列)
+  titleStartRect() { const w = 300, h = 60, x = (CONFIG.WIDTH - w) / 2, y = 396; return { x, y, w, h }; },
+  titleStartHit(px, py) { const r = this.titleStartRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  titleEndlessRect() { const w = 300, h = 60, x = (CONFIG.WIDTH - w) / 2, y = 472; return { x, y, w, h }; },
+  titleEndlessHit(px, py) { const r = this.titleEndlessRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  titleShipRect() { const w = 300, h = 60, x = (CONFIG.WIDTH - w) / 2, y = 548; return { x, y, w, h }; },
+  titleShipHit(px, py) { const r = this.titleShipRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  titleSettingsRect() { return { x: CONFIG.WIDTH - 108, y: 30, w: 92, h: 40 }; },
+  titleSettingsHit(px, py) { const r = this.titleSettingsRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  titleCodexRect() { return { x: 16, y: 30, w: 92, h: 40 }; },
+  titleCodexHit(px, py) { const r = this.titleCodexRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  titleHelpRect() { return { x: 16, y: 76, w: 92, h: 40 }; },
+  titleHelpHit(px, py) { const r = this.titleHelpRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  drawTitle(ctx) {
+    const cx = CONFIG.WIDTH / 2, t = this.titleT;
+    ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ctx.textAlign = "center";
+    // 标题:轻微呼吸缩放
+    const s = 1 + Math.sin(t * 2) * 0.03;
+    ctx.save(); ctx.translate(cx, 175); ctx.scale(s, s);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 56px 'Segoe UI', sans-serif"; ctx.fillText("空中突袭", 0, 0); ctx.restore();
+    ctx.fillStyle = "#4dabf7"; ctx.font = "26px 'Segoe UI', sans-serif"; ctx.fillText("1 9 4 5 · 复刻原型", cx, 220);
+    // 悬停的占位飞机(上下浮动)
+    const py = 262 + Math.sin(t * 1.6) * 6;
+    ctx.fillStyle = "#4dabf7"; ctx.beginPath(); ctx.moveTo(cx, py - 16); ctx.lineTo(cx - 13, py + 12); ctx.lineTo(cx + 13, py + 12); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#a5d8ff"; ctx.fillRect(cx - 3, py - 5, 6, 13);
+    // 设置(右上角)/ 图鉴(左上角)小图标按钮
+    UI.button(ctx, this.titleSettingsRect(), { label: "⚙ 设置", color: "#adb5bd", font: 15, radius: 10 });
+    UI.button(ctx, this.titleCodexRect(), { label: "📖 图鉴", color: "#adb5bd", font: 15, radius: 10 });
+    UI.button(ctx, this.titleHelpRect(), { label: "？帮助", color: "#adb5bd", font: 15, radius: 10 });
+    // S:三个同尺寸大按钮 —— 开始 / 无尽(难度固定) / 机型选择
+    UI.button(ctx, this.titleStartRect(), { label: "关卡地图 MAP", color: "#38d9a9", active: true, font: 26, radius: 16 });
+    UI.button(ctx, this.titleEndlessRect(), { label: "无尽模式 ENDLESS", sub: "难度固定 · 普通", color: "#ff922b", active: true, font: 26, radius: 16 });
+    UI.button(ctx, this.titleShipRect(), { label: "机型选择 SHIP", sub: this.ship.name, color: "#4dabf7", active: true, font: 24, radius: 16 });
+    // Q:排行榜按关卡区分,标题页无具体关卡上下文,故不再显示总榜;进入关卡结算/失败画面时显示该关排行
+    ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("排行榜 · 按关卡分别记录,通关或失败后可见", cx, 650);
+    ctx.textAlign = "left";
+  },
+
+  // ── R:首页机型选择(左右滑动卡片;关卡地图里的机型选项仍保留,两处互相同步)──
+  drawShipSelect(ctx) {
+    const cx = CONFIG.WIDTH / 2, order = this.shipSelectOrder(), key = order[this._shipIdx], sp = CONFIG.ships[key], selected = this.ship.key === key;
+    ctx.fillStyle = "rgba(0,0,0,.62)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff"; ctx.font = "bold 30px 'Segoe UI', sans-serif"; ctx.fillText("选择机型", cx, 66);
+    UI.button(ctx, this.shipSelectBackRect(), { label: "‹ 首页", color: "#adb5bd", font: 15, radius: 10 });
+    UI.button(ctx, this.shipSelectArrowRect(-1), { label: "‹", color: "#495057", font: 26, radius: 12 });
+    UI.button(ctx, this.shipSelectArrowRect(1), { label: "›", color: "#495057", font: 26, radius: 12 });
+
+    // 机体卡片(QQ:玻璃质感面板 + 真实机身剪影,与游戏内造型一致)
+    const cardW = 300, cardH = 210, cardX = cx - cardW / 2, cardY = 150;
+    UI.panel(ctx, cardX, cardY, cardW, cardH, 18, { accent: sp.color, lineWidth: 2.5 });
+    drawShipBody(ctx, cx, cardY + 92, sp);
+    ctx.fillStyle = sp.color; ctx.font = "bold 26px 'Segoe UI', sans-serif"; ctx.fillText(sp.name, cx, cardY + 156);
+    ctx.fillStyle = "#dee2e6"; ctx.font = "15px 'Segoe UI', sans-serif"; ctx.fillText(sp.desc, cx, cardY + 182);
+
+    // 圆点指示器(对应机型颜色)
+    order.forEach((k, i) => {
+      const dx = cx + (i - (order.length - 1) / 2) * 22, dy = cardY + cardH + 26;
+      ctx.beginPath(); ctx.arc(dx, dy, i === this._shipIdx ? 6 : 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = i === this._shipIdx ? sp.color : "rgba(255,255,255,.3)"; ctx.fill();
+    });
+
+    // X6:性能改用直观的进度条(而不是裸数字),被动/机型技能各配一枚精致图案图标——整体向"现代游戏图鉴"风格靠拢
+    const statX = cx - 150, statW = 300, statY = cardY + cardH + 56;
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("性能", statX, statY);
+    // 三条性能条:生命值/射速(越低越快,取反归一化)/机动,统一映射到有对比区分度的区间而不是简单 0-100%
+    const stats = [
+      { label: "生命值", ratio: clamp((sp.hpMult - 0.5) / 1.1, 0, 1), value: Math.round(sp.hpMult * 100) + "%", color: "#ff6b6b" },
+      { label: "射速", ratio: 1 - clamp((sp.fireMult - 0.7) / 0.6, 0, 1), value: "×" + sp.fireMult.toFixed(2), color: "#4dabf7" },
+      { label: "机动", ratio: clamp(((sp.lerpMult || 1) - 0.7) / 0.9, 0, 1), value: Math.round((sp.lerpMult || 1) * 100) + "%", color: "#38d9a9" },
+    ];
+    let sy = statY + 16;
+    stats.forEach(st => {
+      ctx.fillStyle = "#adb5bd"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText(st.label, statX, sy);
+      ctx.textAlign = "right"; ctx.fillStyle = "#dee2e6"; ctx.fillText(st.value, statX + statW, sy); ctx.textAlign = "left";
+      UI.bar(ctx, statX, sy + 6, statW, 8, st.ratio, UI.shade(st.color, -0.15), st.color, {});
+      sy += 32;
+    });
+
+    // 被动技能:图标框(专属图案)+ 名称/描述
+    sy += 14;
+    ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("被动技能", statX, sy);
+    const perkBoxY = sy + 14, boxSize = 44;
+    UI.panel(ctx, statX, perkBoxY, boxSize, boxSize, 12, { accent: sp.color });
+    this.drawPassiveIcon(ctx, statX + boxSize / 2, perkBoxY + boxSize / 2, boxSize * 0.75, key, sp.color);
+    const textX = statX + boxSize + 12, textW = statX + statW - textX;
+    ctx.fillStyle = sp.color; ctx.font = "bold 15px 'Segoe UI', sans-serif"; ctx.fillText(sp.perkName || "—", textX, perkBoxY + 18);
+    ctx.fillStyle = "#38d9a9"; ctx.font = "12px 'Segoe UI', sans-serif";
+    UI.wrapText(ctx, sp.perkDesc || "", textW).forEach((line, i) => ctx.fillText(line, textX, perkBoxY + 38 + i * 15));
+    sy = perkBoxY + 62;
+
+    const equip = [];
+    if (sp.bombs > 0) equip.push("初始炸弹 +" + sp.bombs);
+    if (sp.wings > 0) equip.push("初始僚机 +" + sp.wings);
+    if (equip.length) { ctx.fillStyle = "#dee2e6"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText(equip.join("  ·  "), statX, sy); }
+    sy += 26;
+
+    // X5:"必杀技"改名"机型技能"——四个机型效果都不一样了,单独一段说明,别让玩家以为是同一个东西
+    // X6:图标直接复用 HUD 里那枚同款 drawSpecialIcon(用户要求"技能放上游戏内技能图案"),而不是另画一套专属图鉴图标
+    ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("机型技能", statX, sy);
+    const skillBoxY = sy + 14;
+    UI.panel(ctx, statX, skillBoxY, boxSize, boxSize, 12, { accent: "#ffd43b" });
+    this.drawSpecialIcon(ctx, statX + boxSize / 2, skillBoxY + boxSize / 2, boxSize * 0.75, sp.specialType || "nuke", sp.color);
+    const skillTextX = statX + boxSize + 12, skillTextW = statX + statW - skillTextX;
+    ctx.fillStyle = "#ffd43b"; ctx.font = "bold 15px 'Segoe UI', sans-serif"; ctx.fillText(sp.specialName || "—", skillTextX, skillBoxY + 18);
+    ctx.fillStyle = "#dee2e6"; ctx.font = "12px 'Segoe UI', sans-serif";
+    UI.wrapText(ctx, sp.specialDesc || "", skillTextW).forEach((line, i) => ctx.fillText(line, skillTextX, skillBoxY + 38 + i * 15));
+
+    ctx.textAlign = "center";
+    UI.button(ctx, this.shipSelectConfirmRect(), { label: selected ? "✓ 使用中" : "选择 USE", color: selected ? "#38d9a9" : "#4dabf7", active: true, font: 20, radius: 14 });
+    ctx.fillStyle = "#4a90d9"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText("左右滑动或点击箭头切换机型", cx, CONFIG.HEIGHT - 32);
+    ctx.textAlign = "left";
+  },
+
+  // ── Z:首页图鉴 —— 上半关卡预览网格(纯展示)+ 下半 BOSS 轮播(左右滑动) ──
+  drawCodex(ctx) {
+    const cx = CONFIG.WIDTH / 2;
+    ctx.fillStyle = "rgba(0,0,0,.62)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff"; ctx.font = "bold 26px 'Segoe UI', sans-serif"; ctx.fillText("图鉴", cx, 50);
+    UI.button(ctx, this.codexBackRect(), { label: "‹ 首页", color: "#adb5bd", font: 15, radius: 10 });
+    // OO:图鉴 / 成就 标签切换
+    UI.button(ctx, this.codexTabRect(0), { label: "图鉴", color: "#4dabf7", active: this._codexTab === "guide", font: 16, radius: 10 });
+    UI.button(ctx, this.codexTabRect(1), { label: "成就", color: "#ffd43b", active: this._codexTab === "achievements", font: 16, radius: 10 });
+    if (this._codexTab === "achievements") { this.drawAchievements(ctx); return; }
+
+    // 关卡预览网格:4列 x 3行,共 12 关,纯展示(通关地图去实际进入关卡)
+    ctx.textAlign = "left"; ctx.fillStyle = "#868e96"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText("关卡预览", 18, 128); ctx.textAlign = "center";
+    const cols = 4, tileW = 120, tileH = 64, gapX = 8, gapY = 10, gridW = cols * tileW + (cols - 1) * gapX, gx0 = (CONFIG.WIDTH - gridW) / 2, gy0 = 138;
+    LEVELS.forEach((L, i) => {
+      const col = i % cols, row = Math.floor(i / cols), tx = gx0 + col * (tileW + gapX), ty = gy0 + row * (tileH + gapY);
+      const pr = Progress.entry(L.id), cleared = !!(pr && pr.cleared);
+      // 注意:accent 会喂给 UI.rgba() 做透明度混合,必须是 hex;非 hex 颜色要走 opts.stroke 直接指定,绕开 rgba() 转换
+      UI.panel(ctx, tx, ty, tileW, tileH, 10, cleared ? { accent: "#38d9a9" } : { stroke: "rgba(255,255,255,.25)" });
+      ctx.fillStyle = "#fff"; ctx.font = "bold 16px 'Segoe UI', sans-serif"; ctx.fillText(L.id, tx + tileW / 2, ty + 26);
+      ctx.fillStyle = cleared ? "#38d9a9" : "#868e96"; ctx.font = "11px 'Segoe UI', sans-serif";
+      ctx.fillText(cleared ? "✓ " + pr.best : "未通关", tx + tileW / 2, ty + 46);
+    });
+
+    // BOSS 图鉴轮播
+    const bossAreaY = this.codexBossCardY();
+    ctx.textAlign = "left"; ctx.fillStyle = "#868e96"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText("BOSS 图鉴", 18, bossAreaY - 10); ctx.textAlign = "center";
+    UI.button(ctx, this.codexArrowRect(-1), { label: "‹", color: "#495057", font: 26, radius: 12 });
+    UI.button(ctx, this.codexArrowRect(1), { label: "›", color: "#495057", font: 26, radius: 12 });
+
+    const idx = this._codexBossIdx, def = CONFIG.bosses[idx];
+    const cardW = 320, cardH = 246, cardX = cx - cardW / 2, cardY = bossAreaY;
+    UI.panel(ctx, cardX, cardY, cardW, cardH, 16, { accent: def.colors[0] });
+    fillBossShape(ctx, cx, cardY + 58, 34, def.shape, def.colors[0]);
+    ctx.fillStyle = def.colors[0]; ctx.font = "bold 22px 'Segoe UI', sans-serif"; ctx.fillText(def.name, cx, cardY + 112);
+    ctx.fillStyle = "#dee2e6"; ctx.font = "13px 'Segoe UI', sans-serif";
+    ctx.fillText("HP " + def.hp + "   分值 " + def.score, cx, cardY + 134);
+    // X6:攻击方式图标行——一眼看出这只BOSS会用哪些弹幕套路(去重跨所有阶段的 attacks[].type),现代游戏图鉴常见的"技能一览"
+    const atkTypes = [...new Set(def.phases.flatMap(p => p.attacks.map(a => a.type)))];
+    const atkGap = 34, atkTotalW = (atkTypes.length - 1) * atkGap;
+    atkTypes.forEach((t, i) => this.drawAttackIcon(ctx, cx - atkTotalW / 2 + i * atkGap, cardY + 156, 20, t, def.colors[0]));
+    const appearIn = bossLevelIds(idx);
+    // MM:有出场关卡时这行做成可点击样式(蓝色+下划线),点了跳转地图并高亮
+    if (appearIn.length) {
+      ctx.fillStyle = "#4dabf7"; ctx.font = "12px 'Segoe UI', sans-serif";
+      const label = "出场关卡: " + appearIn.join(", ");
+      ctx.fillText(label, cx, cardY + 182);
+      const tw = ctx.measureText(label).width;
+      ctx.strokeStyle = "#4dabf7"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx - tw / 2, cardY + 186); ctx.lineTo(cx + tw / 2, cardY + 186); ctx.stroke();
+    } else {
+      ctx.fillStyle = "#868e96"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText("出场关卡: —", cx, cardY + 182);
+    }
+    ctx.fillStyle = "#ffd43b"; ctx.font = "italic 14px 'Segoe UI', sans-serif"; ctx.fillText("「" + def.taunt + "」", cx, cardY + 210);
+
+    // 圆点指示器
+    for (let i = 0; i < CONFIG.bosses.length; i++) {
+      const dx = cx + (i - (CONFIG.bosses.length - 1) / 2) * 20, dy = cardY + cardH + 20;
+      ctx.beginPath(); ctx.arc(dx, dy, i === idx ? 5.5 : 4, 0, Math.PI * 2);
+      ctx.fillStyle = i === idx ? def.colors[0] : "rgba(255,255,255,.3)"; ctx.fill();
+    }
+    ctx.fillStyle = "#4a90d9"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText("左右滑动或点击箭头切换 BOSS", cx, cardY + cardH + 46);
+    ctx.textAlign = "left";
+  },
+
+  // ── OO:成就列表(图鉴页第二个标签)——纯展示,一屏放得下不用滚动 ──
+  drawAchievements(ctx) {
+    const cx = CONFIG.WIDTH / 2, rowH = 70, gap = 8, x0 = 20, w = CONFIG.WIDTH - 40;
+    let unlockedCount = 0;
+    ACHIEVEMENTS.forEach((a, i) => {
+      const y = 138 + i * (rowH + gap), unlocked = Achievements.isUnlocked(a.id);
+      if (unlocked) unlockedCount++;
+      UI.panel(ctx, x0, y, w, rowH, 12, unlocked ? { accent: "#ffd43b", top: "rgba(255,212,59,.1)", bottom: "rgba(255,212,59,.02)" } : { stroke: "rgba(255,255,255,.15)" });
+      ctx.textAlign = "center"; ctx.font = "28px 'Segoe UI', sans-serif"; ctx.fillStyle = unlocked ? "#fff" : "rgba(255,255,255,.25)";
+      ctx.fillText(unlocked ? a.icon : "🔒", x0 + 40, y + rowH / 2 + 10);
+      ctx.textAlign = "left";
+      ctx.fillStyle = unlocked ? "#ffd43b" : "#868e96"; ctx.font = "bold 16px 'Segoe UI', sans-serif"; ctx.fillText(a.name, x0 + 76, y + 28);
+      ctx.fillStyle = unlocked ? "#dee2e6" : "rgba(255,255,255,.3)"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText(a.desc, x0 + 76, y + 50);
+      if (unlocked) { ctx.textAlign = "right"; ctx.fillStyle = "#38d9a9"; ctx.font = "bold 18px 'Segoe UI', sans-serif"; ctx.fillText("✓", x0 + w - 16, y + rowH / 2 + 6); ctx.textAlign = "left"; }
+    });
+    ctx.textAlign = "center"; ctx.fillStyle = "#868e96"; ctx.font = "13px 'Segoe UI', sans-serif";
+    ctx.fillText("已解锁 " + unlockedCount + " / " + ACHIEVEMENTS.length, cx, 138 + ACHIEVEMENTS.length * (rowH + gap) + 20);
+    ctx.textAlign = "left";
+  },
+
+  // ── FF:新手引导(左右滑动翻页,和机型选择/图鉴同一套交互手感)──
+  drawTutorial(ctx) {
+    const cx = CONFIG.WIDTH / 2, n = TUTORIAL_PAGES.length, p = TUTORIAL_PAGES[this._tutorialPage], last = this._tutorialPage >= n - 1;
+    ctx.fillStyle = "rgba(0,0,0,.66)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff"; ctx.font = "bold 26px 'Segoe UI', sans-serif"; ctx.fillText("新手引导", cx, 66);
+    UI.button(ctx, this.tutorialSkipRect(), { label: "跳过", color: "#adb5bd", font: 15, radius: 10 });
+    UI.button(ctx, this.tutorialArrowRect(-1), { label: "‹", color: "#495057", font: 26, radius: 12 });
+    UI.button(ctx, this.tutorialArrowRect(1), { label: "›", color: "#495057", font: 26, radius: 12 });
+
+    const cardW = 340, cardH = 340, cardX = cx - cardW / 2, cardY = 220;
+    UI.panel(ctx, cardX, cardY, cardW, cardH, 20, { accent: "#4dabf7" });
+    ctx.font = "56px 'Segoe UI', sans-serif"; ctx.fillStyle = "#fff"; ctx.fillText(p.icon, cx, cardY + 74);
+    ctx.fillStyle = "#4dabf7"; ctx.font = "bold 22px 'Segoe UI', sans-serif"; ctx.fillText(p.title, cx, cardY + 118);
+    ctx.fillStyle = "#dee2e6"; ctx.font = "15px 'Segoe UI', sans-serif";
+    p.lines.forEach((line, i) => ctx.fillText(line, cx, cardY + 160 + i * 30));
+
+    for (let i = 0; i < n; i++) {
+      const dx = cx + (i - (n - 1) / 2) * 22, dy = cardY + cardH + 26;
+      ctx.beginPath(); ctx.arc(dx, dy, i === this._tutorialPage ? 6 : 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = i === this._tutorialPage ? "#4dabf7" : "rgba(255,255,255,.3)"; ctx.fill();
+    }
+    UI.button(ctx, this.tutorialNextRect(), { label: last ? "开始游戏 START" : "下一步 NEXT", color: "#38d9a9", active: true, font: 20, radius: 14 });
+    ctx.textAlign = "left";
+  },
+
+  // ── 关卡地图 ──
+  // LL:蛇形排布 —— 偶数世界从右到左排,让世界之间的衔接线变成垂直对齐(而不是斜线穿过空白),读起来更像一条连贯路线
+  mapNodePos(i) {
+    const L = LEVELS[i], reversed = L.world % 2 === 0, col = reversed ? (4 - L.sub) : L.sub;
+    return { x: 120 + (col - 1) * 150, y: 360 + (L.world - 1) * 146, r: 38 };
+  },
+  // WW:基准 y 从 324 改成 360 —— 324 时世界1的战区名(band.y+18=292)比视口裁剪线(mapViewportRect().top=296)还靠上,
+  //   每次绘制都会被 ctx.clip() 切掉,标题永远显示不出来;360 让 band.y(310)留出安全余量,不再被裁剪线咬到。
+  mapWorldBandRect(world) { const y = 360 + (world - 1) * 146; return { x: 10, y: y - 50, w: CONFIG.WIDTH - 20, h: 122 }; },
+  mapRowRect(i, y, count = 3) { const w = 102, gap = 14, total = count * w + (count - 1) * gap, x0 = (CONFIG.WIDTH - total) / 2; return { x: x0 + i * (w + gap), y, w, h: 46 }; },
+  mapDiffRect(i) { return this.mapRowRect(i, 118, 3); },
+  mapShipRect(i) { return this.mapRowRect(i, 192, CONFIG.shipOrder.length); },
+  mapBackRect() { return { x: 20, y: 28, w: 90, h: 36 }; },
+  // MM:节点滚动区域 —— top 以下、bottom 以上这段可以纵向拖动;世界数增多超出这段高度时 mapMaxScroll()>0 才会真的动起来
+  mapViewportRect() { return { top: 296, bottom: CONFIG.HEIGHT - 6 }; },
+  mapContentRange() {
+    const worlds = LEVELS.reduce((m, l) => Math.max(m, l.world), 1);
+    const top = this.mapWorldBandRect(1), bot = this.mapWorldBandRect(worlds);
+    return { top: top.y, bottom: bot.y + bot.h };
+  },
+  mapMaxScroll() {
+    const vp = this.mapViewportRect(), cr = this.mapContentRange();
+    return Math.max(0, (cr.bottom - cr.top) - (vp.bottom - vp.top));
+  },
+  mapPointerDown(px, py) {
+    const inR = (r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+    if (inR(this.mapBackRect())) { this.toTitle(); return; }
+    const dk = ["easy", "normal", "hard"];
+    for (let i = 0; i < 3; i++) if (inR(this.mapDiffRect(i))) { this.setDiff(dk[i]); return; }
+    const sk = CONFIG.shipOrder;
+    for (let i = 0; i < sk.length; i++) if (inR(this.mapShipRect(i))) { this.setShip(sk[i]); return; }
+    // MM:节点区域先记一个拖拽起点,松手时(mapPointerUp)再判断这一下到底是"点关卡"还是"拖动滚动"
+    const vp = this.mapViewportRect();
+    if (py >= vp.top && py <= vp.bottom) {
+      this._mapDragStartX = px; this._mapDragStartY = py; this._mapDragStartScrollY = this._mapScrollY;
+      this._mapDragging = true; this._mapDragMoved = false;
+    }
+  },
+  mapPointerMove(px, py) {
+    if (!this._mapDragging) return;
+    const dy = py - this._mapDragStartY;
+    if (Math.abs(dy) > 6) this._mapDragMoved = true;
+    this._mapScrollY = clamp(this._mapDragStartScrollY - dy, 0, this.mapMaxScroll());
+  },
+  mapPointerUp(px, py) {
+    if (!this._mapDragging) return;
+    this._mapDragging = false;
+    if (this._mapDragMoved) return;   // 拖动过了就是滚动手势,不当点击处理
+    const pyAdj = py + this._mapScrollY;
+    for (let i = 0; i < LEVELS.length; i++) {
+      const n = this.mapNodePos(i);
+      if (this.isUnlocked(i) && (px - n.x) ** 2 + (pyAdj - n.y) ** 2 <= n.r * n.r) { this.enterLevelFromMap(i, px, py); return; }
+    }
+  },
+  // NN:从地图点击关卡节点进入对局,附带一个从点击处展开的聚焦过渡(替代直接瞬切)
+  enterLevelFromMap(i, screenX, screenY) {
+    this.startLevel(i);
+    this._levelTransX = screenX; this._levelTransY = screenY; this._levelTransT = 0.0001;
+  },
+  // MM:图鉴 BOSS 卡片点"出场关卡"跳过来时用 —— 定位/高亮/自动滚动到目标关卡
+  jumpToLevelFromCodex(bossIdx) {
+    const ids = bossLevelIds(bossIdx);
+    if (!ids.length) return;
+    const idx = LEVELS.findIndex(l => l.id === ids[0]);
+    if (idx < 0) return;
+    this._mapHighlightId = ids[0]; this._mapHighlightT = 3.0;
+    const n = this.mapNodePos(idx), vp = this.mapViewportRect();
+    this._mapScrollY = clamp(n.y - (vp.top + (vp.bottom - vp.top) / 2), 0, this.mapMaxScroll());
+    this.toMap();
+  },
+  drawMap(ctx) {
+    const cx = CONFIG.WIDTH / 2;
+    ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff"; ctx.font = "bold 30px 'Segoe UI', sans-serif"; ctx.fillText("关卡地图", cx, 60);
+    // 返回(现代按钮)
+    UI.button(ctx, this.mapBackRect(), { label: "‹ 首页", color: "#adb5bd", font: 15, radius: 10 });
+    // 难度选择
+    const dk = ["easy", "normal", "hard"];
+    ctx.fillStyle = "#868e96"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.textAlign = "left"; ctx.fillText("难度", this.mapDiffRect(0).x + 2, 108); ctx.textAlign = "center";
+    for (let i = 0; i < 3; i++) { const d = CONFIG.difficulties[dk[i]], sel = this.diff.key === dk[i]; UI.button(ctx, this.mapDiffRect(i), { label: d.name.split(" ")[0], sub: sel ? d.desc : "", color: d.color, active: sel, font: 17 }); }
+    // 机型选择
+    const sk = CONFIG.shipOrder;
+    ctx.fillStyle = "#868e96"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.textAlign = "left"; ctx.fillText("机型", this.mapShipRect(0).x + 2, 182); ctx.textAlign = "center";
+    for (let i = 0; i < sk.length; i++) { const sp = CONFIG.ships[sk[i]], sel = this.ship.key === sk[i]; UI.button(ctx, this.mapShipRect(i), { label: sp.name, sub: sel ? sp.desc : "", color: sp.color, active: sel, font: 15 }); }
+    ctx.fillStyle = "#868e96"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.fillText("选难度 + 机型 → 点亮关卡开始 · 通关解锁下一关", cx, 268);
+
+    // MM:节点区域可纵向滚动(为世界数增多做准备)—— 裁剪到视口并按 _mapScrollY 平移,头部的标题/选难度/选机型不受影响
+    const vp = this.mapViewportRect(), scrollY = this._mapScrollY, worldsCount = LEVELS.reduce((m, l) => Math.max(m, l.world), 1);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, vp.top, CONFIG.WIDTH, vp.bottom - vp.top); ctx.clip();
+    ctx.translate(0, -scrollY);
+
+    // LL:每个世界一条主题色底板 + 战区名 + 罗马数字水印,呼应对局内该世界的背景配色,做出"质感"
+    const roman = ["Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "Ⅴ", "Ⅵ"];
+    for (let w = 1; w <= worldsCount; w++) {
+      const band = this.mapWorldBandRect(w), th = CONFIG.themes[(w - 1) % CONFIG.themes.length];
+      UI.roundRect(ctx, band.x, band.y, band.w, band.h, 16);
+      const bg = ctx.createLinearGradient(band.x, 0, band.x + band.w, 0);
+      bg.addColorStop(0, th.band1); bg.addColorStop(1, "rgba(255,255,255,.02)");
+      ctx.fillStyle = bg; ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(255,255,255,.12)"; UI.roundRect(ctx, band.x, band.y, band.w, band.h, 16); ctx.stroke();
+      ctx.textAlign = "left"; ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.font = "12px 'Segoe UI', sans-serif";
+      ctx.fillText(CONFIG.worldIntro[(w - 1) % CONFIG.worldIntro.length], band.x + 16, band.y + 18);
+      ctx.textAlign = "right"; ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.font = "bold 64px 'Segoe UI', sans-serif";
+      ctx.fillText(roman[(w - 1) % roman.length], band.x + band.w - 8, band.y + band.h - 14);
+      ctx.textAlign = "center";
+    }
+
+    // 连线(同世界横向 + 跨世界衔接;蛇形排布下衔接刚好是竖直线,视觉上像一条连贯路线)+ 沿途小路标点做质感
+    ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 3;
+    for (let i = 0; i < LEVELS.length - 1; i++) {
+      const a = this.mapNodePos(i), b = this.mapNodePos(i + 1);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      for (let k = 1; k <= 2; k++) { const t = k / 3; ctx.beginPath(); ctx.arc(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, 2.5, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.fill(); }
+    }
+    // 节点(渐变填充 + 发光描边;压轴关卡(sub 3,对应 BOSS)额外一圈警示红环;图鉴跳转过来的目标关卡额外一圈脉动高亮)
+    for (let i = 0; i < LEVELS.length; i++) {
+      const L = LEVELS[i], n = this.mapNodePos(i), unlocked = this.isUnlocked(i), pr = Progress.entry(L.id);
+      const baseColor = !unlocked ? "#495057" : (pr ? "#38d9a9" : "#4dabf7");
+      if (L.sub === 3 && unlocked) { ctx.strokeStyle = "rgba(255,80,80,.55)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 7, 0, Math.PI * 2); ctx.stroke(); }
+      if (L.id === this._mapHighlightId && this._mapHighlightT > 0) {
+        const pulse = 0.5 + Math.abs(Math.sin(this.titleT * 6)) * 0.5;
+        ctx.save(); ctx.globalAlpha = Math.min(1, this._mapHighlightT) * pulse; ctx.strokeStyle = "#ffd43b"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 13, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
+      const grad = ctx.createRadialGradient(n.x - n.r * 0.3, n.y - n.r * 0.3, n.r * 0.1, n.x, n.y, n.r);
+      grad.addColorStop(0, UI.rgba(baseColor, unlocked ? 0.5 : 0.3)); grad.addColorStop(1, UI.rgba(baseColor, unlocked ? 0.16 : 0.08));
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2); ctx.fillStyle = grad; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = baseColor; ctx.stroke();
+      ctx.fillStyle = unlocked ? "#fff" : "#868e96"; ctx.font = "bold 20px 'Segoe UI', sans-serif"; ctx.fillText(unlocked ? L.id : "🔒", n.x, n.y - 2);
+      // 星星 = 最高通关难度(简1普2困3;未通关=空星)
+      const rank = pr ? (pr.diffRank || 0) : 0;
+      ctx.fillStyle = "#ffd43b"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("★".repeat(rank) + "☆".repeat(3 - rank), n.x, n.y + 17);
+      // 通关信息:✓ + 最高分 + 通关难度
+      if (pr) {
+        ctx.fillStyle = "#38d9a9"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText("✓ " + pr.best, n.x, n.y + n.r + 16);
+        ctx.fillStyle = "#868e96"; ctx.font = "10px 'Segoe UI', sans-serif"; ctx.fillText(CONFIG.difficulties[pr.diff].name.split(" ")[0], n.x, n.y + n.r + 30);
+      }
+    }
+    ctx.restore();
+
+    // MM:超出一屏时右侧画一条极简滚动条提示还能往下/往上翻
+    const maxScroll = this.mapMaxScroll();
+    if (maxScroll > 0) {
+      const trackH = vp.bottom - vp.top, thumbH = Math.max(30, trackH * trackH / (trackH + maxScroll)), thumbY = vp.top + (trackH - thumbH) * (scrollY / maxScroll);
+      ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.fillRect(CONFIG.WIDTH - 8, vp.top, 4, trackH);
+      ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fillRect(CONFIG.WIDTH - 8, thumbY, 4, thumbH);
+    }
+    ctx.textAlign = "left";
+  },
+
+  // ── 达标提示:结算 / 继续刷分 ──
+  drawCleared(ctx) {
+    const cx = CONFIG.WIDTH / 2, L = this.levelDef();
+    ctx.fillStyle = "rgba(0,0,0,.68)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ffd43b"; ctx.font = "bold 46px 'Segoe UI', sans-serif"; ctx.fillText("通关!", cx, 300);
+    ctx.fillStyle = "#fff"; ctx.font = "22px 'Segoe UI', sans-serif"; ctx.fillText("关卡 " + L.id + "   当前得分 " + this.score, cx, 350);
+    ctx.fillStyle = "#adb5bd"; ctx.font = "15px 'Segoe UI', sans-serif"; ctx.fillText("结算=计入血量与难度加成 · 继续刷分=无尽额外波次", cx, 384);
+    // ②自动进入下一关勾选(末关则灰显不可用)
+    const isLast = this.currentLevel >= LEVELS.length - 1, chk = this.clearedCheckRect();
+    ctx.strokeStyle = isLast ? "#495057" : "#38d9a9"; ctx.lineWidth = 2; ctx.strokeRect(chk.x, chk.y + 6, 24, 24);
+    if (this.autoNext && !isLast) { ctx.fillStyle = "#38d9a9"; ctx.font = "bold 20px 'Segoe UI', sans-serif"; ctx.textAlign = "left"; ctx.fillText("✓", chk.x + 5, chk.y + 24); }
+    ctx.fillStyle = isLast ? "#868e96" : "#ced4da"; ctx.font = "16px 'Segoe UI', sans-serif"; ctx.textAlign = "left";
+    ctx.fillText(isLast ? "已是最后一关" : "结算后自动进入下一关", chk.x + 34, chk.y + 24); ctx.textAlign = "center";
+    UI.button(ctx, this.clearedMenuRect(0), { label: "结算 SETTLE", color: "#ffd43b", active: true, font: 21 });
+    UI.button(ctx, this.clearedMenuRect(1), { label: "继续刷分 FARM", color: "#38d9a9", font: 21 });
+    ctx.textAlign = "left";
+  },
+
+  // ── 结算界面:血量系数 × 难度系数 ──
+  drawSettle(ctx) {
+    const cx = CONFIG.WIDTH / 2, L = this.levelDef(), r = this.settleResult || this.computeFinal();
+    ctx.fillStyle = "rgba(0,0,0,.78)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ctx.textAlign = "center";
+    const rank = this.diff.rank;
+    ctx.fillStyle = "#ffd43b"; ctx.font = "bold 40px 'Segoe UI', sans-serif"; ctx.fillText("结算", cx, 206);
+    ctx.fillStyle = "#adb5bd"; ctx.font = "16px 'Segoe UI', sans-serif"; ctx.fillText("关卡 " + L.id + "  难度 " + r.diffName, cx, 238);
+    ctx.fillStyle = "#ffd43b"; ctx.font = "22px 'Segoe UI', sans-serif"; ctx.fillText("★".repeat(rank) + "☆".repeat(3 - rank), cx, 268);
+    // 明细
+    ctx.font = "20px 'Segoe UI', sans-serif";
+    ctx.fillStyle = "#dee2e6"; ctx.fillText("本局得分", cx - 110, 320); ctx.textAlign = "right"; ctx.fillText("" + this.easedCount(r.base), cx + 150, 320); ctx.textAlign = "center";
+    ctx.fillStyle = "#51cf66"; ctx.fillText("血量加成", cx - 110, 356); ctx.textAlign = "right"; ctx.fillText("×" + r.hpFactor.toFixed(2) + "  (" + Math.round(r.hpRatio * 100) + "% HP)", cx + 150, 356); ctx.textAlign = "center";
+    ctx.fillStyle = "#ff922b"; ctx.fillText("难度系数", cx - 110, 392); ctx.textAlign = "right"; ctx.fillText("×" + r.diffFactor.toFixed(2) + "  (" + r.diffName + ")", cx + 150, 392); ctx.textAlign = "center";
+    ctx.strokeStyle = "#495057"; ctx.beginPath(); ctx.moveTo(cx - 150, 414); ctx.lineTo(cx + 150, 414); ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 30px 'Segoe UI', sans-serif"; ctx.fillText("最终得分  " + this.easedCount(r.final, 1.3), cx, 456);
+    ctx.fillStyle = "#38d9a9"; ctx.font = "16px 'Segoe UI', sans-serif"; ctx.fillText("最高分 " + Progress.entry(L.id).best + "     最高连击 " + this.maxCombo, cx, 492);
+    // 排行榜
+    ctx.fillStyle = "#adb5bd"; ctx.font = "17px 'Segoe UI', sans-serif"; ctx.fillText("── 最高分榜 ──", cx, 536);
+    let hl = false;
+    this.topScores.forEach((e, i) => { const me = !hl && e.score === r.final; if (me) hl = true; ctx.fillStyle = me ? "#ffd43b" : "#dee2e6"; ctx.font = (me ? "bold " : "") + "16px 'Segoe UI', sans-serif"; ctx.fillText((i + 1) + ".   " + e.score + "   " + e.date + (me ? "  ◄" : ""), cx, 564 + i * 26); });
+    ctx.fillStyle = "#4a90d9"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("点击返回地图", cx, 564 + this.topScores.length * 26 + 28);
+    ctx.textAlign = "left";
+  },
+
+  // BOSS 入场警告演出(红色闪烁横幅)
+  drawWarning(ctx) {
+    const cx = CONFIG.WIDTH / 2, blink = Math.floor(this.warningTimer * 6) % 2 === 0;
+    const y = CONFIG.HEIGHT * 0.44;
+    ctx.fillStyle = "rgba(255,40,40," + (blink ? 0.22 : 0.10) + ")"; ctx.fillRect(0, y - 44, CONFIG.WIDTH, 88);
+    ctx.fillStyle = "#ff3b3b"; ctx.fillRect(0, y - 44, CONFIG.WIDTH, 3); ctx.fillRect(0, y + 41, CONFIG.WIDTH, 3);
+    if (blink) {
+      ctx.textAlign = "center"; ctx.fillStyle = "#ff6b6b"; ctx.font = "bold 40px 'Segoe UI', sans-serif";
+      ctx.fillText("⚠ WARNING ⚠", cx, y - 4);
+      ctx.fillStyle = "#ffd43b"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("BOSS 逼近", cx, y + 26);
+      ctx.textAlign = "left";
+    }
+  },
+
+  // ── 设置面板 ──
+  settingsRects() {
+    const W = CONFIG.WIDTH;
+    return {
+      sfxVolume:   { x: 110, y: 214, w: 320, h: 24 },   // JJ:音效音量滑轨
+      musicVolume: { x: 110, y: 280, w: 320, h: 24 },   // JJ:音乐音量滑轨(独立于音效)
+      sound:    { x: W / 2 - 60, y: 346, w: 120, h: 44 },
+      music:    { x: W / 2 - 60, y: 412, w: 120, h: 44 },
+      haptics:  { x: W / 2 - 60, y: 478, w: 120, h: 44 },
+      hidewings:{ x: W / 2 - 60, y: 544, w: 120, h: 44 },
+      controlMode: { x: W / 2 - 80, y: 610, w: 160, h: 44 },   // KK:操作方式(拖动跟随/虚拟摇杆)二选一
+      exportSave: { x: W / 2 - 130, y: 686, w: 124, h: 44 },   // PP:存档导入导出
+      importSave: { x: W / 2 + 6, y: 686, w: 124, h: 44 },
+      reset:    { x: W / 2 - 130, y: 746, w: 260, h: 48 },
+      back:     { x: W / 2 - 100, y: 804, w: 200, h: 52 },
+    };
+  },
+  setSfxVolumeFromX(px) { const r = this.settingsRects().sfxVolume; Settings.set("sfxVolume", clamp((px - r.x) / r.w, 0, 1)); },
+  setMusicVolumeFromX(px) { const r = this.settingsRects().musicVolume; Settings.set("musicVolume", clamp((px - r.x) / r.w, 0, 1)); },
+  settingsPointerDown(px, py) {
+    const R = this.settingsRects();
+    const inR = (r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+    const inSlider = (r) => px >= r.x - 10 && px <= r.x + r.w + 10 && py >= r.y - 16 && py <= r.y + r.h + 16;
+    if (inSlider(R.sfxVolume))   { this._sliderDrag = "sfx"; this.setSfxVolumeFromX(px); this._resetArmed = false; return; }
+    if (inSlider(R.musicVolume)) { this._sliderDrag = "music"; this.setMusicVolumeFromX(px); this._resetArmed = false; return; }
+    if (inR(R.sound))   { Settings.set("sound", !Settings.data.sound); this._resetArmed = false; return; }
+    if (inR(R.music))   { Settings.set("music", !Settings.data.music); if (Settings.data.music) Music.play(); else Music.stop(); this._resetArmed = false; return; }
+    if (inR(R.haptics)) { Settings.set("haptics", !Settings.data.haptics); if (Settings.data.haptics) Haptics.buzz(30); this._resetArmed = false; return; }
+    if (inR(R.hidewings)) { Settings.set("hideWings", !Settings.data.hideWings); this._resetArmed = false; return; }
+    if (inR(R.controlMode)) { Settings.set("controlMode", Settings.data.controlMode === "joystick" ? "drag" : "joystick"); resetJoystick(); this._resetArmed = false; return; }
+    if (inR(R.exportSave)) { this._resetArmed = false; window.prompt("复制下面的文本保存存档(设置/进度/排行榜/成就),换设备后用「导入存档」粘贴回来:", SaveData.exportAll()); return; }
+    if (inR(R.importSave)) {
+      this._resetArmed = false;
+      const s = window.prompt("粘贴之前导出的存档文本:", "");
+      if (s) { const ok = SaveData.importAll(s); this.topScores = []; Sound.hit(); if (!ok) window.prompt("导入失败,内容不是合法的存档文本(仅供查看,可关闭):", s); }
+      return;
+    }
+    if (inR(R.reset))   {   // 完全重置:需二次确认
+      if (this._resetArmed) { Progress.clearAll(); Leaderboard.clearAll(); EndlessBoard.clearAll(); Achievements.clearAll(); this.topScores = []; this._resetArmed = false; Sound.hit(); }
+      else this._resetArmed = true;
+      return;
+    }
+    if (inR(R.back))    { this._resetArmed = false; this.state = "title"; return; }
+  },
+  drawSettings(ctx) {
+    const cx = CONFIG.WIDTH / 2, R = this.settingsRects();
+    ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff"; ctx.font = "bold 44px 'Segoe UI', sans-serif"; ctx.fillText("设置", cx, 160);
+    // JJ:音效音量 / 音乐音量 —— 两条独立滑轨
+    const slider = (r, label, val) => {
+      ctx.fillStyle = "#adb5bd"; ctx.font = "20px 'Segoe UI', sans-serif"; ctx.textAlign = "left";
+      ctx.fillText(label + "  " + Math.round(val * 100) + "%", r.x, r.y - 16);
+      ctx.fillStyle = "#343a40"; ctx.fillRect(r.x, r.y + r.h / 2 - 4, r.w, 8);
+      ctx.fillStyle = "#4dabf7"; ctx.fillRect(r.x, r.y + r.h / 2 - 4, r.w * val, 8);
+      ctx.beginPath(); ctx.arc(r.x + r.w * val, r.y + r.h / 2, 11, 0, Math.PI * 2); ctx.fill();
+    };
+    slider(R.sfxVolume, "音效音量", Settings.data.sfxVolume);
+    slider(R.musicVolume, "音乐音量", Settings.data.musicVolume);
+    // 开关按钮(现代)+ 左侧标签
+    const toggle = (r, label, on) => {
+      ctx.textAlign = "left"; ctx.fillStyle = "#adb5bd"; ctx.font = "19px 'Segoe UI', sans-serif"; ctx.fillText(label, cx - 200, r.y + r.h / 2 + 6);
+      UI.button(ctx, r, { label: on ? "开 ON" : "关 OFF", color: on ? "#38d9a9" : "#868e96", active: on, font: 18, radius: 11 });
+    };
+    toggle(R.sound, "音效", Settings.data.sound);
+    toggle(R.music, "音乐", Settings.data.music);
+    toggle(R.haptics, "震动", Settings.data.haptics);
+    toggle(R.hidewings, "隐藏僚机", Settings.data.hideWings);   // 开=隐藏
+    // KK:操作方式(拖动跟随/虚拟摇杆二选一,不是简单开关,复用 UI.button 但自定义文案/配色)
+    { const isJoy = Settings.data.controlMode === "joystick", r = R.controlMode;
+      ctx.textAlign = "left"; ctx.fillStyle = "#adb5bd"; ctx.font = "19px 'Segoe UI', sans-serif"; ctx.fillText("操作方式", cx - 200, r.y + r.h / 2 + 6);
+      UI.button(ctx, r, { label: isJoy ? "虚拟摇杆" : "拖动跟随", color: isJoy ? "#ff922b" : "#4dabf7", active: true, font: 16, radius: 11 }); }
+    ctx.textAlign = "center"; ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("上次难度会被记住 · 当前:" + CONFIG.difficulties[Settings.data.diff].name, cx, 672);
+    // PP:导出/导入存档(弹窗展示/粘贴 JSON 文本,零依赖不用文件下载)
+    UI.button(ctx, R.exportSave, { label: "导出存档", color: "#4dabf7", font: 15, radius: 11 });
+    UI.button(ctx, R.importSave, { label: "导入存档", color: "#4dabf7", font: 15, radius: 11 });
+    // 重置(二次确认)+ 返回
+    UI.button(ctx, R.reset, { label: this._resetArmed ? "⚠ 再点一次确认清空" : "重置所有关卡分数", color: "#f03e3e", active: this._resetArmed, font: 18, radius: 12 });
+    UI.button(ctx, R.back, { label: "返回 BACK", color: "#adb5bd", font: 20, radius: 13 });
+    ctx.textAlign = "left";
+  },
+
+  // KK:虚拟摇杆(固定底座 + 跟手指的摇杆头),不按下时底座半透明常驻提示位置,按下时变实并显示摇杆头
+  drawJoystick(ctx) {
+    const j = CONFIG.joystick, active = input.joystickActive;
+    ctx.globalAlpha = active ? 0.5 : 0.22;
+    ctx.beginPath(); ctx.arc(j.baseX, j.baseY, j.radius, 0, Math.PI * 2); ctx.fillStyle = "#4dabf7"; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.stroke();
+    ctx.globalAlpha = active ? 0.9 : 0.45;
+    ctx.beginPath(); ctx.arc(input.joyKnobX, input.joyKnobY, j.radius * 0.42, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
+    ctx.globalAlpha = 1;
+  },
+
+  // WW:通关进度条顶端的"终点旗"图标 —— 杆 + 三角旗面,纯矢量绘制(不用汉字/emoji,和游戏其它图标风格统一)
+  drawFlagIcon(ctx, x, y, size) {
+    const poleH = size * 1.4, topY = y - poleH;
+    ctx.save();
+    ctx.strokeStyle = "#ced4da"; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, topY); ctx.stroke();
+    ctx.fillStyle = "#ff6b6b";
+    ctx.beginPath(); ctx.moveTo(x, topY); ctx.lineTo(x + size * 0.85, topY + size * 0.28); ctx.lineTo(x, topY + size * 0.56); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  },
+  // X5:炸弹按钮的精致图标——深色渐变弹体(球面高光做立体感)+ 引信 + 跳动火花,取代原来纯文字"×N"
+  drawBombIcon(ctx, x, y, r) {
+    const br = r * 0.5, cy = y + r * 0.08;
+    ctx.save();
+    const g = ctx.createRadialGradient(x - br * 0.35, cy - br * 0.35, br * 0.15, x, cy, br);
+    g.addColorStop(0, "#5a5f68"); g.addColorStop(0.6, "#24282e"); g.addColorStop(1, "#0a0c0f");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, cy, br, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.beginPath(); ctx.arc(x - br * 0.32, cy - br * 0.32, br * 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#d9a066"; ctx.lineWidth = 2; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x + br * 0.3, cy - br * 0.88); ctx.quadraticCurveTo(x + br * 0.85, cy - br * 1.5, x + br * 0.5, cy - br * 1.9); ctx.stroke();
+    const sparkA = this.titleT * 6;
+    ctx.fillStyle = "#ffd43b"; ctx.beginPath(); ctx.arc(x + br * 0.5, cy - br * 1.9, br * 0.22 + Math.sin(sparkA) * br * 0.04, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#ff922b"; ctx.lineWidth = 1.3;
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + sparkA * 0.5; ctx.beginPath(); ctx.moveTo(x + br * 0.5 + Math.cos(a) * br * 0.32, cy - br * 1.9 + Math.sin(a) * br * 0.32); ctx.lineTo(x + br * 0.5 + Math.cos(a) * br * 0.52, cy - br * 1.9 + Math.sin(a) * br * 0.52); ctx.stroke(); }
+    ctx.restore();
+  },
+  // X5:通用数量气泡徽标(按钮/图标右上角)——原来炸弹数量直接写在图标中心,现在图标本身是造型图案,数字挪到角上的小气泡里
+  // X6:泛化出 color 参数,炸弹用红色,后续火力等级/僚机数等也能复用同一视觉语言,不用各画一套
+  drawCountBadge(ctx, x, y, n, color = "#e03131") {
+    const r = 12;
+    ctx.save();
+    const g = ctx.createRadialGradient(x - 3, y - 3, 1, x, y, r);
+    g.addColorStop(0, UI.shade(color, 0.35)); g.addColorStop(1, UI.shade(color, -0.15));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(String(n), x, y + 0.5);
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    ctx.restore();
+  },
+  // X5/X6:机型技能图标——按 specialType 定制,四种机型一眼能分辨是哪种效果,而不是统一写"必杀"两个字。
+  //   color 现在直接传具体颜色(取代原来的 dark 布尔开关):HUD 就绪按钮用机型色调暗后的版本(金色底上要够深才看得清),
+  //   图鉴/机型选择页的深色玻璃底上直接用机型本色(够亮,不用再压暗)。每种图案都带机型色描边发光+一点轻微待机动画,
+  //   呼应用户"继续优化图标"的要求(不是静态死板的线框,而是有一点"活"的细节)。
+  drawSpecialIcon(ctx, x, y, r, type, color = "#2b1d00") {
+    const s = r * 0.5, t = this.titleT;
+    ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.shadowColor = color; ctx.shadowBlur = 6;
+    if (type === "shield") {
+      ctx.beginPath();
+      ctx.moveTo(x, y - s); ctx.lineTo(x + s * 0.85, y - s * 0.45); ctx.lineTo(x + s * 0.85, y + s * 0.25);
+      ctx.quadraticCurveTo(x + s * 0.7, y + s * 0.95, x, y + s * 1.05);
+      ctx.quadraticCurveTo(x - s * 0.7, y + s * 0.95, x - s * 0.85, y + s * 0.25); ctx.lineTo(x - s * 0.85, y - s * 0.45); ctx.closePath();
+      ctx.globalAlpha = 0.18; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - s * 0.28, y); ctx.lineTo(x - s * 0.02, y + s * 0.32); ctx.lineTo(x + s * 0.4, y - s * 0.3); ctx.stroke();
+    } else if (type === "stealth") {
+      const blink = 0.55 + Math.sin(t * 3) * 0.45;   // 呼吸式明暗,呼应"忽隐忽现"
+      ctx.globalAlpha = blink;
+      ctx.beginPath(); ctx.ellipse(x, y, s * 0.95, s * 0.58, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, s * 0.28, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.moveTo(x - s * 1.05, y - s * 0.95); ctx.lineTo(x + s * 1.05, y + s * 0.95); ctx.stroke();
+    } else if (type === "wave") {
+      const ph = (t * 1.2) % 1;   // 波纹相位缓慢流动,暗示"正在向外扩散"
+      for (let i = 1; i <= 3; i++) { ctx.globalAlpha = Math.max(0, 1 - (i - 1) * 0.28 - ph * 0.15); ctx.beginPath(); ctx.arc(x, y + s * 0.55, s * 0.42 * i, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); }
+      ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(x, y + s * 0.55, s * 0.16, 0, Math.PI * 2); ctx.fill();
+    } else {   // nuke:默认——爆裂星芒,轻微脉动模拟蓄力
+      const pulse = 1 + Math.sin(t * 6) * 0.08;
+      for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * s * 0.32, y + Math.sin(a) * s * 0.32); ctx.lineTo(x + Math.cos(a) * s * pulse, y + Math.sin(a) * s * pulse); ctx.stroke(); }
+      ctx.beginPath(); ctx.arc(x, y, s * 0.32, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  },
+  // X6:机型被动技能图案(和机型技能图标并列展示)——天平(全面均衡)/闪电(狂热连击)/实心装甲板(钢铁装甲)/速度线(灵敏机动)
+  //   防御型的被动"装甲"故意用实心图形,和技能"护盾"的线框+勾选图案区分开,不然两个都叫"盾"容易看混
+  drawPassiveIcon(ctx, x, y, r, shipKey, color) {
+    const s = r * 0.5;
+    ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.shadowColor = color; ctx.shadowBlur = 5;
+    if (shipKey === "balanced") {
+      ctx.beginPath(); ctx.moveTo(x - s * 0.9, y - s * 0.15); ctx.lineTo(x + s * 0.9, y - s * 0.15); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, y - s * 0.6); ctx.lineTo(x, y - s * 0.15); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - s * 0.32, y - s * 0.75); ctx.lineTo(x + s * 0.32, y - s * 0.75); ctx.lineTo(x, y - s * 1.0); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.arc(x - s * 0.9, y + s * 0.3, s * 0.26, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x + s * 0.9, y + s * 0.3, s * 0.26, 0, Math.PI * 2); ctx.stroke();
+    } else if (shipKey === "attacker") {
+      ctx.beginPath(); ctx.moveTo(x + s * 0.15, y - s); ctx.lineTo(x - s * 0.5, y + s * 0.15); ctx.lineTo(x, y + s * 0.15); ctx.lineTo(x - s * 0.15, y + s); ctx.lineTo(x + s * 0.55, y - s * 0.15); ctx.lineTo(x + s * 0.05, y - s * 0.15); ctx.closePath();
+      ctx.globalAlpha = 0.22; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke();
+    } else if (shipKey === "defender") {
+      ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s * 0.8, y - s * 0.4); ctx.lineTo(x + s * 0.8, y + s * 0.25); ctx.lineTo(x, y + s * 1.05); ctx.lineTo(x - s * 0.8, y + s * 0.25); ctx.lineTo(x - s * 0.8, y - s * 0.4); ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x - s * 0.55, y); ctx.lineTo(x + s * 0.55, y); ctx.stroke();
+    } else {   // scout
+      for (let i = 0; i < 3; i++) { const dy = (i - 1) * s * 0.5; ctx.globalAlpha = 1 - Math.abs(i - 1) * 0.3; ctx.beginPath(); ctx.moveTo(x - s * 0.9, y + dy - s * 0.15); ctx.lineTo(x + s * 0.7 - Math.abs(i - 1) * s * 0.25, y + dy); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  },
+  // X6:图鉴 BOSS 卡片用的攻击方式小图标——一眼看出这只 BOSS 会用哪些弹幕套路,不用逐字看攻击类型英文名
+  drawAttackIcon(ctx, x, y, r, type, color) {
+    const s = r * 0.5;
+    ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.8; ctx.lineCap = "round";
+    if (type === "fanDown") {
+      for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(x, y - s * 0.8); ctx.lineTo(x + i * s * 0.6, y + s * 0.8); ctx.stroke(); }
+    } else if (type === "aimed") {
+      ctx.beginPath(); ctx.arc(x, y, s * 0.7, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - s, y); ctx.lineTo(x + s, y); ctx.moveTo(x, y - s); ctx.lineTo(x, y + s); ctx.stroke();
+    } else if (type === "ring") {
+      ctx.beginPath(); ctx.arc(x, y, s * 0.75, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, s * 0.25, 0, Math.PI * 2); ctx.fill();
+    } else if (type === "spiral") {
+      ctx.beginPath();
+      for (let i = 0; i <= 24; i++) { const a = i * 0.55, rr = s * 0.06 * i; const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+      ctx.stroke();
+    } else if (type === "wall") {
+      for (let i = -1; i <= 1; i++) ctx.strokeRect(x + i * s * 0.7 - s * 0.22, y - s * 0.3, s * 0.44, s * 0.6);
+    } else if (type === "laser") {
+      ctx.fillRect(x - s * 0.18, y - s * 0.9, s * 0.36, s * 1.8);
+      ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x - s * 0.35, y - s * 0.55); ctx.lineTo(x + s * 0.35, y - s * 0.55); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  },
+  // X6:火力等级图标——两道叠放的上箭头("升级/增幅"的通用视觉语言),配合 drawCountBadge 显示具体等级数字
+  drawPowerIcon(ctx, x, y, r) {
+    const s = r * 0.5;
+    ctx.save(); ctx.fillStyle = "#38d9a9"; ctx.shadowColor = "#38d9a9"; ctx.shadowBlur = 4;
+    for (let i = 0; i < 2; i++) {
+      const oy = y + s * 0.3 - i * s * 0.55;
+      ctx.beginPath(); ctx.moveTo(x - s * 0.75, oy + s * 0.4); ctx.lineTo(x, oy - s * 0.3); ctx.lineTo(x + s * 0.75, oy + s * 0.4); ctx.lineTo(x + s * 0.45, oy + s * 0.4); ctx.lineTo(x, oy + s * 0.05); ctx.lineTo(x - s * 0.45, oy + s * 0.4); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  },
+  drawHUD(ctx) {
+    ctx.fillStyle = "#e9ecef"; ctx.font = "20px 'Segoe UI', sans-serif"; ctx.textAlign = "left";
+    ctx.fillText("得分 " + this.score, 16, 30);
+    // X6:火力等级从纯文字"火力 Lv.N"改成图标+气泡徽标,和炸弹按钮统一"图标+数字气泡"的视觉语言
+    this.drawPowerIcon(ctx, 24, 55, 30);
+    this.drawCountBadge(ctx, 40, 40, this.player.power, "#38d9a9");
+    ctx.fillStyle = "#adb5bd"; ctx.font = "16px 'Segoe UI', sans-serif"; ctx.fillText(this.endless ? "无尽 " + Math.floor(this._endlessT) + "s" : "关卡 " + this.levelDef().id, 200, 28);
+
+    // AA:HP 血条 —— 更大更醒目:渐变(绿→黄→红)+ 底槽玻璃质感 + 掉血残影 + 危险脉动发光 + 图标
+    const hpW = 190, hpH = 18, hpX = CONFIG.WIDTH - hpW - 16, hpY = 14;
+    const hpRatio = clamp(this.player.hp / this.player.maxHp, 0, 1), danger = hpRatio <= 0.25;
+    const hpPulse = danger ? 0.55 + Math.abs(Math.sin(this.titleT * 6)) * 0.45 : 1;
+    const hpColor = hpRatio > 0.55 ? "#51cf66" : hpRatio > 0.25 ? "#ffd43b" : "#ff4d4f";
+    // 图标(医疗十字,与道具里的血包图标呼应)
+    const ix = hpX - 22, iy = hpY + hpH / 2;
+    ctx.fillStyle = danger ? "#ff4d4f" : "#e03131"; ctx.beginPath(); ctx.arc(ix, iy, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.fillRect(ix - 1.6, iy - 5.5, 3.2, 11); ctx.fillRect(ix - 5.5, iy - 1.6, 11, 3.2);
+    UI.bar(ctx, hpX, hpY, hpW, hpH, hpRatio, hpColor, danger ? "#ff8787" : hpColor, { glow: danger, glowColor: "#ff3b3b", glowBlur: 14, pulse: hpPulse, trailRatio: this._hpTrailRatio });
+    ctx.fillStyle = "#fff"; ctx.font = "bold 11px 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(Math.ceil(this.player.hp) + "/" + this.player.maxHp, hpX + hpW / 2, hpY + hpH / 2 + 1);
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    // 危险时屏幕边缘轻微红色脉动警示,配合血条一起提醒
+    if (danger) { ctx.save(); ctx.globalAlpha = 0.35 * hpPulse; const vg = ctx.createRadialGradient(CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2, CONFIG.HEIGHT * 0.35, CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2, CONFIG.HEIGHT * 0.72); vg.addColorStop(0, "rgba(255,0,0,0)"); vg.addColorStop(1, "rgba(255,0,0,.5)"); ctx.fillStyle = vg; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT); ctx.restore(); }
+
+    // ①通关进度(右侧竖条,自下而上;刷分/无尽不显示)
+    if (!this.farming && !this.endless && director.script) {
+      const pr = clamp(director.cursor / Math.max(1, director.script.length - 1), 0, 1);
+      const bx = CONFIG.WIDTH - 9, y0 = 152, y1 = CONFIG.HEIGHT - 150, bh = y1 - y0;
+      ctx.fillStyle = "#2b2b2b"; ctx.fillRect(bx, y0, 4, bh);
+      ctx.fillStyle = this.boss ? "#f03e3e" : "#4dabf7"; ctx.fillRect(bx, y1 - bh * pr, 4, bh * pr);
+      ctx.fillStyle = "#fff"; ctx.fillRect(bx - 3, y1 - bh * pr - 1, 10, 2);
+      // WW:原来用汉字"旗"当终点图标,和游戏里其它全绘图标风格不统一;改成杆+三角旗面的矢量小图标
+      this.drawFlagIcon(ctx, bx + 2, y0 - 4, 12);
+    }
+    if (this.combo >= 2) {
+      ctx.save(); ctx.shadowColor = "rgba(255,212,59,.7)"; ctx.shadowBlur = 8;
+      ctx.fillStyle = "#ffd43b"; ctx.font = "bold 22px 'Segoe UI', sans-serif"; ctx.fillText(this.combo + " COMBO  ×" + this.comboMult().toFixed(2), 16, 88);
+      ctx.restore();
+      UI.bar(ctx, 16, 94, 150, 9, this.comboTimer / CONFIG.combo.timeout, "#ffd43b", "#ff922b", {});
+    }
+
+    // B:必杀能量条 —— 紫→金渐变,满能量时发光脉动 + 图标
+    const enW = 190, enH = 14, enX = 16, enY = 112, enR = clamp(this.player.energy / 100, 0, 1), enFull = this.player.energy >= 100;
+    const enPulse = enFull ? 0.55 + Math.abs(Math.sin(this.titleT * 5)) * 0.45 : 1;
+    UI.bar(ctx, enX, enY, enW, enH, enR, "#845ef7", enFull ? "#ffd43b" : "#cc5de8", { glow: enFull, glowColor: "#ffd43b", glowBlur: 12, pulse: enPulse });
+    // X4:必杀能量现在除了击杀也会随时间被动缓慢回复,加一道持续扫过已填充部分的柔光,提示"没打到东西也在悄悄涨"
+    if (enR > 0.001 && !enFull) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(enX, enY, enW * enR, enH); ctx.clip();
+      const sweepX = enX + ((this.titleT * 55) % (enW + 30)) - 30;
+      const sg = ctx.createLinearGradient(sweepX, 0, sweepX + 22, 0);
+      sg.addColorStop(0, "rgba(255,255,255,0)"); sg.addColorStop(0.5, "rgba(255,255,255,.4)"); sg.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = sg; ctx.fillRect(enX, enY, enW, enH);
+      ctx.restore();
+    }
+    ctx.fillStyle = "#ffe066"; ctx.beginPath(); ctx.moveTo(enX + enW + 20, enY - 3); ctx.lineTo(enX + enW + 14, enY + enH / 2 + 1); ctx.lineTo(enX + enW + 19, enY + enH / 2 + 1); ctx.lineTo(enX + enW + 13, enY + enH + 4); ctx.lineTo(enX + enW + 24, enY + enH / 2 - 3); ctx.lineTo(enX + enW + 18, enY + enH / 2 - 3); ctx.closePath(); ctx.fill();
+    // X4:就绪时显示机型专属技能名字(而不是统一的"机型技能"),呼应四种机型四套不同效果
+    const specName = this.player.ship.specialName || "机型技能";
+    ctx.fillStyle = enFull ? "#ffd43b" : "#adb5bd"; ctx.font = "bold 12px 'Segoe UI', sans-serif"; ctx.fillText(enFull ? specName + " · 就绪" : "机型技能", enX, enY + enH + 14);
+
+    // BOSS 血条 —— 渐变发光 + 阶段分隔刻度 + 狂暴提示
+    if (this.boss) {
+      const bw = CONFIG.WIDTH - 40, bx = 20, by = 68, bh = 13, br = clamp(this.boss.hp / this.boss.maxHp, 0, 1), bcol = this.boss.def.colors[this.boss.phaseIndex];
+      UI.bar(ctx, bx, by, bw, bh, br, bcol, UI.rgba(bcol, .7), { glow: true, glowColor: bcol, glowBlur: 10, pulse: this.boss._enraged ? (0.6 + Math.abs(Math.sin(this.titleT * 8)) * 0.4) : 1 });
+      this.boss.def.phases.forEach(p => { if (p.until > 0) { const tx = bx + bw * p.until; ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(tx - 1, by + 2, 2, bh - 4); } });
+      ctx.fillStyle = this.boss._enraged ? "#ff3b3b" : "#ff8787"; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.textAlign = "right";
+      ctx.fillText((this.boss._enraged ? "⚠ 狂暴 · " : "") + "BOSS  " + this.boss.def.name, CONFIG.WIDTH - 20, by - 5); ctx.textAlign = "left";
+    }
+
+    // AA:HUD 圆形按钮统一走玻璃质感 roundButton
+    // X5:炸弹按钮改精致图标(深色弹体+引信+火花),数量从图标中心的"×N"文字挪到右上角的小气泡徽标
+    const b = this.bombBtn;
+    ctx.globalAlpha = this.player.bombs > 0 ? 1 : 0.35;
+    UI.roundButton(ctx, b.x, b.y, b.r, "#cc5de8");
+    this.drawBombIcon(ctx, b.x, b.y, b.r);
+    ctx.globalAlpha = 1;
+    if (this.player.bombs > 0) this.drawCountBadge(ctx, b.x + b.r * 0.62, b.y - b.r * 0.62, this.player.bombs);
+    // 暂停按钮(⏸ 双竖条)—— X6:圆角化 + 渐变 + 柔光,和炸弹/机型技能图标同一套精致度,不再是两个裸 fillRect
+    const pb = this.pauseBtn;
+    UI.roundButton(ctx, pb.x, pb.y, pb.r, "#495057", { stroke: "rgba(255,255,255,.45)" });
+    ctx.save(); ctx.shadowColor = "rgba(255,255,255,.4)"; ctx.shadowBlur = 4;
+    const pauseG = ctx.createLinearGradient(0, pb.y - 12, 0, pb.y + 12);
+    pauseG.addColorStop(0, "#fff"); pauseG.addColorStop(1, "#dee2e6");
+    ctx.fillStyle = pauseG;
+    UI.roundRect(ctx, pb.x - 9, pb.y - 12, 6, 24, 2); ctx.fill();
+    UI.roundRect(ctx, pb.x + 3, pb.y - 12, 6, 24, 2); ctx.fill();
+    ctx.restore();
+    // B:机型技能按钮(能量满才显示;冷却结束前显示剩余秒数,冷却结束后才高亮可点)
+    // X5:就绪态图标按 ship.specialType 定制(爆裂星芒/护盾/隐身斜杠眼/波纹),不再统一写"必杀"两个字
+    if (this.player.energy >= 100) {
+      const sb = this.specialBtn, ready = this.player.specialCooldown <= 0;
+      if (ready) {
+        const pulse = 0.6 + Math.abs(Math.sin(this.titleT * 5)) * 0.4;
+        UI.roundButton(ctx, sb.x, sb.y, sb.r, "#ffd43b", { alpha: pulse });
+        // X6:图标颜色改用机型本色压暗后的版本(而不是固定的深棕色),金色底上仍然够清楚,但能一眼看出"这是这台机的颜色"
+        this.drawSpecialIcon(ctx, sb.x, sb.y, sb.r, this.player.ship.specialType || "nuke", UI.shade(this.player.ship.color, -0.5));
+      } else {
+        UI.roundButton(ctx, sb.x, sb.y, sb.r, "#495057", { alpha: 0.7 });
+        ctx.fillStyle = "#dee2e6"; ctx.font = "bold 17px 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(Math.ceil(this.player.specialCooldown) + "", sb.x, sb.y + 1); ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      }
+    }
+    // 刷分模式:结算按钮 + 提示
+    if (this.farming) {
+      const sb = this.settleBtn;
+      UI.roundButton(ctx, sb.x, sb.y, sb.r, "#ffd43b");
+      ctx.fillStyle = "#2b1d00"; ctx.font = "bold 15px 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("结算", sb.x, sb.y + 1);
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      ctx.fillStyle = "#38d9a9"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("✓ 通关 · 刷分 " + this.score + "/" + Math.round(this._clearScore * CONFIG.scoring.farmScoreCapMult), 200, 56);
+    }
+  },
+
+  drawEndScreen(ctx, title, color) {
+    const cx = CONFIG.WIDTH / 2;
+    ctx.fillStyle = "rgba(0,0,0,.72)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ctx.textAlign = "center";
+    ctx.fillStyle = color; ctx.font = "42px 'Segoe UI', sans-serif"; ctx.fillText(title, cx, 300);
+    ctx.fillStyle = "#adb5bd"; ctx.font = "16px 'Segoe UI', sans-serif"; ctx.fillText("难度 " + this.diff.name, cx, 332);
+    ctx.fillStyle = "#fff"; ctx.font = "22px 'Segoe UI', sans-serif"; ctx.fillText("本局得分 " + this.easedCount(this.score), cx, 366);
+    ctx.fillStyle = "#ffd43b"; ctx.font = "16px 'Segoe UI', sans-serif"; ctx.fillText("最高连击 " + this.maxCombo, cx, 392);
+    ctx.fillStyle = "#adb5bd"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("── 最高分榜 ──", cx, 440);
+    let highlighted = false;
+    this.topScores.forEach((e, i) => {
+      const isMe = !highlighted && e.score === this.score; if (isMe) highlighted = true;
+      ctx.fillStyle = isMe ? "#ffd43b" : "#dee2e6"; ctx.font = (isMe ? "bold " : "") + "18px 'Segoe UI', sans-serif";
+      ctx.fillText((i + 1) + ".   " + e.score + "      " + e.date + (isMe ? "  ◄" : ""), cx, 472 + i * 30);
+    });
+    ctx.fillStyle = "#4a90d9"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("点击返回地图", cx, 472 + this.topScores.length * 30 + 30);
+    ctx.textAlign = "left";
+  },
+};
+
+/* =====================================================================
+ * 8) 前景星点 + 主循环
+ * ===================================================================== */
+const stars = {
+  items: Array.from({ length: 60 }, () => ({ x: Math.random() * CONFIG.WIDTH, y: Math.random() * CONFIG.HEIGHT, s: 90 + Math.random() * 160, r: Math.random() < 0.8 ? 1 : 2 })),
+  update(dt) { for (const p of this.items) { p.y += p.s * dt; if (p.y > CONFIG.HEIGHT) { p.y = 0; p.x = Math.random() * CONFIG.WIDTH; } } },
+  draw(ctx) { ctx.fillStyle = "rgba(255,255,255,.25)"; for (const p of this.items) ctx.fillRect(p.x, p.y, p.r, p.r * 3); },
+};
+
+Settings.load();                                   // 载入持久化设置(音量/音效/震动/上次难度)
+Progress.load();                                   // 载入关卡进度
+Achievements.load();                               // OO:载入成就进度
+game.diff = CONFIG.difficulties[Settings.data.diff];
+game.ship = CONFIG.ships[Settings.data.ship] || CONFIG.ships.balanced;
+game.autoNext = Settings.data.autoNext !== false;
+if (Settings.data.seenTutorial) game.toTitle(); else game.toTutorial();   // FF:首次启动自动展示新手引导
+let last = performance.now();
+function loop(now) {
+  let dt = (now - last) / 1000; last = now;
+  if (dt > 0.05) dt = 0.05;
+  game.titleT += dt;
+  if (game._hitStopT > 0) { game._hitStopT -= dt; game.draw(ctx); requestAnimationFrame(loop); return; }   // N:命中停顿(冻结逻辑,仍绘制)
+  if (game.state !== "paused") { background.update(dt); stars.update(dt); }   // 暂停冻结背景
+  Music.update(dt);                                                           // M:BGM 步进
+  game.update(dt); game.draw(ctx);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
