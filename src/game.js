@@ -186,6 +186,10 @@ const game = {
     return s.countBase + Math.min(s.countStepMax, Math.floor(t / s.countStepSec));
   },
   activeEndlessEvent() { return this.endless && this._endlessEventTimer > 0 ? this._endlessEvent : null; },
+  activeEventRouteBias() {
+    const e = this.activeEndlessEvent();
+    return e && e.routeBias ? e.routeBias : "";
+  },
   endlessEventValue(prop, fallback = 0) {
     const e = this.activeEndlessEvent();
     return e && e[prop] != null ? e[prop] : fallback;
@@ -584,6 +588,7 @@ const game = {
     const info = this.routePreviewInfo(card), top = this.buildRouteSummary().top;
     if (info && info.unlocked) w *= 1.65;
     else if (info && top.score >= 3 && info.top.name === top.name) w *= 1.35;
+    if (info && info.top.name === this.activeEventRouteBias()) w *= 1.2;
     return w;
   },
   chipChoiceRect(i) { return { x: 40, y: 238 + i * 104, w: CONFIG.WIDTH - 80, h: 92 }; },
@@ -1259,8 +1264,11 @@ const game = {
     ctx.fillStyle = "#fff"; ctx.font = "bold 16px 'Segoe UI', sans-serif"; ctx.fillText("当前构筑", x + 16, y + 23);
     const route = this.buildRouteSummary();
     ctx.fillStyle = route.top.color; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.fillText("路线 " + this.buildRouteText(), x + 94, y + 23);
-    const effectText = this.routeEffectText();
-    if (effectText) { ctx.fillStyle = "#adb5bd"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText("共鸣 " + effectText, x + 16, y + 45); }
+    const effectText = this.routeEffectText(), eventBias = this.activeEventRouteBias();
+    const meta = [];
+    if (effectText) meta.push("共鸣 " + effectText);
+    if (eventBias) meta.push("空域偏向 " + eventBias);
+    if (meta.length) { ctx.fillStyle = "#adb5bd"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText(meta.join(" · "), x + 16, y + 45); }
     ctx.fillStyle = "#adb5bd"; ctx.font = "13px 'Segoe UI', sans-serif";
     if (!keys.length && !active.length) ctx.fillText("暂无永久 BONUS", x + 16, y + 62);
     let bx = x + 16, by = y + 62, shown = 0;
