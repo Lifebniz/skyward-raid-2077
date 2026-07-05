@@ -109,7 +109,7 @@ for (const a of affixes) {
 
 const bonusKeys = new Set(Object.keys(CONFIG.bonuses));
 for (const key of CONFIG.bonusOrder) assert(bonusKeys.has(key), `bonusOrder references missing bonus ${key}`);
-for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "leech", "painConverter", "armorCaliber", "vitalReactor"]) {
+for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "leech", "painConverter", "armorCaliber", "vitalReactor", "shieldAmplifier"]) {
   assert(bonusKeys.has(key), `missing survival/build bonus ${key}`);
 }
 assert(CONFIG.bonuses.armorCaliber.hpPerDamage > 0, "armorCaliber hpPerDamage must be positive");
@@ -117,6 +117,11 @@ between(CONFIG.bonuses.armorCaliber.maxDamage, 2, 8, "armorCaliber maxDamage");
 assert(CONFIG.bonuses.vitalReactor.hpPerDamageMult > 0, "vitalReactor hpPerDamageMult must be positive");
 between(CONFIG.bonuses.vitalReactor.damageMult, 0.02, 0.08, "vitalReactor damageMult");
 between(CONFIG.bonuses.vitalReactor.maxDamageMult, 0.1, 0.4, "vitalReactor maxDamageMult");
+between(CONFIG.bonuses.shieldAmplifier.damageMult, 0.08, 0.3, "shieldAmplifier damageMult");
+game.bonuses = { shieldAmplifier: 1 }; game.chips = {}; game.player = { hp: 100, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
+assert.strictEqual(game.playerDamage(100), 100, "shieldAmplifier should not add damage without shield");
+game.player.shieldHp = 10;
+assert(game.playerDamage(100) > 100, "shieldAmplifier should add damage while shielded");
 between(CONFIG.bonuses.painConverter.energyPerHp, 0.5, 2, "painConverter energyPerHp");
 between(CONFIG.bonuses.painConverter.maxEnergy, 15, 60, "painConverter maxEnergy");
 between(CONFIG.bonuses.sideCannons.maxPairs, 1, 4, "sideCannons maxPairs");

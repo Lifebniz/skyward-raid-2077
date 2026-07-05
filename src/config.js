@@ -95,7 +95,7 @@ const CONFIG = {
     sideGuns: { name: "侧翼炮组", desc: "主炮附加斜向火力", color: "#ffd43b", duration: 10, angle: 22 },
     volatileCore: { name: "危险过载", desc: "分数更高,承伤也更高", color: "#ff6b6b", duration: 9, scoreBonus: 0.35, threatGainMult: 1.35, damageTakenMult: 1.18 },
   },
-  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "leech", "painConverter", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "kineticAmmo", "heavyRounds", "armorPiercer", "armorCaliber", "vitalReactor", "sideCannons", "laserLens", "laserSplitter", "swarmCore", "homingShards", "explosivePayload", "clusterWarheads", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "adrenaline", "emergencyBarrier", "overdrive"],
+  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "leech", "painConverter", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "shieldAmplifier", "kineticAmmo", "heavyRounds", "armorPiercer", "armorCaliber", "vitalReactor", "sideCannons", "laserLens", "laserSplitter", "swarmCore", "homingShards", "explosivePayload", "clusterWarheads", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "adrenaline", "emergencyBarrier", "overdrive"],
   bonuses: {
     damage: { name: "火力校准", desc: "全武器伤害 +15%", color: "#ff6b6b", damageMult: 0.15 },
     fireRate: { name: "加速扳机", desc: "主炮/副武器射速 +10%", color: "#4dabf7", cooldownMult: 0.10 },
@@ -111,6 +111,7 @@ const CONFIG = {
     chainSpark: { name: "连锁电弧", desc: "击杀会电击附近敌人", color: "#74c0fc", damage: 4, range: 230 },
     pointDefense: { name: "近防协议", desc: "击杀会清除目标附近敌弹", color: "#74c0fc", rarity: "稀有", weight: 34, range: 170 },
     salvage: { name: "残骸回收", desc: "每 5 次击杀获得护盾", color: "#20c997", shield: 10, every: 5, dur: 5 },
+    shieldAmplifier: { name: "护盾放大器", desc: "有护盾时全武器伤害 +18%", color: "#74c0fc", rarity: "稀有", weight: 34, damageMult: 0.18 },
     kineticAmmo: { name: "动能弹芯", desc: "主炮基础伤害 +1", color: "#ffa94d", bulletDamage: 1 },
     heavyRounds: { name: "钨芯重弹", desc: "主炮伤害 +2,主炮射速 -12%", color: "#ffd43b", rarity: "稀有", weight: 30, bulletDamage: 2, mainCooldownPenalty: 0.12 },
     armorPiercer: { name: "破甲弹芯", desc: "主炮对高生命敌机伤害 +35%", color: "#ff922b", rarity: "稀有", weight: 34, minHp: 12, heavyDamageMult: 0.35 },
@@ -280,7 +281,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 35, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 36, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
