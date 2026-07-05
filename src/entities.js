@@ -48,6 +48,12 @@ class Player {
       const pattern = CONFIG.weapon[clamp(this.power, 1, c.maxPower)];
       for (const s of pattern) { const rad = s.deg * DEG; game.spawnPlayerBullet(this.x + s.ox, this.y - this.radius, Math.sin(rad) * c.bulletSpeed, -Math.cos(rad) * c.bulletSpeed); }
       for (let i = 0; i < this.wings; i++) game.spawnPlayerBullet(this.x + wingOffsetX(i), this.y + 4, 0, -c.bulletSpeed);   // 僚机直射(任意数量排布)
+      const side = game.bonusStacks("sideCannons"), sideCfg = CONFIG.bonuses.sideCannons;
+      for (let i = 1, n = Math.min(side, sideCfg.maxPairs); i <= n; i++) {
+        const a = (sideCfg.angle + (i - 1) * 6) * DEG, ox = sideCfg.offset * i;
+        game.spawnPlayerBullet(this.x - ox, this.y, -Math.sin(a) * c.bulletSpeed, -Math.cos(a) * c.bulletSpeed);
+        game.spawnPlayerBullet(this.x + ox, this.y, Math.sin(a) * c.bulletSpeed, -Math.cos(a) * c.bulletSpeed);
+      }
       if (game.chipActive("sideGuns")) {
         const a = CONFIG.chips.sideGuns.angle * DEG;
         game.spawnPlayerBullet(this.x - 18, this.y, -Math.sin(a) * c.bulletSpeed, -Math.cos(a) * c.bulletSpeed);

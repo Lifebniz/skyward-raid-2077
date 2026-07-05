@@ -559,7 +559,7 @@ const game = {
   },
   buildRouteSummary(source = this.bonuses) {
     const routes = [
-      { name: "主炮", color: "#ffd43b", weights: { damage: 1, fireRate: 1, pierce: 2, kineticAmmo: 2, chainSpark: 1, pointDefense: 1, executioner: 1, glassCannon: 1, overdrive: 1 } },
+      { name: "主炮", color: "#ffd43b", weights: { damage: 1, fireRate: 1, pierce: 2, kineticAmmo: 2, sideCannons: 3, chainSpark: 1, pointDefense: 1, executioner: 1, glassCannon: 1, overdrive: 1 } },
       { name: "激光", color: "#cc5de8", weights: { damage: 1, range: 1, laserLens: 3, laserSplitter: 3, chargeAmp: 1, bossHunter: 1, glassCannon: 1 } },
       { name: "追踪", color: "#4dabf7", weights: { range: 1, fireRate: 1, swarmCore: 3, homingShards: 3, magnetCore: 1, comboBattery: 1, comboSurge: 1 } },
       { name: "导弹", color: "#ff922b", weights: { missileRack: 3, explosivePayload: 3, clusterWarheads: 3, missileInterceptor: 2, fireRate: 1, range: 1, bossHunter: 1 } },
@@ -1406,7 +1406,7 @@ const game = {
     else if (key.includes("laser") || key.includes("Lens")) this.drawSecondaryWeaponIcon(ctx, x, y, r * .9, "laser", "#fff");
     else if (key.includes("homing") || key.includes("swarm")) this.drawSecondaryWeaponIcon(ctx, x, y, r * .9, "homing", "#fff");
     else if (key.includes("shield") || key.includes("Armor") || key.includes("Defense") || key.includes("salvage") || key.includes("Barrier") || key.includes("Hull") || key.includes("Hp") || key.includes("Stand") || key.includes("Repair") || key === "capacitor") this.drawSpecialIcon(ctx, x, y, r * .86, "shield", "#fff");
-    else if (key.includes("charge") || key.includes("overdrive") || key.includes("Battery") || key.includes("Surge") || key.includes("fireRate")) this.drawChargeIcon(ctx, x, y, r * .9, "#fff");
+    else if (key.includes("charge") || key.includes("overdrive") || key.includes("Battery") || key.includes("Surge") || key.includes("fireRate") || key.includes("Cannon")) this.drawChargeIcon(ctx, x, y, r * .9, "#fff");
     else if (key.includes("range") || key.includes("magnet")) {
       ctx.save(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; for (let i = 1; i <= 3; i++) { ctx.globalAlpha = 1 - i * .18; ctx.beginPath(); ctx.arc(x, y, r * (.22 + i * .18), 0, Math.PI * 2); ctx.stroke(); } ctx.restore();
     } else if (key.includes("chain")) {
