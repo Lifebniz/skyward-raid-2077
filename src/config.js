@@ -95,7 +95,7 @@ const CONFIG = {
     sideGuns: { name: "侧翼炮组", desc: "主炮附加斜向火力", color: "#ffd43b", duration: 10, angle: 22 },
     volatileCore: { name: "危险过载", desc: "分数更高,承伤也更高", color: "#ff6b6b", duration: 9, scoreBonus: 0.35, threatGainMult: 1.35, damageTakenMult: 1.18 },
   },
-  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "leech", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "kineticAmmo", "laserLens", "swarmCore", "homingShards", "explosivePayload", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "glassCannon", "bossHunter", "adrenaline", "emergencyBarrier", "overdrive"],
+  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "leech", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "kineticAmmo", "laserLens", "swarmCore", "homingShards", "explosivePayload", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "adrenaline", "emergencyBarrier", "overdrive"],
   bonuses: {
     damage: { name: "火力校准", desc: "全武器伤害 +15%", color: "#ff6b6b", damageMult: 0.15 },
     fireRate: { name: "加速扳机", desc: "主炮/副武器射速 +10%", color: "#4dabf7", cooldownMult: 0.10 },
@@ -120,6 +120,7 @@ const CONFIG = {
     chargeAmp: { name: "蓄能放大器", desc: "蓄力激光更强,冷却更短", color: "#f783ac", rarity: "稀有", weight: 34, boostBonus: 4, cooldownMult: 0.14 },
     executioner: { name: "处决算法", desc: "对 40% 血以下敌人伤害 +30%", color: "#e64980", rarity: "稀有", weight: 34, threshold: 0.4, damageMult: 0.30 },
     reactiveArmor: { name: "反应装甲", desc: "护盾格挡时震击近身敌人", color: "#74c0fc", rarity: "稀有", weight: 30, damage: 8, range: 170 },
+    lastStand: { name: "黑匣子保险", desc: "致命伤保留 1 生命并展开护盾", color: "#845ef7", rarity: "史诗", weight: 12, shield: 32, maxShield: 90, dur: 5, cooldown: 70 },
     glassCannon: { name: "玻璃大炮", desc: "全武器伤害 +35%,承伤 +20%", color: "#ff6b6b", rarity: "稀有", weight: 28, damageMult: 0.35, damageTakenMult: 0.20 },
     bossHunter: { name: "猎首协议", desc: "对 Boss 伤害 +40%", color: "#cc5de8", rarity: "稀有", weight: 30, bossDamageMult: 0.40 },
     adrenaline: { name: "肾上腺素", desc: "半血以下伤害和射速大幅提升", color: "#ff8787", rarity: "史诗", weight: 16, threshold: 0.5, damageMult: 0.30, cooldownMult: 0.18 },
@@ -258,7 +259,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 7, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 8, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

@@ -7,7 +7,7 @@ const game = {
   state: "title", diff: CONFIG.difficulties.normal, ship: CONFIG.ships.balanced, currentLevel: 0, world: 1, player: null, boss: null,
   playerBullets: [], homingShots: [], missiles: [], playerLasers: [], enemyBullets: [], enemies: [], powerups: [], particles: [], floats: [], lasers: [], shockwaves: [], specialWaves: [],
   score: 0, combo: 0, comboTimer: 0, maxCombo: 0,
-  threat: 0, chips: {}, bonuses: {}, _chipCursor: 0, _chipChoices: [], _chipRerolls: 0, _nextChipDraftAt: 0, _bonusKillN: 0, _noHitT: 0, _emergencyBarrierCd: 0, _chipStats: {}, _bonusStats: {}, _maxThreatLevel: 0,
+  threat: 0, chips: {}, bonuses: {}, _chipCursor: 0, _chipChoices: [], _chipRerolls: 0, _nextChipDraftAt: 0, _bonusKillN: 0, _noHitT: 0, _emergencyBarrierCd: 0, _lastStandCd: 0, _chipStats: {}, _bonusStats: {}, _maxThreatLevel: 0,
   flashTimer: 0, bannerText: "", bannerSub: "", bannerTimer: 0, warningTimer: 0, titleT: 0, _sliderDrag: false,
   dlgName: "", dlgText: "", dlgTimer: 0,   // P:BOSS 台词
   topScores: [], _recorded: false,
@@ -469,7 +469,7 @@ const game = {
   showDialogue(name, text, dur) { this.dlgName = name; this.dlgText = text || ""; this.dlgTimer = dur || 3.5; },   // P
   addShake(mag, t) { this._shake = Math.max(this._shake, mag); this._shakeT = Math.max(this._shakeT, t); },   // N
   hitStop(t) { this._hitStopT = Math.max(this._hitStopT, t); },
-  resetDepthSystems() { this.threat = 0; this.chips = {}; this.bonuses = {}; this._chipCursor = 0; this._chipChoices = []; this._chipRerolls = 0; this._nextChipDraftAt = 0; this._bonusKillN = 0; this._noHitT = 0; this._emergencyBarrierCd = 0; this._chipStats = {}; this._bonusStats = {}; this._maxThreatLevel = 0; },
+  resetDepthSystems() { this.threat = 0; this.chips = {}; this.bonuses = {}; this._chipCursor = 0; this._chipChoices = []; this._chipRerolls = 0; this._nextChipDraftAt = 0; this._bonusKillN = 0; this._noHitT = 0; this._emergencyBarrierCd = 0; this._lastStandCd = 0; this._chipStats = {}; this._bonusStats = {}; this._maxThreatLevel = 0; },
   maxThreat() { return CONFIG.threat.maxLevel * CONFIG.threat.perLevel; },
   threatLevel() { return clamp(Math.floor(this.threat / CONFIG.threat.perLevel), 0, CONFIG.threat.maxLevel); },
   threatScoreMult() {
@@ -544,7 +544,7 @@ const game = {
       { name: "激光", color: "#cc5de8", weights: { damage: 1, range: 1, laserLens: 3, chargeAmp: 1, bossHunter: 1, glassCannon: 1 } },
       { name: "追踪", color: "#4dabf7", weights: { range: 1, fireRate: 1, swarmCore: 3, homingShards: 3, magnetCore: 1, comboBattery: 1, comboSurge: 1 } },
       { name: "导弹", color: "#ff922b", weights: { missileRack: 3, explosivePayload: 3, missileInterceptor: 2, fireRate: 1, range: 1, bossHunter: 1 } },
-      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, leech: 2, salvage: 2, reactiveArmor: 2, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1 } },
+      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, leech: 2, salvage: 2, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1 } },
       { name: "风险", color: "#ff6b6b", weights: { glassCannon: 3, overdrive: 3, adrenaline: 3, comboSurge: 2, executioner: 1, bossHunter: 1 } },
     ].map(r => {
       const score = Object.keys(r.weights).reduce((sum, key) => sum + (source[key] || 0) * r.weights[key], 0);
@@ -756,6 +756,16 @@ const game = {
     this.floats.push(new FloatText(p.x, p.y - 58, "应急力场", cfg.color));
     Sound.powerup();
   },
+  tryLastStand(p) {
+    const stacks = this.bonusStacks("lastStand"), cfg = CONFIG.bonuses.lastStand;
+    if (!stacks || this._lastStandCd > 0 || !p || p.hp > 0) return false;
+    p.hp = 1;
+    p.grantShield(Math.min(cfg.maxShield, p.shieldHp + cfg.shield * stacks), cfg.dur);
+    this._lastStandCd = cfg.cooldown;
+    this.floats.push(new FloatText(p.x, p.y - 66, "黑匣子保险", cfg.color));
+    Sound.powerup();
+    return true;
+  },
   updateDepthSystems(dt) {
     for (const key of Object.keys(this.chips)) {
       this.chips[key] -= dt;
@@ -764,6 +774,7 @@ const game = {
     if (!this.player) return;
     this._noHitT += dt;
     if (this._emergencyBarrierCd > 0) this._emergencyBarrierCd -= dt;
+    if (this._lastStandCd > 0) this._lastStandCd -= dt;
     const t = CONFIG.threat;
     if (this.player.power >= CONFIG.player.maxPower && this.player.overcharge >= CONFIG.player.maxOvercharge) this.addThreat(t.fullPowerPerSec * dt);
     if (this.combo >= t.comboTrigger) this.addThreat(t.comboPerSec * dt);
@@ -1339,7 +1350,7 @@ const game = {
     if (key.includes("missile") || key.includes("Payload")) this.drawSecondaryWeaponIcon(ctx, x, y, r * .9, "missile", "#fff");
     else if (key.includes("laser") || key.includes("Lens")) this.drawSecondaryWeaponIcon(ctx, x, y, r * .9, "laser", "#fff");
     else if (key.includes("homing") || key.includes("swarm")) this.drawSecondaryWeaponIcon(ctx, x, y, r * .9, "homing", "#fff");
-    else if (key.includes("shield") || key.includes("Armor") || key.includes("Defense") || key.includes("salvage") || key.includes("Barrier") || key.includes("Hull") || key.includes("Hp") || key === "capacitor") this.drawSpecialIcon(ctx, x, y, r * .86, "shield", "#fff");
+    else if (key.includes("shield") || key.includes("Armor") || key.includes("Defense") || key.includes("salvage") || key.includes("Barrier") || key.includes("Hull") || key.includes("Hp") || key.includes("Stand") || key === "capacitor") this.drawSpecialIcon(ctx, x, y, r * .86, "shield", "#fff");
     else if (key.includes("charge") || key.includes("overdrive") || key.includes("Battery") || key.includes("Surge") || key.includes("fireRate")) this.drawChargeIcon(ctx, x, y, r * .9, "#fff");
     else if (key.includes("range") || key.includes("magnet")) {
       ctx.save(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; for (let i = 1; i <= 3; i++) { ctx.globalAlpha = 1 - i * .18; ctx.beginPath(); ctx.arc(x, y, r * (.22 + i * .18), 0, Math.PI * 2); ctx.stroke(); } ctx.restore();
