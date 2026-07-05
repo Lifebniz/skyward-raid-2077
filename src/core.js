@@ -122,34 +122,40 @@ const background = {
   update(dt) { this.scroll += CONFIG.bg.speed * dt; },
   draw(ctx, level) {
     const W = CONFIG.WIDTH, H = CONFIG.HEIGHT, th = CONFIG.themes[(level - 1) % CONFIG.themes.length];
-    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, th.sky1); g.addColorStop(1, th.sky2);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    // RR:星云软云层 —— 比 band1/band2 更慢的视差(纵深感的"最远景"),纯径向渐变模拟柔光,不用 ctx.filter 保性能。
-    // 交替左右位置同样要用"绝对行号"(nebBaseRow+i)判断奇偶,道理和下面 band2 的注释一样,不然循环归零时会跳变。
-    const nebSp = 480, nebT = this.scroll * 0.12, offNeb = nebT % nebSp, nebBaseRow = Math.floor(nebT / nebSp);
-    for (let y = -nebSp + offNeb, i = 0; y < H + nebSp; y += nebSp, i++) {
-      const ncx = W * (((nebBaseRow + i) % 2 === 0) ? 0.28 : 0.72), nr = 150;
-      const ng = ctx.createRadialGradient(ncx, y, 0, ncx, y, nr);
-      ng.addColorStop(0, th.band2); ng.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = ng; ctx.beginPath(); ctx.arc(ncx, y, nr, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.fillStyle = th.band1;
-    const sp1 = 320, off1 = (this.scroll * 0.35) % sp1;
-    for (let y = -sp1 + off1; y < H + sp1; y += sp1) ctx.fillRect(0, y, W, 150);
-    ctx.fillStyle = th.band2;
-    // U:交替左右的色块用"绝对行号"(baseRow+i)判断奇偶,而非每帧从 0 重新计的循环变量 i,
-    // 否则 off2 每循环一圈归零时,同一个色块的奇偶性(从而左右位置)会突然翻转,产生明显跳变。
-    const sp2 = 170, t2 = this.scroll * 0.7, off2 = t2 % sp2, baseRow = Math.floor(t2 / sp2);
-    for (let y = -sp2 + off2, i = 0; y < H + sp2; y += sp2, i++) ctx.fillRect(((baseRow + i) % 2 === 0) ? 40 : W * 0.45, y, W * 0.4, 60);
-    ctx.strokeStyle = "rgba(210,240,255,.22)";
-    ctx.lineWidth = 1;
-    const streakSp = 120, streakT = this.scroll * 1.65, streakOff = streakT % streakSp, streakBase = Math.floor(streakT / streakSp);
-    for (let y = -streakSp + streakOff, row = 0; y < H + streakSp; y += streakSp, row++) {
-      for (let i = 0; i < 8; i++) {
-        const seed = (streakBase + row) * 17 + i * 31;
-        const x = (seed * 73) % W, len = 24 + (seed % 28);
-        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + len); ctx.stroke();
+    const base = ImageAssets.background(level, "base");
+    if (base) ImageAssets.drawScrolling(ctx, base, this.scroll * 0.18);
+    else {
+      const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, th.sky1); g.addColorStop(1, th.sky2);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      // RR:星云软云层 —— 比 band1/band2 更慢的视差(纵深感的"最远景"),纯径向渐变模拟柔光,不用 ctx.filter 保性能。
+      // 交替左右位置同样要用"绝对行号"(nebBaseRow+i)判断奇偶,道理和下面 band2 的注释一样,不然循环归零时会跳变。
+      const nebSp = 480, nebT = this.scroll * 0.12, offNeb = nebT % nebSp, nebBaseRow = Math.floor(nebT / nebSp);
+      for (let y = -nebSp + offNeb, i = 0; y < H + nebSp; y += nebSp, i++) {
+        const ncx = W * (((nebBaseRow + i) % 2 === 0) ? 0.28 : 0.72), nr = 150;
+        const ng = ctx.createRadialGradient(ncx, y, 0, ncx, y, nr);
+        ng.addColorStop(0, th.band2); ng.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = ng; ctx.beginPath(); ctx.arc(ncx, y, nr, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = th.band1;
+      const sp1 = 320, off1 = (this.scroll * 0.35) % sp1;
+      for (let y = -sp1 + off1; y < H + sp1; y += sp1) ctx.fillRect(0, y, W, 150);
+      ctx.fillStyle = th.band2;
+      // U:交替左右的色块用"绝对行号"(baseRow+i)判断奇偶,而非每帧从 0 重新计的循环变量 i,
+      // 否则 off2 每循环一圈归零时,同一个色块的奇偶性(从而左右位置)会突然翻转,产生明显跳变。
+      const sp2 = 170, t2 = this.scroll * 0.7, off2 = t2 % sp2, baseRow = Math.floor(t2 / sp2);
+      for (let y = -sp2 + off2, i = 0; y < H + sp2; y += sp2, i++) ctx.fillRect(((baseRow + i) % 2 === 0) ? 40 : W * 0.45, y, W * 0.4, 60);
+      ctx.strokeStyle = "rgba(210,240,255,.22)";
+      ctx.lineWidth = 1;
+      const streakSp = 120, streakT = this.scroll * 1.65, streakOff = streakT % streakSp, streakBase = Math.floor(streakT / streakSp);
+      for (let y = -streakSp + streakOff, row = 0; y < H + streakSp; y += streakSp, row++) {
+        for (let i = 0; i < 8; i++) {
+          const seed = (streakBase + row) * 17 + i * 31;
+          const x = (seed * 73) % W, len = 24 + (seed % 28);
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + len); ctx.stroke();
+        }
       }
     }
+    ImageAssets.drawScrolling(ctx, ImageAssets.background(level, "mid"), this.scroll * 0.45, 0.95);
+    ImageAssets.drawScrolling(ctx, ImageAssets.background(level, "fg"), this.scroll * 1.4, 0.9);
   },
 };

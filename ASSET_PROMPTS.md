@@ -343,13 +343,19 @@ manifest: {
   boss: {
     0: "assets/images/bosses/boss-01-guard.png",
   },
+  background: {
+    1: {
+      base: "assets/images/backgrounds/world-01-base.png",
+      mid: "assets/images/backgrounds/world-01-mid.png",
+      fg: "assets/images/backgrounds/world-01-fg.png",
+    },
+  },
 }
 ```
 
 当前已支持图片兜底:
 
+- 五个世界背景的 `base / mid / fg` 三层视差图。
 - 玩家机型选择页和游戏内玩家机体。
 - 普通敌机。
 - Boss 战斗机体和图鉴预览。
-
-背景层等第一批背景图出来后再接，避免在没有真实图时提前猜滚动和裁切规则。
