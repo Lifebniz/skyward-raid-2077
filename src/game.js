@@ -24,7 +24,7 @@ const game = {
   _mapScrollY: 0, _mapDragStartX: 0, _mapDragStartY: 0, _mapDragStartScrollY: 0, _mapDragging: false, _mapDragMoved: false,
   _mapHighlightId: null, _mapHighlightT: 0,   // MM:从图鉴跳转过来时高亮提示的关卡
   _levelTransX: 0, _levelTransY: 0, _levelTransT: 0,   // NN:进入关卡的聚焦扩散过渡(从点击处展开)
-  autoNext: true, endless: false, challengeSeed: "", challengeMode: false, challengeDaily: false, challengeTarget: null, challengeSplits: [], rivalInterference: null, _rng: null, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0, _endlessEventT: 0, _endlessEventTimer: 0, _endlessEvent: null, _endlessEventsSeen: [], _endlessStats: null, _endlessTimeline: [], _endlessMarkIdx: 0,
+  autoNext: true, endless: false, challengeSeed: "", challengeMode: false, challengeDaily: false, challengeTarget: null, challengeSplits: [], rivalInterference: null, _rng: null, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0, _endlessEventT: 0, _endlessEventTimer: 0, _endlessEvent: null, _endlessHazardT: 0, _endlessEventsSeen: [], _endlessStats: null, _endlessTimeline: [], _endlessMarkIdx: 0,
   _endlessBossAffixesSeen: [],
   _shake: 0, _shakeT: 0, _hitStopT: 0,   // N:打击感
   // 触控按钮放大,便于拇指操作
@@ -130,7 +130,7 @@ const game = {
   pauseButtonHit(x, y) { const b = this.pauseBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
   // 开始某一关(索引)
   startLevel(i) {
-    this.currentLevel = i; this.world = LEVELS[i].world; this.endless = false; this.challengeSeed = ""; this.challengeMode = false; this.challengeDaily = false; this.challengeTarget = null; this.challengeSplits = []; this.rivalInterference = null; this._rng = null; this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = 0; this._endlessEventsSeen = []; this._endlessStats = null; this._endlessTimeline = []; this._endlessMarkIdx = 0;
+    this.currentLevel = i; this.world = LEVELS[i].world; this.endless = false; this.challengeSeed = ""; this.challengeMode = false; this.challengeDaily = false; this.challengeTarget = null; this.challengeSplits = []; this.rivalInterference = null; this._rng = null; this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = 0; this._endlessHazardT = 0; this._endlessEventsSeen = []; this._endlessStats = null; this._endlessTimeline = []; this._endlessMarkIdx = 0;
     this.state = "playing";
     this.player = new Player(); this.boss = null;
     this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.floats = []; this.lasers = []; this.shockwaves = []; this.specialWaves = [];
@@ -166,7 +166,7 @@ const game = {
     this.resetDepthSystems();
     this.flashTimer = 0; this.warningTimer = 0; this._hpTrailRatio = 1;
     this._endlessT = 0; this._endlessSpawnT = CONFIG.endless.spawn.initialDelay; this._endlessBossT = CONFIG.endless.boss.firstDelay; this._endlessBossN = 0;
-    this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = CONFIG.endless.eventInterval * 0.65; this._endlessEventsSeen = []; this._endlessBossAffixesSeen = [];
+    this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = CONFIG.endless.eventInterval * 0.65; this._endlessHazardT = 0; this._endlessEventsSeen = []; this._endlessBossAffixesSeen = [];
     this.resetEndlessTelemetry();
     director.begin(null);
     input.targetX = CONFIG.player.startX; input.targetY = CONFIG.player.startY;
@@ -200,7 +200,7 @@ const game = {
     if (!events.length) return;
     const pool = this._endlessEvent ? events.filter(e => e.key !== this._endlessEvent.key) : events;
     const e = this.pick(pool.length ? pool : events);
-    this._endlessEvent = e; this._endlessEventTimer = CONFIG.endless.eventDuration; this._endlessEventT = CONFIG.endless.eventInterval;
+    this._endlessEvent = e; this._endlessEventTimer = CONFIG.endless.eventDuration; this._endlessEventT = CONFIG.endless.eventInterval; this._endlessHazardT = e.laserEvery ? (e.laserDelay || 1) : 0;
     this._endlessEventsSeen.push(e.name || e.key);
     if (this._endlessStats) this._endlessStats.events++;
     this.banner(e.name, e.sub || "空域变化");
@@ -209,10 +209,21 @@ const game = {
   updateEndlessEvent(dt) {
     if (this._endlessEventTimer > 0) {
       this._endlessEventTimer -= dt;
-      if (this._endlessEventTimer <= 0) this._endlessEvent = null;
+      if (this._endlessEvent && this._endlessEvent.laserEvery) this.updateEndlessLaserEvent(dt, this._endlessEvent);
+      if (this._endlessEventTimer <= 0) { this._endlessEvent = null; this._endlessHazardT = 0; }
     }
     this._endlessEventT -= dt;
     if (this._endlessEventT <= 0) this.triggerEndlessEvent();
+  },
+  updateEndlessLaserEvent(dt, e) {
+    this._endlessHazardT -= dt;
+    if (this._endlessHazardT > 0) return;
+    this._endlessHazardT += e.laserEvery || 4;
+    const baseX = this.player ? this.player.x : CONFIG.WIDTH / 2;
+    const x = clamp(baseX + (this.rng() - 0.5) * (e.jitter || 160), 36, CONFIG.WIDTH - 36);
+    const dmg = (e.damage || 7) * this.activeDiff.dmgMult * this.endlessBulletDmgMult() * this.threatDamageMult();
+    this.spawnBossLaser(x, e.warn || 0.7, e.dur || 0.5, e.width || 34, dmg);
+    this.floats.push(new FloatText(x, 110, e.name, e.color || "#cc5de8"));
   },
   updateRivalInterference() {
     if (!this.rivalInterference || typeof RivalInterference === "undefined") return;
