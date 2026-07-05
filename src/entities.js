@@ -150,6 +150,7 @@ class Player {
 // QQ:机翼/机身/座舱全部改渐变(取代纯色)+ 机翼加柔和投影,做出立体感;原始剪影坐标完全不变。
 function drawShipBody(ctx, x, y, ship) {
   const col = ship.color, s = ship.radiusMult || 1, shape = ship.bodyShape || "delta";
+  if (ImageAssets.draw(ctx, ImageAssets.player(ship.key), x, y, 64 * s)) return;
   ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
   const wingGrad = ctx.createLinearGradient(0, -4, 0, 16);
   wingGrad.addColorStop(0, "#3d4f70"); wingGrad.addColorStop(1, "#161d2b");
@@ -339,6 +340,10 @@ class Enemy {
   // QQ:主体色改渐变(受光面亮/边缘暗)+ 整体加柔和投影,取代纯色平涂,读起来更有质感
   draw(ctx) {
     const x = this.x, y = this.y, r = this.radius, t = this.type;
+    if (this._flash <= 0 && ImageAssets.draw(ctx, ImageAssets.enemy(t), x, y, r * 2.8)) {
+      this.drawCarrierSpawnRing(ctx);
+      return;
+    }
     let c;
     if (this._flash > 0) c = "#fff";
     else { c = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r); c.addColorStop(0, UI.shade(this.color, 0.4)); c.addColorStop(1, UI.shade(this.color, -0.25)); }
@@ -390,12 +395,15 @@ class Enemy {
     }
     ctx.restore();
     // W2:carrier 裂解出的僚机短暂带一圈脉动紫环,提示玩家"这是母舰刚炸出来的",1秒后自然消失,不需要额外状态清理
-    if (this._carrierSpawn > 0) {
-      ctx.save(); ctx.globalAlpha = clamp(this._carrierSpawn, 0, 1) * 0.8;
-      ctx.strokeStyle = "#9775fa"; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(x, y, r + 5 + Math.sin(this._mt * 14) * 2, 0, Math.PI * 2); ctx.stroke();
-      ctx.restore();
-    }
+    this.drawCarrierSpawnRing(ctx);
+  }
+  drawCarrierSpawnRing(ctx) {
+    if (this._carrierSpawn <= 0) return;
+    const x = this.x, y = this.y, r = this.radius;
+    ctx.save(); ctx.globalAlpha = clamp(this._carrierSpawn, 0, 1) * 0.8;
+    ctx.strokeStyle = "#9775fa"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, r + 5 + Math.sin(this._mt * 14) * 2, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -413,7 +421,8 @@ function runBossAttack(b, atk) {
 
 // Y:BOSS 造型剪影(供 Boss.draw 与首页图鉴共用)
 // QQ:纯色改渐变(受光面亮/边缘暗),给BOSS舰体加立体感;供 Boss.draw 与首页图鉴共用
-function fillBossShape(ctx, x, y, r, shape, color) {
+function fillBossShape(ctx, x, y, r, shape, color, assetIndex) {
+  if (assetIndex != null && ImageAssets.draw(ctx, ImageAssets.boss(assetIndex), x, y, r * 2.45)) return;
   const grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.15, x, y, r);
   grad.addColorStop(0, UI.shade(color, 0.35)); grad.addColorStop(1, UI.shade(color, -0.3));
   ctx.fillStyle = grad;
@@ -466,6 +475,7 @@ class Boss {
     const flash = this._flash > 0, color = flash ? "#fff" : this.def.colors[this.phaseIndex], r = this.radius, x = this.x, y = this.y;
     // Y:狂暴态外圈红色脉动光晕
     if (this._enraged) { const gr = r + 14 + Math.sin(this._t * 6) * 4; ctx.fillStyle = "rgba(255,40,40,.22)"; ctx.beginPath(); ctx.arc(x, y, gr, 0, Math.PI * 2); ctx.fill(); }
+    if (!flash && ImageAssets.draw(ctx, ImageAssets.boss(this.defIndex), x, y, r * 2.45)) return;
     // 侧翼炮塔
     ctx.fillStyle = "#2b3038"; ctx.fillRect(x - r - 7, y - 8, 12, 26); ctx.fillRect(x + r - 5, y - 8, 12, 26);
     ctx.fillStyle = "#495057"; ctx.fillRect(x - r - 3, y + 16, 4, 8); ctx.fillRect(x + r - 1, y + 16, 4, 8);

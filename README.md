@@ -14,8 +14,11 @@
 ## 结构
 
 - `空中突袭.html`: 页面入口和脚本加载顺序
+- `assets/audio/`: BGM 和后续音效素材
+- `assets/images/`: 可选图片素材，当前通过清单按需接入
 - `style.css`: 页面布局样式
 - `src/config.js`: 数值、关卡外配置、教程文本
+- `src/assets.js`: 可选图片素材清单与加载/绘制兜底
 - `src/services.js`: 音效、音乐、设置、存档、排行榜、成就
 - `src/canvas.js`: Canvas 初始化和自适应
 - `src/input.js`: 鼠标、触摸、键盘输入

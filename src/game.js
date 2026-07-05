@@ -794,7 +794,7 @@ const game = {
     const idx = this._codexBossIdx, def = CONFIG.bosses[idx];
     const cardW = 320, cardH = 246, cardX = cx - cardW / 2, cardY = bossAreaY;
     UI.panel(ctx, cardX, cardY, cardW, cardH, 16, { accent: def.colors[0] });
-    fillBossShape(ctx, cx, cardY + 58, 34, def.shape, def.colors[0]);
+    fillBossShape(ctx, cx, cardY + 58, 34, def.shape, def.colors[0], idx);
     ctx.fillStyle = def.colors[0]; ctx.font = "bold 22px 'Segoe UI', sans-serif"; ctx.fillText(def.name, cx, cardY + 112);
     ctx.fillStyle = "#dee2e6"; ctx.font = "13px 'Segoe UI', sans-serif";
     ctx.fillText("HP " + def.hp + "   分值 " + def.score, cx, cardY + 134);

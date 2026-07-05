@@ -325,3 +325,31 @@ sprite sheet, 4 columns 4 rows, arcade sci-fi explosion animation, orange yellow
 4. 三个基础敌机: 小型机、中型机、大型机。
 
 这批完成后，再补 Boss 和更多敌机。这样可以最快把整体观感拉起来，同时不让素材管理一开始就变重。
+
+## 接入到游戏
+
+图片素材接入点在 `src/assets.js`。游戏只会加载清单中登记的图片，所以现在没有素材时不会产生 404，也不会影响直接打开 HTML。
+
+登记示例:
+
+```js
+manifest: {
+  player: {
+    balanced: "assets/images/ships/player-balanced.png",
+  },
+  enemy: {
+    small: "assets/images/enemies/enemy-small.png",
+  },
+  boss: {
+    0: "assets/images/bosses/boss-01-guard.png",
+  },
+}
+```
+
+当前已支持图片兜底:
+
+- 玩家机型选择页和游戏内玩家机体。
+- 普通敌机。
+- Boss 战斗机体和图鉴预览。
+
+背景层等第一批背景图出来后再接，避免在没有真实图时提前猜滚动和裁切规则。

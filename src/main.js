@@ -9,6 +9,7 @@ const stars = {
   draw(ctx) { ctx.fillStyle = "rgba(255,255,255,.25)"; for (const p of this.items) ctx.fillRect(p.x, p.y, p.r, p.r * 3); },
 };
 
+ImageAssets.load();                                // 载入可选图片素材(无素材时不请求文件)
 Settings.load();                                   // 载入持久化设置(音量/音效/震动/上次难度)
 Progress.load();                                   // 载入关卡进度
 Achievements.load();                               // OO:载入成就进度
