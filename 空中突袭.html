@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>空袭复刻 · 原型 v3.6</title>
+<title>Skyward Raid 2077 · 原型 v3.6</title>
 <style>
   html, body {
     margin: 0; height: 100%;
@@ -29,7 +29,7 @@
 <script>
 "use strict";
 /* =====================================================================
- *  《空中突袭 1945》复刻 —— 竖切片原型  v0.5
+ *  Skyward Raid 2077 —— 原创未来空战原型  v0.5
  *  引擎:HTML5 原生 Canvas,零依赖。双击本文件即可在浏览器运行。
  *
  *  本版新增:标题界面 / 难度选择(简单·普通·困难)/ 完整游戏流程(标题↔对局↔结算)
@@ -456,14 +456,14 @@ const Achievements = {
 const SaveData = {
   keys: ["kzts_settings", "kzts_progress", "kzts_scores", "kzts_endless", "kzts_achievements"],
   exportAll() {
-    const out = { _game: "airstrike1945remake", _v: 1 };
+    const out = { _game: "skywardRaid2077", _v: 1 };
     for (const k of this.keys) { const v = localStorage.getItem(k); if (v != null) out[k] = v; }
     return JSON.stringify(out);
   },
   importAll(jsonStr) {
     let obj;
     try { obj = JSON.parse(jsonStr); } catch (e) { return false; }
-    if (!obj || typeof obj !== "object" || obj._game !== "airstrike1945remake") return false;
+    if (!obj || typeof obj !== "object" || obj._game !== "skywardRaid2077") return false;
     for (const k of this.keys) { if (obj[k] != null) { try { localStorage.setItem(k, obj[k]); } catch (e) {} } }
     Settings.load(); Progress.load(); Achievements.load();
     game.diff = CONFIG.difficulties[Settings.data.diff] || CONFIG.difficulties.normal;
@@ -1973,7 +1973,7 @@ const game = {
     const s = 1 + Math.sin(t * 2) * 0.03;
     ctx.save(); ctx.translate(cx, 175); ctx.scale(s, s);
     ctx.fillStyle = "#fff"; ctx.font = "bold 56px 'Segoe UI', sans-serif"; ctx.fillText("空中突袭", 0, 0); ctx.restore();
-    ctx.fillStyle = "#4dabf7"; ctx.font = "26px 'Segoe UI', sans-serif"; ctx.fillText("1 9 4 5 · 复刻原型", cx, 220);
+    ctx.fillStyle = "#4dabf7"; ctx.font = "26px 'Segoe UI', sans-serif"; ctx.fillText("2 0 7 7 · 原创空战", cx, 220);
     // 悬停的占位飞机(上下浮动)
     const py = 262 + Math.sin(t * 1.6) * 6;
     ctx.fillStyle = "#4dabf7"; ctx.beginPath(); ctx.moveTo(cx, py - 16); ctx.lineTo(cx - 13, py + 12); ctx.lineTo(cx + 13, py + 12); ctx.closePath(); ctx.fill();
