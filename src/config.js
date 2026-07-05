@@ -252,6 +252,7 @@ const CONFIG = {
       { key: "overloadField", name: "过载磁场", color: "#ffd43b", sub: "分数提升,威胁提升", routeBias: "风险", scoreBonus: 0.25, threatGainMult: 1.3 },
       { key: "ambush", name: "伏击航道", color: "#74c0fc", sub: "敌群加密,补给偏防御", routeBias: "生存", spawnBonus: 2, powerupChanceAdd: 0.08, forceDrop: "heal" },
       { key: "ionStorm", name: "离子风暴", color: "#cc5de8", sub: "周期镭射航道", routeBias: "激光", laserEvery: 4.2, laserDelay: 1.2, warn: 0.72, dur: 0.5, width: 34, damage: 7, jitter: 190 },
+      { key: "jammerCloud", name: "扰频云层", color: "#15aabf", sub: "干扰机增多", routeBias: "追踪", spawnBonus: 1, jammerChance: 0.42 },
     ],
     boss: {
       firstDelay: 30, interval: 35, hpStep: 0.08, hpStepMax: 12,
@@ -264,7 +265,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 11, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 12, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

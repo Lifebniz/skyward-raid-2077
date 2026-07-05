@@ -265,7 +265,7 @@ const game = {
       const n = Math.min(this.endlessSpawnCount(t) + this.endlessEventValue("spawnBonus", 0), CONFIG.endless.maxEnemies - this.enemies.length);   // 不超同屏上限
       const pool = this.endlessPool(t), moves = CONFIG.endless.moves;
       for (let i = 0; i < n; i++) {
-        const type = this.pick(pool), r = CONFIG.enemy[type].radius;
+        const type = this.rng() < this.endlessEventValue("jammerChance", 0) ? "jammer" : this.pick(pool), r = CONFIG.enemy[type].radius;
         const elite = type !== "small" && this.rng() < this.endlessEventValue("eliteChance", 0) ? this.pick(["shield", "charger"]) : null;
         this.enemies.push(pools.enemy.get(type, r + 20 + this.rng() * (CONFIG.WIDTH - 2 * (r + 20)), 0, this.pick(moves), elite));
       }
