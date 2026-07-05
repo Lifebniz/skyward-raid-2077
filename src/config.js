@@ -42,7 +42,7 @@ const CONFIG = {
     splitter: { hp: 8,  speed: 100, radius: 26, score: 400, color: "#20c997", fireInterval: 0,   bulletSpeed: 0,   damage: 0, splits: 3 },
     // Z:世界4 新增两种。sniper 狙击机(慢速/低频但单发高伤精准狙击,shots:1 时 fireFan 天然退化为直线瞄准);
     //   detonator 雷机(自身不开火,死亡时炸出一圈弹幕,onEnemyKilled 里按 ringCount/ringSpeed/ringDamage 处理)
-    sniper:     { hp: 7, speed: 70,  radius: 22, score: 550, color: "#e64980", fireInterval: 2.6, bulletSpeed: 520, damage: 14, shots: 1 },
+    sniper:     { hp: 7, speed: 70,  radius: 22, score: 550, color: "#e64980", fireInterval: 2.6, bulletSpeed: 520, damage: 14, shots: 1, warn: 0.55 },
     detonator:  { hp: 6, speed: 110, radius: 24, score: 450, color: "#fab005", fireInterval: 0,   bulletSpeed: 0,   damage: 0, ringCount: 14, ringSpeed: 210, ringDamage: 9 },
     // V:世界5 新增两种。phantom 幻影机(高速/双发瞄准,量多但脆);
     //   carrier 母舰机(自身不开火,死亡时裂出 spawnCount 只 spawns 类型的僚机,onEnemyKilled 里处理,同 splitter 套路但更硬更重)
@@ -267,7 +267,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 15, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 16, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

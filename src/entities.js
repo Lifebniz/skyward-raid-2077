@@ -359,6 +359,7 @@ class Enemy {
     this.move = move; this.mp = CONFIG.moves[move] || {}; this._mt = 0;
     this.phase = "in"; this._ht = 0; this._aimed = false; this.vx = 0; this.vy = 0; this._flash = 0;
     this._carrierSpawn = 0;   // W2:carrier 裂解出的僚机短暂带一圈紫色识别环,归零后就是普通敌机(池复用要清零,不然会带着上一轮的状态)
+    this._sniperWarn = 0; this._sniperAim = 0;
     this._supportTimer = (t.repairInterval || 0) * (0.45 + game.rng() * 0.25); this._supportPulse = 0;
   }
   rollElite() {
@@ -403,7 +404,14 @@ class Enemy {
     if (this.y > CONFIG.HEIGHT + this.radius || this.x < -70 || this.x > CONFIG.WIDTH + 70) this.dead = true;
     if (this.cfg.fireInterval > 0 && this.y > 0 && this.y < CONFIG.HEIGHT * 0.7 && game.player) {
       this._fireTimer -= dt;
-      if (this._fireTimer <= 0) { this._fireTimer = this.cfg.fireInterval * game.activeDiff.fireMult; const aim = Math.atan2(game.player.y - this.y, game.player.x - this.x); game.fireFan(this.x, this.y, aim, 22 * DEG, this.cfg.shots, this.cfg.bulletSpeed, this.cfg.damage); }
+      if (this.type === "sniper" && this._sniperWarn > 0) {
+        this._sniperWarn -= dt;
+        if (this._sniperWarn <= 0) { this._fireTimer = this.cfg.fireInterval * game.activeDiff.fireMult; game.fireFan(this.x, this.y, this._sniperAim, 22 * DEG, this.cfg.shots, this.cfg.bulletSpeed, this.cfg.damage); }
+      } else if (this._fireTimer <= 0) {
+        const aim = Math.atan2(game.player.y - this.y, game.player.x - this.x);
+        if (this.type === "sniper") { this._sniperAim = aim; this._sniperWarn = this.cfg.warn || 0.55; }
+        else { this._fireTimer = this.cfg.fireInterval * game.activeDiff.fireMult; game.fireFan(this.x, this.y, aim, 22 * DEG, this.cfg.shots, this.cfg.bulletSpeed, this.cfg.damage); }
+      }
     }
   }
   updateElite(dt) {
@@ -524,6 +532,12 @@ class Enemy {
       ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = this.color; ctx.lineWidth = this._supportPulse > 0 ? 3 : 1.5;
       ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 0.85; ctx.fillStyle = this.color; ctx.font = "bold 10px 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.fillText("修复", x, y - r - 10);
+      ctx.restore();
+    } else if (this.type === "sniper" && this._sniperWarn > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.25 + 0.35 * Math.sin(this._mt * 30) ** 2;
+      ctx.strokeStyle = this.color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(this._sniperAim) * 900, y + Math.sin(this._sniperAim) * 900); ctx.stroke();
       ctx.restore();
     }
   }
