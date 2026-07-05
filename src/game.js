@@ -252,6 +252,7 @@ const game = {
   },
   updateEndless(dt) {
     this._endlessT += dt;
+    this.recordEndlessPressure(dt);
     this.recordChallengeSplits();
     this.recordEndlessTelemetry();
     this.updateEndlessEvent(dt);
@@ -293,13 +294,13 @@ const game = {
   startDailyChallenge() { this.startEndless({ seed: Challenge.dailySeed(), challenge: true, daily: true }); },
   challengeSplitMarks() { return CONFIG.challenge.splits; },
   resetEndlessTelemetry() {
-    this._endlessStats = { kills: 0, bossKills: 0, hits: 0, blocked: 0, damageTaken: 0, bombs: 0, drafts: 0, picks: 0, skips: 0, rerolls: 0, events: 0 };
+    this._endlessStats = { kills: 0, bossKills: 0, hits: 0, blocked: 0, damageTaken: 0, bombs: 0, drafts: 0, picks: 0, skips: 0, rerolls: 0, events: 0, jammed: 0 };
     this._endlessTimeline = []; this._endlessMarkIdx = 0;
   },
   endlessTelemetryMarks() { return [60, 120, 180, 300]; },
   endlessTelemetrySnapshot(t) {
     const s = this._endlessStats, p = this.player, hp = p && p.maxHp ? Math.round(p.hp / p.maxHp * 100) : 0;
-    return { t, score: Math.round(this.score * this.activeDiff.scoreMult), kills: s.kills, boss: s.bossKills, hits: s.hits, dmg: Math.round(s.damageTaken), drafts: s.drafts || 0, picks: s.picks || 0, skips: s.skips || 0, rerolls: s.rerolls || 0, threat: this.threatLevel(), hp };
+    return { t, score: Math.round(this.score * this.activeDiff.scoreMult), kills: s.kills, boss: s.bossKills, hits: s.hits, dmg: Math.round(s.damageTaken), drafts: s.drafts || 0, picks: s.picks || 0, skips: s.skips || 0, rerolls: s.rerolls || 0, jam: Math.round(s.jammed || 0), threat: this.threatLevel(), hp };
   },
   recordEndlessTelemetry() {
     if (!this.endless || !this._endlessStats) return;
@@ -319,6 +320,10 @@ const game = {
     this._endlessStats.hits++;
     if (blocked) this._endlessStats.blocked++;
     this._endlessStats.damageTaken += Math.max(0, amount || 0);
+  },
+  recordEndlessPressure(dt) {
+    if (!this.endless || !this._endlessStats || !this.player) return;
+    if (this.jamFactor(this.player.x, this.player.y) > 1) this._endlessStats.jammed += dt;
   },
   recordChallengeSplits() {
     const marks = this.challengeSplitMarks();
@@ -586,6 +591,7 @@ const game = {
     else if (time >= 60 && hitsPerMin <= 1.5) tags.push("走位稳定");
     if ((tele.bossKills || 0) >= 3) tags.push("Boss处理强");
     else if ((r.bossAffixes || []).length && !(tele.bossKills || 0)) tags.push("Boss压力高");
+    if ((tele.jammed || 0) / time >= 0.18) tags.push("干扰压力高");
     if ((tele.drafts || 0) >= 3) tags.push((tele.picks || 0) >= tele.drafts ? "选择充分" : "跳过偏多");
     if ((r.maxThreat || 0) >= 4 && hitsPerMin <= 2.2) tags.push("高威胁掌控");
     return tags.slice(0, 4);
@@ -1528,8 +1534,8 @@ const game = {
       ctx.fillText("BONUS " + bonusText, cx, infoY); infoY += 22;
     }
     const tele = r.telemetry || {};
-    ctx.fillText(fitLine("战况 击杀 " + (tele.kills || 0) + " · Boss " + (tele.bossKills || 0) + " · 受击 " + (tele.hits || 0) + "(格挡 " + (tele.blocked || 0) + ") · 承伤 " + Math.round(tele.damageTaken || 0) + " · 炸弹 " + (tele.bombs || 0) + " · 选择 " + (tele.picks || 0) + "/" + (tele.drafts || 0), 356), cx, infoY); infoY += 18;
-    const timeline = (r.timeline || []).map(m => m.t + "s " + m.score + "分/" + m.kills + "杀/HP" + m.hp + "%").join(" · ");
+    ctx.fillText(fitLine("战况 击杀 " + (tele.kills || 0) + " · Boss " + (tele.bossKills || 0) + " · 受击 " + (tele.hits || 0) + "(格挡 " + (tele.blocked || 0) + ") · 承伤 " + Math.round(tele.damageTaken || 0) + " · 干扰 " + Math.round(tele.jammed || 0) + "s · 炸弹 " + (tele.bombs || 0) + " · 选择 " + (tele.picks || 0) + "/" + (tele.drafts || 0), 356), cx, infoY); infoY += 18;
+    const timeline = (r.timeline || []).map(m => m.t + "s " + m.score + "分/" + m.kills + "杀/HP" + m.hp + "%" + (m.jam ? "/干扰" + m.jam + "s" : "")).join(" · ");
     if (timeline && !compactResult) { ctx.fillText(fitLine("节点 " + timeline, 356), cx, infoY); infoY += 22; }
     const boardY = infoY > 418 ? infoY + 16 : 434;
     if (!compactResult) {
