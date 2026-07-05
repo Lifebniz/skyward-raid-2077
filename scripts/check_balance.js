@@ -23,6 +23,16 @@ between(CONFIG.endless.boss.firstDelay, 20, 45, "first boss delay");
 between(CONFIG.endless.boss.interval, 25, 55, "boss interval");
 
 const enemyKeys = new Set(Object.keys(CONFIG.enemy));
+const eliteTypes = CONFIG.elite.types || [];
+unique(eliteTypes, "elite types");
+assert(eliteTypes.length >= 3, "elite type variety should include at least 3 types");
+for (const key of eliteTypes) {
+  const e = CONFIG.elite[key];
+  assert(e && e.name && e.color, `elite ${key} needs readable text`);
+  if (e.hpMult) between(e.hpMult, 0.75, 1.35, `elite ${key} hpMult`);
+  if (e.speedMult) between(e.speedMult, 1, 1.45, `elite ${key} speedMult`);
+  if (e.fireMult) between(e.fireMult, 0.6, 1, `elite ${key} fireMult`);
+}
 for (const [i, pool] of CONFIG.endless.pools.entries()) {
   assert(pool.enemies && pool.enemies.length, `endless pool ${i} is empty`);
   for (const type of pool.enemies) assert(enemyKeys.has(type), `pool ${i} references missing enemy ${type}`);
@@ -57,6 +67,7 @@ for (const a of affixes) {
     between(a.every || 0, 3, 12, `boss affix ${a.key} interval`);
   }
   if (a.enemy) assert(enemyKeys.has(a.enemy), `boss affix ${a.key} references missing enemy ${a.enemy}`);
+  if (a.elite) assert(eliteTypes.includes(a.elite), `boss affix ${a.key} references missing elite ${a.elite}`);
   if (a.healPct) between(a.healPct, 0.01, 0.06, `boss affix ${a.key} healPct`);
 }
 

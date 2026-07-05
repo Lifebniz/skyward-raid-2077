@@ -356,6 +356,7 @@ class Enemy {
     this.eliteShield = this.eliteCfg && this.eliteCfg.shield ? this.eliteCfg.shield : 0; this._eliteCd = 1.2 + game.rng(); this._eliteWarn = 0;
     if (game.endless) this.hp = Math.max(1, Math.round(this.hp * game.endlessEnemyHpMult()));
     if (this.eliteCfg) { this.hp = Math.round(this.hp * (this.eliteCfg.hpMult || 1)); this.score = Math.round(this.score * (this.eliteCfg.scoreMult || 1)); }
+    if (this.eliteCfg && this.eliteCfg.speedMult) this.speed *= this.eliteCfg.speedMult;
     this.maxHp = this.hp;
     // 运动状态
     this.move = move; this.mp = CONFIG.moves[move] || {}; this._mt = 0;
@@ -370,7 +371,7 @@ class Enemy {
     let chance = game.currentLevel >= e.minLevel ? e.baseChance + game.currentLevel * e.levelChance : 0;
     if (game.endless) chance = e.endlessChance + game.threatLevel() * e.threatChance + Math.min(game._endlessT / 900, 0.08);
     if (game.rng() > Math.min(chance, e.maxChance)) return null;
-    return game.rng() < 0.55 ? "shield" : "charger";
+    return game.pick(e.types || ["shield", "charger"]);
   }
   applyMove(dt) {
     const W = CONFIG.WIDTH, m = this.mp;
@@ -409,11 +410,13 @@ class Enemy {
       this._fireTimer -= dt;
       if (this.type === "sniper" && this._sniperWarn > 0) {
         this._sniperWarn -= dt;
-        if (this._sniperWarn <= 0) { this._fireTimer = this.cfg.fireInterval * game.activeDiff.fireMult; game.fireFan(this.x, this.y, this._sniperAim, 22 * DEG, this.cfg.shots, this.cfg.bulletSpeed, this.cfg.damage); }
+        const fireMult = this.eliteCfg && this.eliteCfg.fireMult ? this.eliteCfg.fireMult : 1;
+        if (this._sniperWarn <= 0) { this._fireTimer = this.cfg.fireInterval * game.activeDiff.fireMult * fireMult; game.fireFan(this.x, this.y, this._sniperAim, 22 * DEG, this.cfg.shots, this.cfg.bulletSpeed, this.cfg.damage); }
       } else if (this._fireTimer <= 0) {
         const aim = Math.atan2(game.player.y - this.y, game.player.x - this.x);
+        const fireMult = this.eliteCfg && this.eliteCfg.fireMult ? this.eliteCfg.fireMult : 1;
         if (this.type === "sniper") { this._sniperAim = aim; this._sniperWarn = this.cfg.warn || 0.55; }
-        else { this._fireTimer = this.cfg.fireInterval * game.activeDiff.fireMult; game.fireFan(this.x, this.y, aim, 22 * DEG, this.cfg.shots, this.cfg.bulletSpeed, this.cfg.damage); }
+        else { this._fireTimer = this.cfg.fireInterval * game.activeDiff.fireMult * fireMult; game.fireFan(this.x, this.y, aim, 22 * DEG, this.cfg.shots, this.cfg.bulletSpeed, this.cfg.damage); }
       }
     }
   }

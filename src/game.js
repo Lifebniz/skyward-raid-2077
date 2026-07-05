@@ -243,7 +243,7 @@ const game = {
       }
     } else {
       const type = event.type === "elite" ? "gunner" : this.pick(["small", "medium", "gunner"]);
-      const elite = event.type === "elite" ? this.pick(["shield", "charger"]) : null;
+      const elite = event.type === "elite" ? this.pick(CONFIG.elite.types || ["shield", "charger"]) : null;
       const count = event.type === "ambush" ? Math.min(2 + event.points, 5) : 1;
       for (let i = 0; i < count && this.enemies.length < CONFIG.endless.maxEnemies; i++) {
         const r = CONFIG.enemy[type].radius, x = r + 20 + this.rng() * (CONFIG.WIDTH - 2 * (r + 20));
@@ -269,7 +269,7 @@ const game = {
       for (let i = 0; i < n; i++) {
         const eventType = this.endlessEventValue("enemyType", null), eventChance = this.endlessEventValue("enemyChance", 0);
         const type = eventType && CONFIG.enemy[eventType] && this.rng() < eventChance ? eventType : (this.rng() < this.endlessEventValue("jammerChance", 0) ? "jammer" : this.pick(pool)), r = CONFIG.enemy[type].radius;
-        const elite = type !== "small" && this.rng() < this.endlessEventValue("eliteChance", 0) ? this.pick(["shield", "charger"]) : null;
+        const elite = type !== "small" && this.rng() < this.endlessEventValue("eliteChance", 0) ? this.pick(CONFIG.elite.types || ["shield", "charger"]) : null;
         this.enemies.push(pools.enemy.get(type, r + 20 + this.rng() * (CONFIG.WIDTH - 2 * (r + 20)), 0, this.pick(moves), elite));
       }
       if (this.rng() < CONFIG.endless.powerupChance + this.endlessEventValue("powerupChanceAdd", 0)) this.spawnPowerUp(30 + this.rng() * (CONFIG.WIDTH - 60), this.endlessEventValue("forceDrop", null) || this.chooseDrop());
