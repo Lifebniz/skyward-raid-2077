@@ -496,14 +496,16 @@ class Boss {
 }
 
 class PowerUp {
-  constructor(x, y, kind) { this.x = x; this.y = y; this.kind = kind; this.radius = CONFIG.powerup.radius; this.dead = false; this._magnet = false; }
+  constructor(x, y, kind) { this.x = x; this.y = y; this.kind = kind; this.radius = CONFIG.powerup.radius; this.dead = false; this._magnet = false; this._magnetRatio = 0; }
   update(dt) {
-    this.y += CONFIG.powerup.speed * dt; this._magnet = false;
+    this.y += CONFIG.powerup.speed * dt; this._magnet = false; this._magnetRatio = 0;
     if (game.player) {
       const dx = game.player.x - this.x, dy = game.player.y - this.y, d = Math.hypot(dx, dy), mr = CONFIG.powerup.magnetRadius;
       if (d > 1 && d < mr) {
-        const step = Math.min(d, CONFIG.powerup.magnetSpeed * (1.25 - d / mr) * dt);
+        const pull = 1 - d / mr;
+        const step = Math.min(d, CONFIG.powerup.magnetSpeed * (0.28 + pull) * dt);
         this.x += dx / d * step; this.y += dy / d * step; this._magnet = true;
+        this._magnetRatio = pull;
       }
     }
     if (this.y > CONFIG.HEIGHT + this.radius) this.dead = true;
@@ -514,7 +516,13 @@ class PowerUp {
     const pulse = 0.78 + Math.sin(game.titleT * 6 + x * 0.03) * 0.12;
     ctx.save();
     if (this._magnet) {
-      ctx.globalAlpha = 0.28 + pulse * 0.22; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
+      if (game.player) {
+        ctx.globalAlpha = 0.18 + this._magnetRatio * 0.32;
+        ctx.strokeStyle = bg; ctx.lineWidth = 2.2; ctx.setLineDash([6, 5]);
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(game.player.x, game.player.y); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.globalAlpha = 0.38 + this._magnetRatio * 0.32; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(x, y, r + 7 + pulse * 3, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
     }

@@ -72,7 +72,7 @@ const CONFIG = {
 
   // weights 普通掉落;endlessWeights 无尽掉落(炸弹更稀有)。火力满级后继续吃 power 会进入超载层数。
   // autoInterval:常规关卡(非无尽)每隔多久自动刷新一个道具(秒)。
-  powerup: { radius: 14, speed: 130, dropChance: 0.14, healAmount: 12, autoInterval: 5, magnetRadius: 92, magnetSpeed: 420,
+  powerup: { radius: 14, speed: 130, dropChance: 0.14, healAmount: 12, autoInterval: 5, magnetRadius: 150, magnetSpeed: 640,
     weights:        { power: 0.5,  heal: 0.22, bomb: 0.13, wing: 0.15 },
     endlessWeights: { power: 0.55, heal: 0.26, bomb: 0.04, wing: 0.15 } },
   bomb: { bossDamage: 70, flash: 0.35 },
