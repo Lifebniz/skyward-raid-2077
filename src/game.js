@@ -603,7 +603,7 @@ const game = {
     return routes.length ? routes.map(r => r.name + r.stage).join(" / ") : "未成型";
   },
   routeEffectText(source = this.bonuses, limit = 2) {
-    const effects = { "主炮": "主炮+1", "激光": "激光+2", "追踪": "追踪+1", "导弹": "导弹强化", "生存": "承伤-10%", "风险": "分数+12%" };
+    const effects = { "主炮": "主炮+1", "激光": "激光+2", "追踪": "追踪+1", "导弹": "导弹+1", "生存": "承伤-10%", "风险": "分数+12%" };
     const ready = this.buildRouteSummary(source).routes.filter(r => r.score >= 7).slice(0, limit).map(r => effects[r.name]);
     return ready.length ? ready.join(" / ") : "";
   },
@@ -628,6 +628,7 @@ const game = {
   },
   routeReady(name) { return this.routeScore(name) >= 7; },
   routeBonus(name, amount) { return this.routeReady(name) ? amount : 0; },
+  missileVolleyBonus() { return this.routeReady("导弹") ? 1 : 0; },
   routePreviewInfo(card) {
     if (!card || card.type !== "bonus") return null;
     const next = Object.assign({}, this.bonuses);

@@ -135,5 +135,8 @@ between(CONFIG.bonuses.painConverter.maxEnergy, 15, 60, "painConverter maxEnergy
 between(CONFIG.bonuses.sideCannons.maxPairs, 1, 4, "sideCannons maxPairs");
 between(CONFIG.bonuses.laserSplitter.maxPairs, 1, 5, "laserSplitter maxPairs");
 between(CONFIG.bonuses.clusterWarheads.maxCount, CONFIG.bonuses.clusterWarheads.count, 8, "clusterWarheads maxCount");
+game.bonuses = {}; assert.strictEqual(game.missileVolleyBonus(), 0, "missile route should not add volley before ready");
+game.bonuses = { missileRack: 3 }; assert.strictEqual(game.missileVolleyBonus(), 1, "missile route should add one missile when ready");
+assert(game.routeEffectText().includes("导弹+1"), "missile route resonance text should show the extra missile");
 
 console.log(`balance check passed: ${CONFIG.endless.events.length} events, ${affixes.length} boss affixes, ${CONFIG.bonusOrder.length} bonuses`);

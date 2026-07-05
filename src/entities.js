@@ -91,7 +91,7 @@ class Player {
       this._missileTimer -= dt;
       if (this._missileTimer <= 0) {
         this._missileTimer = Math.max(0.45, (s.missileInterval - oc * 0.04) * game.chipValue("missileBarrage", "intervalMult", 1) * game.shipWeaponValue("missileIntervalMult", 1) * allCd * game.weaponCooldownMult() * Math.max(0.6, 1 - game.bonusValue("missileRack", "missileCooldownMult")));
-        const xs = [-16, 16], extra = game.chipValue("missileBarrage", "extraCount", 0) + game.bonusValue("missileRack", "missileCount");
+        const xs = [-16, 16], extra = game.chipValue("missileBarrage", "extraCount", 0) + game.bonusValue("missileRack", "missileCount") + game.missileVolleyBonus();
         if (extra >= 1) xs.push(0);
         if (extra >= 2) xs.push(-32, 32);
         for (const ox of xs) game.spawnMissile(this.x + ox, this.y + 4, oc);
