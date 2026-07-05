@@ -198,8 +198,10 @@ const game = {
   triggerEndlessEvent() {
     const events = CONFIG.endless.events || [];
     if (!events.length) return;
-    const pool = this._endlessEvent ? events.filter(e => e.key !== this._endlessEvent.key) : events;
-    const e = this.pick(pool.length ? pool : events);
+    const eligible = events.filter(e => !e.minTime || this._endlessT >= e.minTime);
+    const base = eligible.length ? eligible : events;
+    const pool = this._endlessEvent ? base.filter(e => e.key !== this._endlessEvent.key) : base;
+    const e = this.pick(pool.length ? pool : base);
     this._endlessEvent = e; this._endlessEventTimer = CONFIG.endless.eventDuration; this._endlessEventT = CONFIG.endless.eventInterval; this._endlessHazardT = e.laserEvery ? (e.laserDelay || 1) : 0;
     this._endlessEventsSeen.push(e.name || e.key);
     if (this._endlessStats) this._endlessStats.events++;
@@ -265,7 +267,8 @@ const game = {
       const n = Math.min(this.endlessSpawnCount(t) + this.endlessEventValue("spawnBonus", 0), CONFIG.endless.maxEnemies - this.enemies.length);   // 不超同屏上限
       const pool = this.endlessPool(t), moves = CONFIG.endless.moves;
       for (let i = 0; i < n; i++) {
-        const type = this.rng() < this.endlessEventValue("jammerChance", 0) ? "jammer" : this.pick(pool), r = CONFIG.enemy[type].radius;
+        const eventType = this.endlessEventValue("enemyType", null), eventChance = this.endlessEventValue("enemyChance", 0);
+        const type = eventType && CONFIG.enemy[eventType] && this.rng() < eventChance ? eventType : (this.rng() < this.endlessEventValue("jammerChance", 0) ? "jammer" : this.pick(pool)), r = CONFIG.enemy[type].radius;
         const elite = type !== "small" && this.rng() < this.endlessEventValue("eliteChance", 0) ? this.pick(["shield", "charger"]) : null;
         this.enemies.push(pools.enemy.get(type, r + 20 + this.rng() * (CONFIG.WIDTH - 2 * (r + 20)), 0, this.pick(moves), elite));
       }
