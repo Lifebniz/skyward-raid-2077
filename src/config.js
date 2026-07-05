@@ -257,10 +257,11 @@ const CONFIG = {
         { key: "armored", name: "装甲", desc: "生命更高", color: "#74c0fc", hpMult: 0.18, scoreMult: 1.12 },
         { key: "rapid", name: "急袭", desc: "攻击更快", color: "#ff8787", fireMult: 0.82, scoreMult: 1.15 },
         { key: "prism", name: "棱镜", desc: "周期瞄准镭射", color: "#cc5de8", attack: "laser", every: 5.5, warn: 0.55, dur: 0.65, width: 42, damageMult: 0.85, scoreMult: 1.16 },
+        { key: "escort", name: "护卫", desc: "周期投放精英僚机", color: "#51cf66", attack: "escort", every: 7.5, enemy: "gunner", elite: "charger", maxAdds: 4, scoreMult: 1.14 },
       ],
     },
   },
-  challenge: { rulesVersion: 9, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 10, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

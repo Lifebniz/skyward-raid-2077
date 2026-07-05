@@ -869,8 +869,20 @@ const game = {
     if (b._affixTimer > 0) return;
     b._affixTimer = a.every || 5;
     if (a.attack === "laser") this.spawnBossLaser(this.player ? this.player.x : b.x, a.warn || 0.55, a.dur || 0.65, a.width || 42, b.bulletDamage * (a.damageMult || 1));
+    else if (a.attack === "escort") this.spawnBossEscort(b, a);
     this.spawnShockwave(b.x, b.y, b.radius * 1.8, a.color);
     Sound.tone(620, 0.08, "triangle", 0.1, 180);
+  },
+  spawnBossEscort(b, a) {
+    const activeAdds = this.enemies.filter(e => !e.dead && !e.isBoss).length;
+    if (activeAdds >= (a.maxAdds || 4) || this.enemies.length >= CONFIG.endless.maxEnemies) return false;
+    const type = a.enemy || "gunner", r = CONFIG.enemy[type].radius || 24;
+    const x = clamp(b.x + (this.rng() < 0.5 ? -1 : 1) * (b.radius + r + 22), r + 16, CONFIG.WIDTH - r - 16);
+    const e = pools.enemy.get(type, x, 0, "swoop", a.elite || null);
+    e.y = Math.max(-r, b.y + b.radius * 0.25);
+    this.enemies.push(e);
+    this.floats.push(new FloatText(e.x, e.y - e.radius, a.name + "僚机", a.color));
+    return true;
   },
   // Y:BOSS 狂暴触发提示(HP<=20% 时一次性)
   onBossEnrage(b) { this.showDialogue(this.bossDisplayName(b), "狂暴!攻击频率大幅提升!", 3.0); this.addShake(6, 0.28); Sound.hit(); Haptics.bomb(); },
