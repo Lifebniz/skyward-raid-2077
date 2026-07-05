@@ -25,7 +25,9 @@ function loop(now) {
   if (game._hitStopT > 0) { game._hitStopT -= dt; game.draw(ctx); requestAnimationFrame(loop); return; }   // N:命中停顿(冻结逻辑,仍绘制)
   if (game.state !== "paused") { background.update(dt); stars.update(dt); }   // 暂停冻结背景
   Music.update(dt);                                                           // M:BGM 步进
+  if (window.Multiplayer) Multiplayer.update(dt);
   game.update(dt); game.draw(ctx);
+  if (window.Multiplayer) Multiplayer.draw(ctx);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

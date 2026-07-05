@@ -11,3 +11,34 @@ html, body {
     position: absolute; left: 0; right: 0; bottom: 8px;
     text-align: center; color: #4a90d9; font-size: 12px; opacity: .6; pointer-events: none;
   }
+  .mp-panel {
+    position: absolute; right: 10px; top: 10px; z-index: 5;
+    width: min(300px, calc(100% - 20px));
+    color: #dbeafe; background: rgba(5, 12, 24, .88);
+    border: 1px solid rgba(77, 171, 247, .35); border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .35);
+    font: 13px/1.35 "Segoe UI", "Microsoft YaHei", sans-serif;
+    pointer-events: auto; user-select: text; touch-action: auto;
+  }
+  .mp-panel.collapsed .mp-body { display: none; }
+  .mp-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; padding: 8px 9px; user-select: none;
+  }
+  .mp-title { font-weight: 700; color: #fff; }
+  .mp-status { color: #8ec5ff; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mp-toggle, .mp-panel button {
+    border: 1px solid rgba(142, 197, 255, .35); border-radius: 6px;
+    background: rgba(77, 171, 247, .16); color: #eef7ff;
+    padding: 6px 8px; cursor: pointer; font: inherit;
+  }
+  .mp-toggle { min-width: 52px; }
+  .mp-body { padding: 0 9px 9px; }
+  .mp-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 7px; }
+  .mp-panel textarea {
+    box-sizing: border-box; width: 100%; height: 88px; resize: vertical;
+    border-radius: 6px; border: 1px solid rgba(142, 197, 255, .25);
+    background: rgba(255, 255, 255, .08); color: #fff; padding: 7px;
+    font: 12px/1.35 Consolas, "Microsoft YaHei", monospace;
+  }
+  .mp-hint { margin-top: 6px; color: #9fb8d5; font-size: 12px; }
