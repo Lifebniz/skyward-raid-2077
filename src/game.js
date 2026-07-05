@@ -525,8 +525,14 @@ const game = {
     const extraHp = Math.max(0, p.maxHp - (p.baseMaxHp || p.maxHp));
     return Math.min((cfg.maxDamage || 4) * stacks, Math.floor(extraHp / (cfg.hpPerDamage || 15)) * stacks);
   },
+  vitalReactorDamageMult() {
+    const cfg = CONFIG.bonuses.vitalReactor, p = this.player, stacks = this.bonusStacks("vitalReactor");
+    if (!cfg || !p || !stacks) return 0;
+    const extraHp = Math.max(0, p.maxHp - (p.baseMaxHp || p.maxHp));
+    return Math.min((cfg.maxDamageMult || 0.2) * stacks, Math.floor(extraHp / (cfg.hpPerDamageMult || 20)) * (cfg.damageMult || 0.04) * stacks);
+  },
   playerDamage(d, target = null) {
-    let m = 1 + this.bonusValue("damage", "damageMult") + this.bonusValue("glassCannon", "damageMult") + this.adrenalineValue("damageMult");
+    let m = 1 + this.bonusValue("damage", "damageMult") + this.bonusValue("glassCannon", "damageMult") + this.vitalReactorDamageMult() + this.adrenalineValue("damageMult");
     if (target && target.isBoss) m += this.bonusValue("bossHunter", "bossDamageMult");
     if (target && target.maxHp && target.hp / target.maxHp <= (CONFIG.bonuses.executioner.threshold || 0)) m += this.bonusValue("executioner", "damageMult");
     return d * m;
@@ -574,11 +580,11 @@ const game = {
   },
   buildRouteSummary(source = this.bonuses) {
     const routes = [
-      { name: "主炮", color: "#ffd43b", weights: { damage: 1, fireRate: 1, pierce: 2, kineticAmmo: 2, heavyRounds: 3, armorPiercer: 3, armorCaliber: 2, sideCannons: 3, chainSpark: 1, pointDefense: 1, executioner: 1, glassCannon: 1, overdrive: 1 } },
+      { name: "主炮", color: "#ffd43b", weights: { damage: 1, fireRate: 1, pierce: 2, kineticAmmo: 2, heavyRounds: 3, armorPiercer: 3, armorCaliber: 2, vitalReactor: 1, sideCannons: 3, chainSpark: 1, pointDefense: 1, executioner: 1, glassCannon: 1, overdrive: 1 } },
       { name: "激光", color: "#cc5de8", weights: { damage: 1, range: 1, laserLens: 3, laserSplitter: 3, chargeAmp: 1, bossHunter: 1, glassCannon: 1 } },
       { name: "追踪", color: "#4dabf7", weights: { range: 1, fireRate: 1, swarmCore: 3, homingShards: 3, magnetCore: 1, comboBattery: 1, comboSurge: 1 } },
       { name: "导弹", color: "#ff922b", weights: { missileRack: 3, explosivePayload: 3, clusterWarheads: 3, missileInterceptor: 2, fireRate: 1, range: 1, bossHunter: 1 } },
-      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, armorPlating: 3, fieldRepair: 3, leech: 2, painConverter: 1, salvage: 2, armorCaliber: 2, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1 } },
+      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, armorPlating: 3, fieldRepair: 3, leech: 2, painConverter: 1, salvage: 2, armorCaliber: 2, vitalReactor: 3, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1 } },
       { name: "风险", color: "#ff6b6b", weights: { glassCannon: 3, overdrive: 3, adrenaline: 3, painConverter: 2, comboSurge: 2, executioner: 1, bossHunter: 1 } },
     ].map(r => {
       const score = Object.keys(r.weights).reduce((sum, key) => sum + (source[key] || 0) * r.weights[key], 0);
@@ -648,6 +654,7 @@ const game = {
     if (key === "maxHp" && p) return "最大生命 " + p.maxHp + "→" + (p.maxHp + b.hp);
     if (key === "reinforcedHull" && p) { const gain = Math.max(1, Math.round(p.maxHp * b.hpPct)); return "最大生命 " + p.maxHp + "→" + (p.maxHp + gain); }
     if (key === "armorCaliber" && p) return "主炮加成 +" + this.armorCaliberDamage() + "→+" + this.withDraftBonus(key, () => this.armorCaliberDamage());
+    if (key === "vitalReactor" && p) return "生命增伤 +" + pct(this.vitalReactorDamageMult()) + "→+" + pct(this.withDraftBonus(key, () => this.vitalReactorDamageMult()));
     if (["kineticAmmo", "heavyRounds"].includes(key)) return "主炮伤害 " + num(this.mainBulletDamage()) + "→" + num(this.withDraftBonus(key, () => this.mainBulletDamage()));
     if (key === "armorPiercer") return "高血主炮 +" + pct(this.bonusValue(key, "heavyDamageMult")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "heavyDamageMult")));
     if (["damage", "glassCannon", "bossHunter"].includes(key)) return "伤害倍率 " + pct(this.playerDamage(1, { isBoss: key === "bossHunter", hp: 1, maxHp: 1 })) + "→" + pct(this.withDraftBonus(key, () => this.playerDamage(1, { isBoss: key === "bossHunter", hp: 1, maxHp: 1 })));
@@ -2425,6 +2432,7 @@ const game = {
     if (!b) return key + "×" + n;
     if (key === "lastStand" && n > 0) return b.name + " " + (this._lastStandCd > 0 ? Math.ceil(this._lastStandCd) + "s" : "就绪");
     if (key === "armorCaliber" && n > 0) return b.name + " +" + this.armorCaliberDamage();
+    if (key === "vitalReactor" && n > 0) return b.name + " +" + Math.round(this.vitalReactorDamageMult() * 100) + "%";
     return b.name + "×" + n;
   },
   drawEndlessEventHUD(ctx) {
