@@ -7,7 +7,7 @@ const game = {
   state: "title", diff: CONFIG.difficulties.normal, ship: CONFIG.ships.balanced, currentLevel: 0, world: 1, player: null, boss: null,
   playerBullets: [], homingShots: [], missiles: [], playerLasers: [], enemyBullets: [], enemies: [], powerups: [], particles: [], floats: [], lasers: [], shockwaves: [], specialWaves: [],
   score: 0, combo: 0, comboTimer: 0, maxCombo: 0,
-  threat: 0, chips: {}, bonuses: {}, _chipCursor: 0, _chipChoices: [], _chipRerolls: 0, _nextChipDraftAt: 0, _bonusKillN: 0, _noHitT: 0, _fieldRepairT: 0, _emergencyBarrierCd: 0, _lastStandCd: 0, _chipStats: {}, _bonusStats: {}, _maxThreatLevel: 0,
+  threat: 0, chips: {}, bonuses: {}, _chipCursor: 0, _chipChoices: [], _chipRerolls: 0, _nextChipDraftAt: 0, _bonusKillN: 0, _noHitT: 0, _fieldRepairT: 0, _emergencyBarrierCd: 0, _lastStandCd: 0, _chipStats: {}, _bonusStats: {}, _bonusHpGain: {}, _maxThreatLevel: 0,
   flashTimer: 0, bannerText: "", bannerSub: "", bannerTimer: 0, warningTimer: 0, titleT: 0, _sliderDrag: false,
   dlgName: "", dlgText: "", dlgTimer: 0,   // P:BOSS 台词
   topScores: [], _recorded: false,
@@ -299,7 +299,7 @@ const game = {
     const previousBest = ChallengeHistory.best(this.challengeSeed, this.ship.key);
     const challengeCode = Challenge.encode({ seed: this.challengeSeed, ship: this.ship.key, score: final, time, combo: this.maxCombo, splits, rulesVersion: CONFIG.challenge.rulesVersion });
     const best = ChallengeHistory.submit({ seed: this.challengeSeed, ship: this.ship.key, score: final, time, combo: this.maxCombo, splits, code: challengeCode, daily: this.challengeDaily });
-    this.endlessResult = { base: this.score, diffFactor: this.activeDiff.scoreMult, time, final, maxCombo: this.maxCombo, splits, challengeCode, challengeSeed: this.challengeSeed, challengeMode: this.challengeMode, challengeDaily: this.challengeDaily, target: this.challengeTarget, rival: (typeof RivalInterference !== "undefined") ? RivalInterference.summary(this.rivalInterference) : null, events: this._endlessEventsSeen.slice(), bossAffixes: this._endlessBossAffixesSeen.slice(), chips: Object.assign({}, this._chipStats), bonuses: Object.assign({}, this._bonusStats), telemetry: Object.assign({}, this._endlessStats || {}), timeline: this._endlessTimeline.slice(), maxThreat: this._maxThreatLevel, best, newBest: !previousBest || final > previousBest.score };
+    this.endlessResult = { base: this.score, diffFactor: this.activeDiff.scoreMult, time, final, maxCombo: this.maxCombo, splits, challengeCode, challengeSeed: this.challengeSeed, challengeMode: this.challengeMode, challengeDaily: this.challengeDaily, target: this.challengeTarget, rival: (typeof RivalInterference !== "undefined") ? RivalInterference.summary(this.rivalInterference) : null, events: this._endlessEventsSeen.slice(), bossAffixes: this._endlessBossAffixesSeen.slice(), chips: Object.assign({}, this._chipStats), bonuses: Object.assign({}, this._bonusStats), bonusHpGain: Object.assign({}, this._bonusHpGain), telemetry: Object.assign({}, this._endlessStats || {}), timeline: this._endlessTimeline.slice(), maxThreat: this._maxThreatLevel, best, newBest: !previousBest || final > previousBest.score };
     this.endlessTop = EndlessBoard.submit(final);
     this.state = "endlessover";
     Achievements.checkEndlessEnd({ time: this._endlessT, maxCombo: this.maxCombo });   // OO
@@ -501,7 +501,7 @@ const game = {
   showDialogue(name, text, dur) { this.dlgName = name; this.dlgText = text || ""; this.dlgTimer = dur || 3.5; },   // P
   addShake(mag, t) { this._shake = Math.max(this._shake, mag); this._shakeT = Math.max(this._shakeT, t); },   // N
   hitStop(t) { this._hitStopT = Math.max(this._hitStopT, t); },
-  resetDepthSystems() { this.threat = 0; this.chips = {}; this.bonuses = {}; this._chipCursor = 0; this._chipChoices = []; this._chipRerolls = 0; this._nextChipDraftAt = 0; this._bonusKillN = 0; this._noHitT = 0; this._fieldRepairT = 0; this._emergencyBarrierCd = 0; this._lastStandCd = 0; this._chipStats = {}; this._bonusStats = {}; this._maxThreatLevel = 0; },
+  resetDepthSystems() { this.threat = 0; this.chips = {}; this.bonuses = {}; this._chipCursor = 0; this._chipChoices = []; this._chipRerolls = 0; this._nextChipDraftAt = 0; this._bonusKillN = 0; this._noHitT = 0; this._fieldRepairT = 0; this._emergencyBarrierCd = 0; this._lastStandCd = 0; this._chipStats = {}; this._bonusStats = {}; this._bonusHpGain = {}; this._maxThreatLevel = 0; },
   maxThreat() { return CONFIG.threat.maxLevel * CONFIG.threat.perLevel; },
   threatLevel() { return clamp(Math.floor(this.threat / CONFIG.threat.perLevel), 0, CONFIG.threat.maxLevel); },
   threatScoreMult() {
@@ -522,6 +522,7 @@ const game = {
   chipValue(key, prop, fallback) { const c = CONFIG.chips[key]; return this.chipActive(key) && c && c[prop] != null ? c[prop] : fallback; },
   bonusStacks(key) { return this.bonuses[key] || 0; },
   bonusValue(key, prop, fallback = 0) { const b = CONFIG.bonuses[key]; return b && b[prop] ? this.bonusStacks(key) * b[prop] : fallback; },
+  bonusHpGain(key) { return (this._bonusHpGain && this._bonusHpGain[key]) || 0; },
   adrenalineValue(prop) {
     const b = CONFIG.bonuses.adrenaline, p = this.player;
     return b && p && p.maxHp && p.hp / p.maxHp <= b.threshold ? this.bonusStacks("adrenaline") * (b[prop] || 0) : 0;
@@ -587,8 +588,10 @@ const game = {
     const b = CONFIG.bonuses[key]; if (!b) return;
     this.bonuses[key] = (this.bonuses[key] || 0) + 1;
     this._bonusStats[key] = (this._bonusStats[key] || 0) + 1;
-    if (key === "maxHp" && this.player) { this.player.maxHp += b.hp; this.player.hp = clamp(this.player.hp + b.hp, 0, this.player.maxHp); }
-    if (b.hpPct && this.player) { const gain = Math.max(1, Math.round(this.player.maxHp * b.hpPct)); this.player.maxHp += gain; this.player.hp = clamp(this.player.hp + gain, 0, this.player.maxHp); }
+    let hpGain = 0;
+    if (key === "maxHp" && this.player) { hpGain += b.hp; this.player.maxHp += b.hp; this.player.hp = clamp(this.player.hp + b.hp, 0, this.player.maxHp); }
+    if (b.hpPct && this.player) { const gain = Math.max(1, Math.round(this.player.maxHp * b.hpPct)); hpGain += gain; this.player.maxHp += gain; this.player.hp = clamp(this.player.hp + gain, 0, this.player.maxHp); }
+    if (hpGain > 0) this._bonusHpGain[key] = (this._bonusHpGain[key] || 0) + hpGain;
     if (this.player) this.floats.push(new FloatText(this.player.x, this.player.y - 50, "BONUS " + b.name, b.color));
   },
   cardInfo(id) {
@@ -629,6 +632,8 @@ const game = {
     else if (time >= 60 && hitsPerMin <= 1.5) tags.push("走位稳定");
     if ((tele.bossKills || 0) >= 3) tags.push("Boss处理强");
     else if ((r.bossAffixes || []).length && !(tele.bossKills || 0)) tags.push("Boss压力高");
+    const hpGain = Object.values(r.bonusHpGain || {}).reduce((sum, n) => sum + (n || 0), 0);
+    if (hpGain >= 20) tags.push("血量构筑 +" + hpGain + "HP");
     if (tele.cleanEvents) tags.push("完美空域 " + tele.cleanEvents);
     else if (tele.eventClears) tags.push("空域突破 " + tele.eventClears);
     if ((tele.jammed || 0) / time >= 0.18) tags.push("干扰压力高");
@@ -1601,7 +1606,7 @@ const game = {
       bx += bw + 8; shown++; return true;
     };
     for (const key of active) if (!drawBadge(CONFIG.chips[key].name + " " + Math.ceil(this.chips[key]) + "s", CONFIG.chips[key].color)) break;
-    for (const key of keys) if (!drawBadge(CONFIG.bonuses[key].name + "×" + this.bonuses[key], CONFIG.bonuses[key].color)) break;
+    for (const key of keys) if (!drawBadge(this.bonusHUDText(key), CONFIG.bonuses[key].color)) break;
     if (shown < active.length + keys.length) { ctx.fillStyle = "#adb5bd"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText("+" + (active.length + keys.length - shown), bx + 4, by + 1); }
     ctx.restore();
   },
@@ -1684,7 +1689,10 @@ const game = {
     const chipKeys = Object.keys(r.chips || {}).filter(k => r.chips[k] > 0);
     const chipText = chipKeys.length ? chipKeys.map(k => (CONFIG.chips[k] ? CONFIG.chips[k].name : k) + "×" + r.chips[k]).slice(0, 3).join(" / ") : "无";
     const bonusKeys = Object.keys(r.bonuses || {}).filter(k => r.bonuses[k] > 0);
-    const bonusText = bonusKeys.length ? bonusKeys.map(k => (CONFIG.bonuses[k] ? CONFIG.bonuses[k].name : k) + "×" + r.bonuses[k]).slice(0, 3).join(" / ") : "无";
+    const bonusText = bonusKeys.length ? bonusKeys.map(k => {
+      const b = CONFIG.bonuses[k], hpGain = ((r.bonusHpGain || {})[k] || 0);
+      return b ? b.name + (hpGain > 0 ? " +" + hpGain + "HP" : "×" + r.bonuses[k]) : k + "×" + r.bonuses[k];
+    }).slice(0, 3).join(" / ") : "无";
     const bossAffixText = r.bossAffixes && r.bossAffixes.length ? r.bossAffixes.slice(-3).join(" / ") : "无";
     const routeText = this.buildRouteText(r.bonuses || {}, 2);
     const routeEffect = this.routeEffectText(r.bonuses || {}, 2);
@@ -2487,6 +2495,10 @@ const game = {
     const b = CONFIG.bonuses[key], n = this.bonuses[key] || 0;
     if (!b) return key + "×" + n;
     if (key === "lastStand" && n > 0) return b.name + " " + (this._lastStandCd > 0 ? Math.ceil(this._lastStandCd) + "s" : "就绪");
+    if ((key === "maxHp" || key === "reinforcedHull") && this.bonusHpGain(key) > 0) return b.name + " +" + this.bonusHpGain(key) + "HP";
+    if (key === "armorPlating" && n > 0) return b.name + " -" + Math.round(this.bonusValue(key, "damageReductionMult") * 100) + "%";
+    if (key === "fieldRepair" && n > 0) return b.name + " " + Math.round(this.bonusValue(key, "healPct") * 100) + "%/s";
+    if (key === "leech" && n > 0) return b.name + " +" + this.bonusValue(key, "heal") + "/杀";
     if (key === "armorCaliber" && n > 0) return b.name + " +" + this.armorCaliberDamage();
     if (key === "vitalReactor" && n > 0) return b.name + " +" + Math.round(this.vitalReactorDamageMult() * 100) + "%";
     if (key === "shieldAmplifier" && n > 0) return b.name + " +" + Math.round(this.bonusValue(key, "damageMult") * 100) + "%" + (this.player && this.player.shieldHp > 0 ? " 激活" : "");

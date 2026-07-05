@@ -149,6 +149,13 @@ between(CONFIG.bonuses.vitalReactor.damageMult, 0.02, 0.08, "vitalReactor damage
 between(CONFIG.bonuses.vitalReactor.maxDamageMult, 0.1, 0.4, "vitalReactor maxDamageMult");
 between(CONFIG.bonuses.shieldAmplifier.damageMult, 0.08, 0.3, "shieldAmplifier damageMult");
 between(CONFIG.bonuses.signalFilter.jamResist, 0.08, 0.3, "signalFilter jamResist");
+game.bonuses = {}; game._bonusStats = {}; game._bonusHpGain = {}; game.floats = []; game.player = { x: 100, y: 100, hp: 80, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
+game.activateBonus("maxHp");
+game.activateBonus("reinforcedHull");
+assert(game._bonusHpGain.maxHp >= CONFIG.bonuses.maxHp.hp, "maxHp bonus should record HP gain");
+assert(game._bonusHpGain.reinforcedHull > 0, "reinforcedHull should record HP gain");
+assert(game.bonusHUDText("maxHp").includes("HP"), "HP bonus HUD should show gained HP");
+assert(game.endlessReviewTags({ telemetry: {}, time: 60, bonuses: game.bonuses, bonusHpGain: game._bonusHpGain }).some(t => t.includes("HP")), "endless review should tag HP builds");
 game.bonuses = { shieldAmplifier: 1 }; game.chips = {}; game.player = { hp: 100, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
 assert.strictEqual(game.playerDamage(100), 100, "shieldAmplifier should not add damage without shield");
 game.player.shieldHp = 10;
