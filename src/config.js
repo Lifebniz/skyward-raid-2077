@@ -138,10 +138,11 @@ const CONFIG = {
     overdrive: { name: "过载弹幕", desc: "射速 +25%,承伤 +15%", color: "#ffd43b", rarity: "史诗", weight: 12, cooldownMult: 0.25, damageTakenMult: 0.15 },
   },
   elite: {
-    minLevel: 3, baseChance: 0.035, levelChance: 0.012, endlessChance: 0.04, threatChance: 0.02, maxChance: 0.18, types: ["shield", "charger", "berserker"],
+    minLevel: 3, baseChance: 0.035, levelChance: 0.012, endlessChance: 0.04, threatChance: 0.02, maxChance: 0.18, types: ["shield", "charger", "berserker", "repair"],
     shield: { name: "护盾", color: "#74c0fc", hpMult: 1.15, shield: 12, scoreMult: 1.35 },
     charger: { name: "充能", color: "#ffd43b", hpMult: 1.08, scoreMult: 1.45, cd: 2.4, warn: 0.65, count: 3, spread: 18, speed: 340, damageMult: 1.15 },
     berserker: { name: "狂暴", color: "#ff6b6b", hpMult: 0.92, speedMult: 1.18, fireMult: 0.78, scoreMult: 1.5 },
+    repair: { name: "再生", color: "#69db7c", hpMult: 1.06, scoreMult: 1.42, regenEvery: 2.6, regenPct: 0.08 },
   },
   bomb: { bossDamage: 70, flash: 0.35 },
 
@@ -278,7 +279,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 29, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 30, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

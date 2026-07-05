@@ -25,13 +25,15 @@ between(CONFIG.endless.boss.interval, 25, 55, "boss interval");
 const enemyKeys = new Set(Object.keys(CONFIG.enemy));
 const eliteTypes = CONFIG.elite.types || [];
 unique(eliteTypes, "elite types");
-assert(eliteTypes.length >= 3, "elite type variety should include at least 3 types");
+assert(eliteTypes.length >= 4, "elite type variety should include at least 4 types");
 for (const key of eliteTypes) {
   const e = CONFIG.elite[key];
   assert(e && e.name && e.color, `elite ${key} needs readable text`);
   if (e.hpMult) between(e.hpMult, 0.75, 1.35, `elite ${key} hpMult`);
   if (e.speedMult) between(e.speedMult, 1, 1.45, `elite ${key} speedMult`);
   if (e.fireMult) between(e.fireMult, 0.6, 1, `elite ${key} fireMult`);
+  if (e.regenEvery) between(e.regenEvery, 1.5, 4, `elite ${key} regenEvery`);
+  if (e.regenPct) between(e.regenPct, 0.03, 0.12, `elite ${key} regenPct`);
 }
 for (const [i, pool] of CONFIG.endless.pools.entries()) {
   assert(pool.enemies && pool.enemies.length, `endless pool ${i} is empty`);

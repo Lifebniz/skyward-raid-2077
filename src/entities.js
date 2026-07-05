@@ -421,7 +421,18 @@ class Enemy {
     }
   }
   updateElite(dt) {
-    if (this.elite !== "charger" || this.y <= 0 || this.y >= CONFIG.HEIGHT * 0.76 || !game.player) return;
+    if (!this.eliteCfg || this.y <= 0 || this.y >= CONFIG.HEIGHT * 0.76) return;
+    if (this.elite === "repair") {
+      this._eliteCd -= dt;
+      if (this._eliteCd > 0) return;
+      this._eliteCd = this.eliteCfg.regenEvery || 2.6;
+      if (this.hp >= this.maxHp) return;
+      const before = this.hp, heal = Math.max(1, Math.round(this.maxHp * (this.eliteCfg.regenPct || 0.06)));
+      this.hp = Math.min(this.maxHp, this.hp + heal);
+      game.floats.push(new FloatText(this.x, this.y - this.radius - 18, "再生 +" + Math.round(this.hp - before), this.eliteCfg.color));
+      return;
+    }
+    if (this.elite !== "charger" || !game.player) return;
     if (this._eliteWarn > 0) {
       this._eliteWarn -= dt;
       if (this._eliteWarn <= 0) {
