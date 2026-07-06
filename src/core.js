@@ -126,10 +126,10 @@ const background = {
   draw(ctx, level) {
     const W = CONFIG.WIDTH, H = CONFIG.HEIGHT, th = CONFIG.themes[(level - 1) % CONFIG.themes.length];
     const base = ImageAssets.background(level, "base");
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, th.sky1); g.addColorStop(1, th.sky2);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     if (base) ImageAssets.drawScrolling(ctx, base, this.scroll * 0.18);
     else {
-      const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, th.sky1); g.addColorStop(1, th.sky2);
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
       // RR:星云软云层 —— 比 band1/band2 更慢的视差(纵深感的"最远景"),纯径向渐变模拟柔光,不用 ctx.filter 保性能。
       // 交替左右位置同样要用"绝对行号"(nebBaseRow+i)判断奇偶,道理和下面 band2 的注释一样,不然循环归零时会跳变。
       const nebSp = 480, nebT = this.scroll * 0.12, offNeb = nebT % nebSp, nebBaseRow = Math.floor(nebT / nebSp);
