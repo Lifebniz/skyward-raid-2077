@@ -7,7 +7,7 @@ const game = {
   state: "title", diff: CONFIG.difficulties.normal, ship: CONFIG.ships.balanced, currentLevel: 0, world: 1, player: null, boss: null,
   playerBullets: [], homingShots: [], missiles: [], playerLasers: [], enemyBullets: [], enemies: [], powerups: [], particles: [], floats: [], lasers: [], shockwaves: [], specialWaves: [],
   score: 0, combo: 0, comboTimer: 0, maxCombo: 0,
-  threat: 0, chips: {}, bonuses: {}, _chipCursor: 0, _chipChoices: [], _chipRerolls: 0, _nextChipDraftAt: 0, _bonusKillN: 0, _noHitT: 0, _fieldRepairT: 0, _repairLoopT: 0, _emergencyBarrierCd: 0, _lastStandCd: 0, _chipStats: {}, _bonusStats: {}, _bonusHpGain: {}, _maxThreatLevel: 0,
+  threat: 0, chips: {}, bonuses: {}, _chipCursor: 0, _chipChoices: [], _chipRerolls: 0, _bonusRerolls: 0, _nextChipDraftAt: 0, _bonusKillN: 0, _noHitT: 0, _fieldRepairT: 0, _repairLoopT: 0, _emergencyBarrierCd: 0, _lastStandCd: 0, _chipStats: {}, _bonusStats: {}, _bonusHpGain: {}, _maxThreatLevel: 0,
   flashTimer: 0, bannerText: "", bannerSub: "", bannerTimer: 0, warningTimer: 0, titleT: 0, _sliderDrag: false,
   dlgName: "", dlgText: "", dlgTimer: 0,   // P:BOSS 台词
   topScores: [], _recorded: false,
@@ -228,7 +228,8 @@ const game = {
     if (gain > 0) { this.score += gain; this.floats.push(new FloatText(this.player.x, this.player.y - 78, "空域突破 +" + gain, e.color || "#ffd43b")); }
     if (clean && cfg.eventCleanShield > 0) {
       this.player.grantShield(Math.min(90, this.player.shieldHp + cfg.eventCleanShield), cfg.eventCleanShieldDur || 5);
-      this.floats.push(new FloatText(this.player.x, this.player.y - 96, "完美空域 护盾+" + cfg.eventCleanShield, e.color || "#74c0fc"));
+      this._bonusRerolls = Math.min(2, (this._bonusRerolls || 0) + 1);
+      this.floats.push(new FloatText(this.player.x, this.player.y - 96, "完美空域 护盾+" + cfg.eventCleanShield + " 重抽+1", e.color || "#74c0fc"));
     }
     return gain;
   },
@@ -505,7 +506,7 @@ const game = {
   showDialogue(name, text, dur) { this.dlgName = name; this.dlgText = text || ""; this.dlgTimer = dur || 3.5; },   // P
   addShake(mag, t) { this._shake = Math.max(this._shake, mag); this._shakeT = Math.max(this._shakeT, t); },   // N
   hitStop(t) { this._hitStopT = Math.max(this._hitStopT, t); },
-  resetDepthSystems() { this.threat = 0; this.chips = {}; this.bonuses = {}; this._chipCursor = 0; this._chipChoices = []; this._chipRerolls = 0; this._nextChipDraftAt = 0; this._lastChipDraftAt = -Infinity; this._pendingBossDraft = false; this._chipDraftReason = ""; this._bonusKillN = 0; this._noHitT = 0; this._fieldRepairT = 0; this._repairLoopT = 0; this._emergencyBarrierCd = 0; this._lastStandCd = 0; this._chipStats = {}; this._bonusStats = {}; this._bonusHpGain = {}; this._maxThreatLevel = 0; },
+  resetDepthSystems() { this.threat = 0; this.chips = {}; this.bonuses = {}; this._chipCursor = 0; this._chipChoices = []; this._chipRerolls = 0; this._bonusRerolls = 0; this._nextChipDraftAt = 0; this._lastChipDraftAt = -Infinity; this._pendingBossDraft = false; this._chipDraftReason = ""; this._bonusKillN = 0; this._noHitT = 0; this._fieldRepairT = 0; this._repairLoopT = 0; this._emergencyBarrierCd = 0; this._lastStandCd = 0; this._chipStats = {}; this._bonusStats = {}; this._bonusHpGain = {}; this._maxThreatLevel = 0; },
   maxThreat() { return CONFIG.threat.maxLevel * CONFIG.threat.perLevel; },
   threatLevel() { return clamp(Math.floor(this.threat / CONFIG.threat.perLevel), 0, CONFIG.threat.maxLevel); },
   threatScoreMult() {
@@ -847,7 +848,8 @@ const game = {
     if (this._endlessStats) this._endlessStats.drafts++;
     this._lastChipDraftAt = this._endlessT;
     this._chipDraftReason = reason;
-    this._chipRerolls = 1;
+    this._chipRerolls = 1 + Math.min(2, this._bonusRerolls || 0);
+    this._bonusRerolls = 0;
     this.drawChipChoices();
     this.state = "chipselect";
     return null;
@@ -1817,7 +1819,7 @@ const game = {
       const preview = this.draftPreviewText(card);
       if (preview) { ctx.fillStyle = rarityColor; ctx.font = "bold 12px 'Segoe UI', sans-serif"; ctx.fillText(UI.wrapText(ctx, preview, r.w - 118, 1)[0] || preview, r.x + 88, r.y + 88); }
     }
-    this.drawChipActionButton(ctx, "reroll", this._chipRerolls > 0 ? "重抽" : "已重抽", "#4dabf7", this._chipRerolls <= 0);
+    this.drawChipActionButton(ctx, "reroll", this._chipRerolls > 0 ? "重抽 " + this._chipRerolls : "已重抽", "#4dabf7", this._chipRerolls <= 0);
     this.drawChipActionButton(ctx, "skip", "跳过拿分", "#adb5bd", false);
     this.drawDraftBuildSummary(ctx);
     ctx.textAlign = "left";
