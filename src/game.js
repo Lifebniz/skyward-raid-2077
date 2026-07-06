@@ -608,7 +608,7 @@ const game = {
       { name: "激光", color: "#cc5de8", weights: { damage: 1, range: 1, laserLens: 3, laserSplitter: 3, chargeAmp: 1, bossHunter: 1, weakScanner: 2, glassCannon: 1 } },
       { name: "追踪", color: "#4dabf7", weights: { range: 1, fireRate: 1, swarmCore: 3, homingShards: 3, signalFilter: 2, magnetCore: 1, comboBattery: 1, comboSurge: 1 } },
       { name: "导弹", color: "#ff922b", weights: { missileRack: 3, explosivePayload: 3, clusterWarheads: 3, missileInterceptor: 2, fireRate: 1, range: 1, bossHunter: 1, weakScanner: 2 } },
-      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, armorPlating: 3, fieldRepair: 3, repairLoop: 3, leech: 2, livingArmor: 3, painConverter: 1, salvage: 2, shieldAmplifier: 3, armorCaliber: 2, vitalReactor: 3, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1, signalFilter: 1 } },
+      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, armorPlating: 3, fieldRepair: 3, repairLoop: 3, repairPulse: 2, leech: 2, livingArmor: 3, painConverter: 1, salvage: 2, shieldAmplifier: 3, armorCaliber: 2, vitalReactor: 3, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1, signalFilter: 1 } },
       { name: "风险", color: "#ff6b6b", weights: { glassCannon: 3, overdrive: 3, adrenaline: 3, painConverter: 2, comboSurge: 2, executioner: 1, bossHunter: 1, weakScanner: 1 } },
     ].map(r => {
       const score = Object.keys(r.weights).reduce((sum, key) => sum + (source[key] || 0) * r.weights[key], 0);
@@ -695,6 +695,7 @@ const game = {
     if (key === "reinforcedHull" && p) { const gain = Math.max(1, Math.round(p.maxHp * b.hpPct)); return "最大生命 " + p.maxHp + "→" + (p.maxHp + gain); }
     if (key === "livingArmor") return "击杀成长 " + this.bonusHpGain(key) + "/" + (this.bonusStacks(key) * b.maxHp) + "HP→" + this.bonusHpGain(key) + "/" + ((this.bonusStacks(key) + 1) * b.maxHp) + "HP";
     if (key === "repairLoop") return "周期修复 +" + pct(this.bonusValue(key, "healPct")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "healPct")));
+    if (key === "repairPulse") return "治疗震击 " + this.bonusValue(key, "damage") + "→" + this.withDraftBonus(key, () => this.bonusValue(key, "damage"));
     if (key === "armorCaliber" && p) return "主炮加成 +" + this.armorCaliberDamage() + "→+" + this.withDraftBonus(key, () => this.armorCaliberDamage());
     if (key === "vitalReactor" && p) return "生命增伤 +" + pct(this.vitalReactorDamageMult()) + "→+" + pct(this.withDraftBonus(key, () => this.vitalReactorDamageMult()));
     if (["kineticAmmo", "heavyRounds"].includes(key)) return "主炮伤害 " + num(this.mainBulletDamage()) + "→" + num(this.withDraftBonus(key, () => this.mainBulletDamage()));
@@ -928,6 +929,23 @@ const game = {
       if (dx * dx + dy * dy <= rr * rr && e.damage(this.playerDamage(cfg.damage * stacks, e))) this.onEnemyKilled(e);
     }
   },
+  triggerRepairPulse(src) {
+    const stacks = this.bonusStacks("repairPulse"), cfg = CONFIG.bonuses.repairPulse;
+    if (!stacks || !cfg || !src) return 0;
+    const range = cfg.range + stacks * 22;
+    let hits = 0;
+    this.spawnShockwave(src.x, src.y, range, cfg.color);
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const dx = e.x - src.x, dy = e.y - src.y, rr = range + e.radius;
+      if (dx * dx + dy * dy <= rr * rr) {
+        hits++;
+        if (e.damage(this.playerDamage(cfg.damage * stacks, e))) this.onEnemyKilled(e);
+      }
+    }
+    if (hits) this.floats.push(new FloatText(src.x, src.y - 82, "维修脉冲 -" + hits, cfg.color));
+    return hits;
+  },
   triggerPainConverter(src, hpLoss) {
     const stacks = this.bonusStacks("painConverter"), cfg = CONFIG.bonuses.painConverter;
     if (!stacks || !cfg || !src || hpLoss <= 0) return 0;
@@ -994,9 +1012,11 @@ const game = {
           const before = this.player.hp;
           this.player.heal(amount);
           this.floats.push(new FloatText(this.player.x, this.player.y - 68, "循环修复 +" + Math.round(this.player.hp - before), loopCfg.color));
+          if (this.player.hp > before) this.triggerRepairPulse(this.player);
         } else {
           this.player.grantShield(Math.min(loopCfg.maxShield || 36, this.player.shieldHp + (loopCfg.shield || 0) * loopStacks), loopCfg.dur || 5);
           this.floats.push(new FloatText(this.player.x, this.player.y - 68, "循环护盾 +" + (loopCfg.shield || 0) * loopStacks, loopCfg.color));
+          this.triggerRepairPulse(this.player);
         }
       }
     } else this._repairLoopT = 0;
@@ -1386,8 +1406,8 @@ const game = {
       }
       else { p.addWing(); this.floats.push(new FloatText(p.x, p.y - 34, "僚机 +1", "#dee2e6")); }
     } else {
-      if (p.hp >= p.maxHp) { p.grantShield(o.healShield, o.healShieldDur); this.floats.push(new FloatText(p.x, p.y - 34, "临时护盾 +" + o.healShield, "#74c0fc")); this.addThreat(o.threatGain); this.grantOverflowScore("#74c0fc"); }
-      else { p.heal(CONFIG.powerup.healAmount); this.floats.push(new FloatText(p.x, p.y - 34, "HP +" + CONFIG.powerup.healAmount, "#ff8787")); }
+      if (p.hp >= p.maxHp) { p.grantShield(o.healShield, o.healShieldDur); this.floats.push(new FloatText(p.x, p.y - 34, "临时护盾 +" + o.healShield, "#74c0fc")); this.addThreat(o.threatGain); this.grantOverflowScore("#74c0fc"); this.triggerRepairPulse(p); }
+      else { const before = p.hp; p.heal(CONFIG.powerup.healAmount); this.floats.push(new FloatText(p.x, p.y - 34, "HP +" + CONFIG.powerup.healAmount, "#ff8787")); if (p.hp > before) this.triggerRepairPulse(p); }
     }
   },
 

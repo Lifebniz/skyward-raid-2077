@@ -95,7 +95,7 @@ const CONFIG = {
     sideGuns: { name: "侧翼炮组", desc: "主炮附加斜向火力", color: "#ffd43b", duration: 10, angle: 22 },
     volatileCore: { name: "危险过载", desc: "分数更高,承伤也更高", color: "#ff6b6b", duration: 9, scoreBonus: 0.35, threatGainMult: 1.35, damageTakenMult: 1.18 },
   },
-  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "leech", "livingArmor", "painConverter", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "shieldAmplifier", "kineticAmmo", "heavyRounds", "armorPiercer", "armorCaliber", "vitalReactor", "sideCannons", "laserLens", "laserSplitter", "swarmCore", "homingShards", "signalFilter", "explosivePayload", "clusterWarheads", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "weakScanner", "adrenaline", "emergencyBarrier", "overdrive"],
+  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "painConverter", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "shieldAmplifier", "kineticAmmo", "heavyRounds", "armorPiercer", "armorCaliber", "vitalReactor", "sideCannons", "laserLens", "laserSplitter", "swarmCore", "homingShards", "signalFilter", "explosivePayload", "clusterWarheads", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "weakScanner", "adrenaline", "emergencyBarrier", "overdrive"],
   bonuses: {
     damage: { name: "火力校准", desc: "全武器伤害 +15%", color: "#ff6b6b", damageMult: 0.15 },
     fireRate: { name: "加速扳机", desc: "主炮/副武器射速 +10%", color: "#4dabf7", cooldownMult: 0.10 },
@@ -105,6 +105,7 @@ const CONFIG = {
     armorPlating: { name: "钛合装甲", desc: "承受伤害 -8%", color: "#74c0fc", rarity: "稀有", weight: 50, damageReductionMult: 0.08 },
     fieldRepair: { name: "纳米修复", desc: "4秒未受击后每秒回复2%最大生命", color: "#69db7c", rarity: "稀有", weight: 42, healPct: 0.02, delay: 4, tick: 1 },
     repairLoop: { name: "维修循环", desc: "每14秒恢复6%最大生命,满血转临时护盾", color: "#38d9a9", rarity: "稀有", weight: 36, every: 14, healPct: 0.06, shield: 8, maxShield: 36, dur: 5 },
+    repairPulse: { name: "维修脉冲", desc: "治疗补给和维修循环会震击近身敌人", color: "#69db7c", rarity: "稀有", weight: 30, damage: 7, range: 165 },
     leech: { name: "吸能核心", desc: "击杀回复 1 生命", color: "#e64980", heal: 1 },
     livingArmor: { name: "活性装甲", desc: "每12次非炸弹击杀永久最大生命 +3,每层最多 +30", color: "#2f9e44", rarity: "稀有", weight: 38, every: 12, hp: 3, maxHp: 30 },
     painConverter: { name: "痛觉转换", desc: "受伤时将损失生命转为必杀能量", color: "#f06595", rarity: "稀有", weight: 28, energyPerHp: 1.1, maxEnergy: 35 },
@@ -291,7 +292,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 52, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 53, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

@@ -12,6 +12,7 @@ vm.runInContext(fs.readFileSync("src/game.js", "utf8") + "\nglobalThis.game = ga
 const { CONFIG } = sandbox;
 const { game } = sandbox;
 sandbox.FloatText = class FloatText { constructor(x, y, text, color) { this.x = x; this.y = y; this.text = text; this.color = color; } };
+sandbox.Shockwave = class Shockwave { constructor(x, y, maxR, color) { this.x = x; this.y = y; this.maxR = maxR; this.color = color; } };
 sandbox.pools = { enemy: { get(type, x, y, move, elite) { return { type, x, y, move, elite, dead: false, isBoss: false, radius: CONFIG.enemy[type].radius }; } } };
 sandbox.Sound = { powerup() {}, tone() {} };
 
@@ -188,7 +189,7 @@ assert.strictEqual(game._endlessRecentBossAffixes[0], phantomEscort.key, "applie
 
 const bonusKeys = new Set(Object.keys(CONFIG.bonuses));
 for (const key of CONFIG.bonusOrder) assert(bonusKeys.has(key), `bonusOrder references missing bonus ${key}`);
-for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "leech", "livingArmor", "painConverter", "armorCaliber", "vitalReactor", "shieldAmplifier", "signalFilter"]) {
+for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "painConverter", "armorCaliber", "vitalReactor", "shieldAmplifier", "signalFilter"]) {
   assert(bonusKeys.has(key), `missing survival/build bonus ${key}`);
 }
 assert(CONFIG.bonuses.armorCaliber.hpPerDamage > 0, "armorCaliber hpPerDamage must be positive");
@@ -201,6 +202,8 @@ between(CONFIG.bonuses.signalFilter.jamResist, 0.08, 0.3, "signalFilter jamResis
 between(CONFIG.bonuses.repairLoop.every, 8, 22, "repairLoop interval");
 between(CONFIG.bonuses.repairLoop.healPct, 0.03, 0.12, "repairLoop healPct");
 between(CONFIG.bonuses.repairLoop.shield, 4, 16, "repairLoop shield");
+between(CONFIG.bonuses.repairPulse.damage, 4, 14, "repairPulse damage");
+between(CONFIG.bonuses.repairPulse.range, 120, 220, "repairPulse range");
 assert(bonusKeys.has("weakScanner"), "missing weak window build bonus");
 between(CONFIG.bonuses.weakScanner.weakDamageMult, 0.1, 0.5, "weakScanner weakDamageMult");
 between(CONFIG.bonuses.weakScanner.weakDuration, 0.2, 1.2, "weakScanner weakDuration");
@@ -231,6 +234,11 @@ game._repairLoopT = repairLoop.every; game.player.hp = game.player.maxHp; game.p
 game.updateDepthSystems(0);
 assert(game.player.shieldHp > 0, "repairLoop should grant shield at full HP");
 assert(game.draftStatPreviewText(game.cardInfo("bonus:repairLoop")).includes("%"), "repairLoop draft preview should show healing");
+game.bonuses = { repairPulse: 1 }; game.floats = []; game.shockwaves = []; game.enemies = [{ dead: false, x: 115, y: 100, radius: 10, hp: 20, maxHp: 20, damage(d) { this.hp -= d; if (this.hp <= 0) { this.dead = true; return true; } return false; } }];
+game.player = { x: 100, y: 100, hp: 100, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
+assert.strictEqual(game.triggerRepairPulse(game.player), 1, "repairPulse should hit nearby enemies");
+assert(game.enemies[0].hp < 20 && game.shockwaves.length, "repairPulse should deal damage and show feedback");
+assert(game.draftStatPreviewText(game.cardInfo("bonus:repairPulse")).includes("→"), "repairPulse draft preview should show damage gain");
 game.bonuses = { shieldAmplifier: 1 }; game.chips = {}; game.player = { hp: 100, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
 assert.strictEqual(game.playerDamage(100), 100, "shieldAmplifier should not add damage without shield");
 game.player.shieldHp = 10;
