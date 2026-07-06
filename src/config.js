@@ -105,7 +105,7 @@ const CONFIG = {
     sideGuns: { name: "侧翼炮组", desc: "主炮附加斜向火力", color: "#ffd43b", duration: 10, angle: 22 },
     volatileCore: { name: "危险过载", desc: "分数更高,承伤也更高", color: "#ff6b6b", duration: 9, scoreBonus: 0.25, threatGainMult: 1.25, damageTakenMult: 1.20 },
   },
-  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "medicalReservoir", "painConverter", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "shieldAmplifier", "shieldBreaker", "kineticAmmo", "heavyRounds", "armorPiercer", "armorCaliber", "vitalReactor", "stableFire", "perfectLine", "sideCannons", "laserLens", "laserSplitter", "swarmCore", "homingShards", "signalFilter", "explosivePayload", "clusterWarheads", "missileInterceptor", "magnetCore", "comboBattery", "comboBarrage", "comboSurge", "chargeAmp", "executioner", "eliteHunter", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "weakScanner", "adrenaline", "emergencyBarrier", "overdrive"],
+  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "medicalReservoir", "painConverter", "missileRack", "pierce", "chainSpark", "salvage", "shieldAmplifier", "shieldBreaker", "kineticAmmo", "heavyRounds", "armorPiercer", "armorCaliber", "vitalReactor", "stableFire", "perfectLine", "sideCannons", "laserLens", "laserSplitter", "swarmCore", "homingShards", "signalFilter", "explosivePayload", "clusterWarheads", "missileInterceptor", "magnetCore", "comboBattery", "comboBarrage", "comboSurge", "chargeAmp", "executioner", "eliteHunter", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "weakScanner", "adrenaline", "emergencyBarrier", "overdrive"],
   bonuses: {
     damage: { name: "火力校准", desc: "全武器伤害 +12%", color: "#ff6b6b", damageMult: 0.12 },
     fireRate: { name: "加速扳机", desc: "主炮/副武器射速 +8%", color: "#4dabf7", cooldownMult: 0.08 },
@@ -123,7 +123,6 @@ const CONFIG = {
     missileRack: { name: "备用弹仓", desc: "导弹 +1 且装填更快", color: "#ff922b", missileCount: 1, missileCooldownMult: 0.06 },
     pierce: { name: "穿甲弹链", desc: "主炮可额外穿透 1 个目标", color: "#ffd43b", pierce: 1 },
     chainSpark: { name: "连锁电弧", desc: "击杀会电击附近敌人", color: "#74c0fc", damage: 3, range: 210 },
-    pointDefense: { name: "近防协议", desc: "击杀会清除目标附近敌弹", color: "#74c0fc", rarity: "稀有", weight: 34, range: 150 },
     salvage: { name: "残骸回收", desc: "每 5 次击杀获得护盾", color: "#20c997", shield: 8, every: 5, dur: 5 },
     shieldAmplifier: { name: "护盾放大器", desc: "有护盾时全武器伤害 +14%", color: "#74c0fc", rarity: "稀有", weight: 34, damageMult: 0.14 },
     shieldBreaker: { name: "破盾电荷", desc: "对敌方护盾伤害 +45%,击破护盾时震击附近敌人", color: "#74c0fc", rarity: "稀有", weight: 34, shieldDamageMult: 0.45, breakDamage: 5, range: 130 },
@@ -363,7 +362,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 77, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 78, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

@@ -693,11 +693,11 @@ const game = {
   },
   buildRouteSummary(source = this.bonuses) {
     const routes = [
-      { name: "主炮", color: "#ffd43b", weights: { damage: 1, fireRate: 1, pierce: 2, kineticAmmo: 2, heavyRounds: 3, armorPiercer: 3, armorCaliber: 2, vitalReactor: 1, stableFire: 1, perfectLine: 1, sideCannons: 3, chainSpark: 1, pointDefense: 1, shieldAmplifier: 1, shieldBreaker: 2, executioner: 1, eliteHunter: 2, glassCannon: 1, weakScanner: 1, overdrive: 1 } },
+      { name: "主炮", color: "#ffd43b", weights: { damage: 1, fireRate: 1, pierce: 2, kineticAmmo: 2, heavyRounds: 3, armorPiercer: 3, armorCaliber: 2, vitalReactor: 1, stableFire: 1, perfectLine: 1, sideCannons: 3, chainSpark: 1, shieldAmplifier: 1, shieldBreaker: 2, executioner: 1, eliteHunter: 2, glassCannon: 1, weakScanner: 1, overdrive: 1 } },
       { name: "激光", color: "#cc5de8", weights: { damage: 1, range: 1, laserLens: 3, laserSplitter: 3, chargeAmp: 1, bossHunter: 1, weakScanner: 2, glassCannon: 1 } },
       { name: "追踪", color: "#4dabf7", weights: { range: 1, fireRate: 1, swarmCore: 3, homingShards: 3, signalFilter: 2, magnetCore: 1, comboBattery: 1, comboBarrage: 3, comboSurge: 1 } },
       { name: "导弹", color: "#ff922b", weights: { missileRack: 3, explosivePayload: 3, clusterWarheads: 3, missileInterceptor: 2, fireRate: 1, range: 1, bossHunter: 1, weakScanner: 2 } },
-      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, armorPlating: 3, fieldRepair: 3, repairLoop: 3, repairPulse: 2, leech: 2, livingArmor: 3, medicalReservoir: 3, painConverter: 1, salvage: 2, shieldAmplifier: 3, shieldBreaker: 1, armorCaliber: 2, vitalReactor: 3, stableFire: 3, perfectLine: 3, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1, signalFilter: 1 } },
+      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, armorPlating: 3, fieldRepair: 3, repairLoop: 3, repairPulse: 2, leech: 2, livingArmor: 3, medicalReservoir: 3, painConverter: 1, salvage: 2, shieldAmplifier: 3, shieldBreaker: 1, armorCaliber: 2, vitalReactor: 3, stableFire: 3, perfectLine: 3, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, missileInterceptor: 1, signalFilter: 1 } },
       { name: "风险", color: "#ff6b6b", weights: { glassCannon: 3, overdrive: 3, adrenaline: 3, painConverter: 2, comboBarrage: 1, comboSurge: 2, executioner: 1, eliteHunter: 1, bossHunter: 1, weakScanner: 1 } },
     ].map(r => {
       const score = Object.keys(r.weights).reduce((sum, key) => sum + (source[key] || 0) * r.weights[key], 0);
@@ -1077,12 +1077,6 @@ const game = {
     this.spawnShockwave(x, y, range, color);
     this.floats.push(new FloatText(x, y - 22, label + " -" + n, color));
     return n;
-  },
-  triggerPointDefense(src) {
-    const stacks = this.bonusStacks("pointDefense");
-    if (!stacks) return;
-    const cfg = CONFIG.bonuses.pointDefense;
-    this.clearEnemyBulletsNear(src.x, src.y, cfg.range + stacks * 26, cfg.color, "近防");
   },
   triggerHomingShards(src, baseDamage) {
     const stacks = this.bonusStacks("homingShards");
@@ -1644,7 +1638,7 @@ const game = {
     if (!e.isBoss && this.boss && !this.boss.dead && this.boss.def.guardDR && this.bossEscortCount() === 0) this.openBossWeakPoint(this.boss, { dur: 2.5, weakDamageMult: 0.35, color: "#ffd43b" });
     if (e.isBoss) { for (let k = 0; k < 5; k++) this.burst(e.x + (Math.random() - 0.5) * e.radius, e.y + (Math.random() - 0.5) * e.radius, ["#ffd43b", "#ff922b", "#fff"][k % 3], 18, 260); this.spawnShockwave(e.x, e.y, e.radius * 3, "#ffd43b"); this.flashTimer = Math.max(this.flashTimer, 0.4); Sound.bossDefeat(); Haptics.bossDefeat(); this.addShake(9, 0.32); this.hitStop(0.08); Achievements.trackBossKill(e.defIndex); this.scheduleBossDraftReward(e); }
     else { this.burst(e.x, e.y, e.color, 14, 180); this.spawnShockwave(e.x, e.y, e.radius * 2.2, e.color); Sound.explosion(e.radius >= 30 ? "large" : e.radius >= 20 ? "medium" : "small"); if (allowDrop) this.maybeDrop(e.type, e.x, e.y); }
-    if (!byBomb) { this.triggerPointDefense(e); this.triggerChainSpark(e); }
+    if (!byBomb) this.triggerChainSpark(e);
     // CC:连击每达 10 的倍数,弹一次居中大字里程碑特效
     if (!byBomb && this.combo > 0 && this.combo % 10 === 0) this.comboMilestone(this.combo);
   },

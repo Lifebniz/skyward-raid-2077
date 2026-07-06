@@ -458,6 +458,7 @@ assert.strictEqual(game._endlessRecentBossAffixes[0], phantomEscort.key, "applie
 
 const bonusKeys = new Set(Object.keys(CONFIG.bonuses));
 for (const key of CONFIG.bonusOrder) assert(bonusKeys.has(key), `bonusOrder references missing bonus ${key}`);
+assert(!bonusKeys.has("pointDefense") && !CONFIG.bonusOrder.includes("pointDefense"), "pointDefense kill-clear bonus should stay removed");
 for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "medicalReservoir", "painConverter", "armorCaliber", "vitalReactor", "stableFire", "perfectLine", "shieldAmplifier", "shieldBreaker", "signalFilter"]) {
   assert(bonusKeys.has(key), `missing survival/build bonus ${key}`);
 }
