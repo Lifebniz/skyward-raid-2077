@@ -76,7 +76,7 @@ const CONFIG = {
 
   // weights 普通掉落;endlessWeights 无尽掉落(炸弹更稀有)。火力满级后继续吃 power 会进入超载层数。
   // autoInterval:常规关卡(非无尽)每隔多久自动刷新一个道具(秒)。
-  powerup: { radius: 14, speed: 130, dropChance: 0.14, healAmount: 12, autoInterval: 5, magnetRadius: 40, magnetSpeed: 640, chipMinPower: 5, chipMinEndlessTime: 30, chipDraftInterval: 30,
+  powerup: { radius: 14, speed: 130, dropChance: 0.14, healAmount: 12, autoInterval: 5, magnetRadius: 40, magnetSpeed: 640, chipMinPower: 5, chipMinEndlessTime: 30, chipDraftInterval: 30, chipBossDraftDelay: 15,
     weights:        { power: 0.47, heal: 0.22, bomb: 0.12, wing: 0.14, chip: 0.05 },
     endlessWeights: { power: 0.48, heal: 0.23, bomb: 0.04, wing: 0.13, chip: 0.12 } },
   overflow: { healShield: 30, healShieldDur: 8, bombEnergy: 26, wingChip: "sideGuns", threatGain: 18, score: 250 },
@@ -299,7 +299,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 59, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 60, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

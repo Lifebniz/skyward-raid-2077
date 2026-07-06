@@ -28,6 +28,7 @@ assert(CONFIG && CONFIG.player && CONFIG.endless, "CONFIG did not load");
 
 between(CONFIG.powerup.chipMinEndlessTime, 15, 30, "first endless draft delay");
 between(CONFIG.powerup.chipDraftInterval, 15, 30, "endless draft interval");
+between(CONFIG.powerup.chipBossDraftDelay, 15, 30, "boss draft delay");
 between(CONFIG.endless.maxEnemies, 8, 20, "endless max enemies");
 between(CONFIG.endless.enemyHpRampMult, 1.5, 3.2, "endless enemy HP ramp");
 between(CONFIG.endless.dmgRampMult, 1.5, 3.5, "endless damage ramp");
@@ -162,6 +163,21 @@ assert.strictEqual(game.updateChipDraftTimer(), true, "draft timer should start 
 assert.strictEqual(game.state, "chipselect", "draft timer should open selection UI");
 assert.strictEqual(game._endlessStats.drafts, 1, "timed draft should be counted once");
 assert.strictEqual(game._nextChipDraftAt, CONFIG.powerup.chipMinEndlessTime + CONFIG.powerup.chipDraftInterval, "next draft should be one fixed interval later");
+game.state = "playing"; game._endlessT = 90; game._lastChipDraftAt = 80; game._nextChipDraftAt = 120; game._pendingBossDraft = false; game._chipDraftReason = ""; game._endlessStats = { drafts: 0 };
+assert.strictEqual(game.scheduleBossDraftReward({ x: 100, y: 100, radius: 40 }), true, "boss reward should pull the next draft earlier");
+assert.strictEqual(game._nextChipDraftAt, 95, "boss reward should respect the minimum draft gap");
+assert.strictEqual(game._pendingBossDraft, true, "boss reward should mark the next draft reason");
+game._endlessT = 94.99;
+assert.strictEqual(game.updateChipDraftTimer(), false, "boss reward draft should still wait for its scheduled time");
+game._endlessT = 95;
+assert.strictEqual(game.updateChipDraftTimer(), true, "boss reward draft should open at its scheduled time");
+assert.strictEqual(game.state, "chipselect", "boss reward should open the selection UI");
+assert(game._chipDraftReason.includes("Boss"), "boss reward draft should show a boss reward reason");
+assert.strictEqual(game._pendingBossDraft, false, "boss reward marker should clear after opening");
+assert.strictEqual(game._endlessStats.bossDrafts, 1, "boss reward should be tracked once");
+game.state = "playing"; game._endlessT = 100; game._lastChipDraftAt = 96; game._nextChipDraftAt = 108; game._pendingBossDraft = false; game._endlessStats = {};
+assert.strictEqual(game.scheduleBossDraftReward({ x: 100, y: 100, radius: 40 }), false, "boss reward should not make drafts too frequent");
+assert.strictEqual(game._nextChipDraftAt, 108, "nearby scheduled draft should be kept");
 for (const e of CONFIG.endless.events.filter(e => e.routeBias)) {
   const matching = draftIds.filter(id => game.draftCardRoute(game.cardInfo(id)) === e.routeBias);
   assert(matching.length, `event ${e.key} routeBias ${e.routeBias} has no matching draft cards`);

@@ -504,7 +504,7 @@ const game = {
   showDialogue(name, text, dur) { this.dlgName = name; this.dlgText = text || ""; this.dlgTimer = dur || 3.5; },   // P
   addShake(mag, t) { this._shake = Math.max(this._shake, mag); this._shakeT = Math.max(this._shakeT, t); },   // N
   hitStop(t) { this._hitStopT = Math.max(this._hitStopT, t); },
-  resetDepthSystems() { this.threat = 0; this.chips = {}; this.bonuses = {}; this._chipCursor = 0; this._chipChoices = []; this._chipRerolls = 0; this._nextChipDraftAt = 0; this._bonusKillN = 0; this._noHitT = 0; this._fieldRepairT = 0; this._repairLoopT = 0; this._emergencyBarrierCd = 0; this._lastStandCd = 0; this._chipStats = {}; this._bonusStats = {}; this._bonusHpGain = {}; this._maxThreatLevel = 0; },
+  resetDepthSystems() { this.threat = 0; this.chips = {}; this.bonuses = {}; this._chipCursor = 0; this._chipChoices = []; this._chipRerolls = 0; this._nextChipDraftAt = 0; this._lastChipDraftAt = -Infinity; this._pendingBossDraft = false; this._chipDraftReason = ""; this._bonusKillN = 0; this._noHitT = 0; this._fieldRepairT = 0; this._repairLoopT = 0; this._emergencyBarrierCd = 0; this._lastStandCd = 0; this._chipStats = {}; this._bonusStats = {}; this._bonusHpGain = {}; this._maxThreatLevel = 0; },
   maxThreat() { return CONFIG.threat.maxLevel * CONFIG.threat.perLevel; },
   threatLevel() { return clamp(Math.floor(this.threat / CONFIG.threat.perLevel), 0, CONFIG.threat.maxLevel); },
   threatScoreMult() {
@@ -814,9 +814,11 @@ const game = {
     if (this._chipChoices.length < 3 && top.score >= 3 && !hasBonusRoute(top.name) && routePool.length) takeWeighted(routePool);
     while (this._chipChoices.length < 3 && pool.length && takeWeighted(pool)) {}
   },
-  beginChipDraft() {
+  beginChipDraft(reason = "") {
     if (!this.endless) return this.activateNextChip();
     if (this._endlessStats) this._endlessStats.drafts++;
+    this._lastChipDraftAt = this._endlessT;
+    this._chipDraftReason = reason;
     this._chipRerolls = 1;
     this.drawChipChoices();
     this.state = "chipselect";
@@ -833,7 +835,7 @@ const game = {
   skipChipDraft() {
     if (this.state !== "chipselect") return false;
     if (this._endlessStats) this._endlessStats.skips++;
-    this._chipChoices = [];
+    this._chipChoices = []; this._chipDraftReason = "";
     this._chipRerolls = 0;
     this.state = "playing";
     const gain = Math.round((CONFIG.overflow.score || 0) * 2 * this.threatScoreMult());
@@ -846,7 +848,7 @@ const game = {
     if (!card) return false;
     const beforeResonance = card.type === "bonus" ? this.routeEffectText() : "";
     if (this._endlessStats) this._endlessStats.picks++;
-    this._chipChoices = [];
+    this._chipChoices = []; this._chipDraftReason = "";
     this._chipRerolls = 0;
     this.state = "playing";
     if (card.type === "chip") this.activateChip(card.key, "芯片 " + card.name);
@@ -871,11 +873,28 @@ const game = {
   claimChipReward() {
     if (this.endless) {
       if (!this.canClaimChipReward()) return false;
+      const reason = this._pendingBossDraft ? "Boss击破奖励 · 强化提前" : "";
+      this._pendingBossDraft = false;
       this._nextChipDraftAt = this._endlessT + (CONFIG.powerup.chipDraftInterval || 30);
-      this.beginChipDraft(); return true;
+      this.beginChipDraft(reason); return true;
     }
     const key = this.activateNextChip(), c = CONFIG.chips[key];
     this.grantOverflowScore(c ? c.color : "#4dabf7");
+    return true;
+  },
+  scheduleBossDraftReward(src) {
+    if (!this.endless || this.state !== "playing") return false;
+    const delay = CONFIG.powerup.chipBossDraftDelay || 15;
+    const earliest = (Number.isFinite(this._lastChipDraftAt) ? this._lastChipDraftAt : this._endlessT) + delay;
+    const rewardAt = Math.max(this._endlessT, earliest);
+    const currentAt = Math.max(CONFIG.powerup.chipMinEndlessTime || 0, this._nextChipDraftAt || 0);
+    if (rewardAt >= currentAt) return false;
+    this._nextChipDraftAt = rewardAt; this._pendingBossDraft = true;
+    if (this._endlessStats) this._endlessStats.bossDrafts = (this._endlessStats.bossDrafts || 0) + 1;
+    if (this.player || src) {
+      const p = this.player || src;
+      this.floats.push(new FloatText(p.x, p.y - 86, "Boss奖励 强化提前", "#ffd43b"));
+    }
     return true;
   },
   triggerChainSpark(src) {
@@ -1376,7 +1395,7 @@ const game = {
       }
       this.burst(e.x, e.y, "#9775fa", 10, 140);
     }
-    if (e.isBoss) { for (let k = 0; k < 5; k++) this.burst(e.x + (Math.random() - 0.5) * e.radius, e.y + (Math.random() - 0.5) * e.radius, ["#ffd43b", "#ff922b", "#fff"][k % 3], 18, 260); this.spawnShockwave(e.x, e.y, e.radius * 3, "#ffd43b"); this.flashTimer = Math.max(this.flashTimer, 0.4); Sound.bossDefeat(); Haptics.bossDefeat(); this.addShake(9, 0.32); this.hitStop(0.08); Achievements.trackBossKill(e.defIndex); }
+    if (e.isBoss) { for (let k = 0; k < 5; k++) this.burst(e.x + (Math.random() - 0.5) * e.radius, e.y + (Math.random() - 0.5) * e.radius, ["#ffd43b", "#ff922b", "#fff"][k % 3], 18, 260); this.spawnShockwave(e.x, e.y, e.radius * 3, "#ffd43b"); this.flashTimer = Math.max(this.flashTimer, 0.4); Sound.bossDefeat(); Haptics.bossDefeat(); this.addShake(9, 0.32); this.hitStop(0.08); Achievements.trackBossKill(e.defIndex); this.scheduleBossDraftReward(e); }
     else { this.burst(e.x, e.y, e.color, 14, 180); this.spawnShockwave(e.x, e.y, e.radius * 2.2, e.color); Sound.explosion(e.radius >= 30 ? "large" : e.radius >= 20 ? "medium" : "small"); if (allowDrop) this.maybeDrop(e.type, e.x, e.y); }
     if (!byBomb) { this.triggerPointDefense(e); this.triggerChainSpark(e); }
     // CC:连击每达 10 的倍数,弹一次居中大字里程碑特效
@@ -1744,7 +1763,7 @@ const game = {
     ctx.fillStyle = "rgba(0,0,0,.72)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
     ctx.textAlign = "center";
     ctx.fillStyle = "#fff"; ctx.font = "bold 34px 'Segoe UI', sans-serif"; ctx.fillText("选择本局强化", cx, 166);
-    ctx.fillStyle = "#adb5bd"; ctx.font = "15px 'Segoe UI', sans-serif"; ctx.fillText("本次奖励 · 每" + (CONFIG.powerup.chipDraftInterval || 30) + "秒一次", cx, 196);
+    ctx.fillStyle = "#adb5bd"; ctx.font = "15px 'Segoe UI', sans-serif"; ctx.fillText(this._chipDraftReason || ("本次奖励 · 每" + (CONFIG.powerup.chipDraftInterval || 30) + "秒一次"), cx, 196);
     for (let i = 0; i < 3; i++) {
       const card = this.cardInfo(this._chipChoices[i] || "");
       if (!card) continue;
