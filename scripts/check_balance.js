@@ -125,11 +125,12 @@ for (const e of CONFIG.endless.events.filter(e => e.routeBias)) {
 const affixes = CONFIG.endless.boss.affixes;
 unique(affixes.map(a => a.key), "boss affixes");
 assert(affixes.some(a => a.key === "ewar"), "boss affixes should include electronic warfare pressure");
+assert(affixes.some(a => a.key === "exposedCore"), "boss affixes should include weak point windows");
 for (const a of affixes) {
   assert(a.name && a.desc, `boss affix ${a.key} needs readable text`);
   if (a.scoreMult) between(a.scoreMult, 1, 1.35, `boss affix ${a.key} scoreMult`);
   if (a.attack) {
-    assert(["laser", "ring", "escort", "repair"].includes(a.attack), `boss affix ${a.key} has unknown attack ${a.attack}`);
+    assert(["laser", "ring", "escort", "repair", "weak"].includes(a.attack), `boss affix ${a.key} has unknown attack ${a.attack}`);
     between(a.every || 0, 3, 12, `boss affix ${a.key} interval`);
   }
   if (a.count) between(a.count, 6, 24, `boss affix ${a.key} count`);
@@ -139,7 +140,12 @@ for (const a of affixes) {
   if (a.enemy) assert(enemyKeys.has(a.enemy), `boss affix ${a.key} references missing enemy ${a.enemy}`);
   if (a.elite) assert(eliteTypes.includes(a.elite), `boss affix ${a.key} references missing elite ${a.elite}`);
   if (a.healPct) between(a.healPct, 0.01, 0.06, `boss affix ${a.key} healPct`);
+  if (a.weakDamageMult) between(a.weakDamageMult, 0.15, 0.7, `boss affix ${a.key} weakDamageMult`);
 }
+const exposedCore = affixes.find(a => a.key === "exposedCore");
+game.player = { hp: 100, maxHp: 100, shieldHp: 0 }; game.bonuses = {};
+game.boss = { isBoss: true, hp: 100, maxHp: 100, affix: exposedCore, _weakTimer: exposedCore.dur };
+assert(game.playerDamage(100, game.boss) > 100, "exposedCore should increase boss damage during weak window");
 
 const bonusKeys = new Set(Object.keys(CONFIG.bonuses));
 for (const key of CONFIG.bonusOrder) assert(bonusKeys.has(key), `bonusOrder references missing bonus ${key}`);

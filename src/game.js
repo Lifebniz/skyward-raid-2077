@@ -552,6 +552,7 @@ const game = {
   playerDamage(d, target = null) {
     let m = 1 + this.bonusValue("damage", "damageMult") + this.bonusValue("glassCannon", "damageMult") + this.vitalReactorDamageMult() + this.shieldDamageMult() + this.adrenalineValue("damageMult");
     if (target && target.isBoss) m += this.bonusValue("bossHunter", "bossDamageMult");
+    if (target && target.isBoss && target._weakTimer > 0 && target.affix) m += target.affix.weakDamageMult || 0;
     if (target && target.maxHp && target.hp / target.maxHp <= (CONFIG.bonuses.executioner.threshold || 0)) m += this.bonusValue("executioner", "damageMult");
     return d * m;
   },
@@ -1044,7 +1045,8 @@ const game = {
     const a = b && b.affix;
     if (!a) return "";
     const cd = a.attack ? " · " + Math.max(0, b._affixTimer || 0).toFixed(1) + "s" : "";
-    return a.name + " · " + (a.desc || "词缀") + cd;
+    const weak = b._weakTimer > 0 ? " · 弱点" + b._weakTimer.toFixed(1) + "s" : "";
+    return a.name + " · " + (a.desc || "词缀") + weak + cd;
   },
   applyEndlessBossAffix(b, affix) {
     if (!b || !affix) return;
@@ -1058,15 +1060,22 @@ const game = {
   updateBossAffix(b, dt) {
     const a = b && b.affix;
     if (!a || !a.attack) return;
+    if (b._weakTimer > 0) b._weakTimer = Math.max(0, b._weakTimer - dt);
     b._affixTimer -= dt;
     if (b._affixTimer > 0) return;
     b._affixTimer = a.every || 5;
     if (a.attack === "laser") this.spawnBossLaser(this.player ? this.player.x : b.x, a.warn || 0.55, a.dur || 0.65, a.width || 42, b.bulletDamage * (a.damageMult || 1));
     else if (a.attack === "ring") this.fireRing(b.x, b.y, a.count || 12, a.speed || 220, b.bulletDamage * (a.damageMult || 1));
     else if (a.attack === "escort") this.spawnBossEscort(b, a);
+    else if (a.attack === "weak") this.openBossWeakPoint(b, a);
     else if (a.attack === "repair" && !this.repairBoss(b, a)) return;
     this.spawnShockwave(b.x, b.y, b.radius * 1.8, a.color);
     Sound.tone(620, 0.08, "triangle", 0.1, 180);
+  },
+  openBossWeakPoint(b, a) {
+    b._weakTimer = a.dur || 2.5;
+    this.floats.push(new FloatText(b.x, b.y - b.radius - 22, "弱点暴露 +" + Math.round((a.weakDamageMult || 0) * 100) + "%", a.color));
+    return true;
   },
   repairBoss(b, a) {
     if (!b || b.hp >= b.maxHp) return false;

@@ -680,6 +680,7 @@ class Boss {
     ctx.save(); ctx.shadowColor = flash ? "#fff" : coreCol; ctx.shadowBlur = 16;
     ctx.fillStyle = flash ? "#fff" : "#ffe3e3"; ctx.beginPath(); ctx.arc(x, y - 6, pr, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = coreCol; ctx.beginPath(); ctx.arc(x, y - 6, pr * 0.5, 0, Math.PI * 2); ctx.fill();
+    if (this._weakTimer > 0) { ctx.strokeStyle = "#ffd43b"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y - 6, pr + 9, 0, Math.PI * 2); ctx.stroke(); }
     ctx.restore();
   }
 }

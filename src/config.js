@@ -281,12 +281,13 @@ const CONFIG = {
         { key: "barrage", name: "弹幕", desc: "周期环形弹幕", color: "#ff922b", attack: "ring", every: 6.2, count: 14, speed: 230, damageMult: 0.78, scoreMult: 1.16 },
         { key: "escort", name: "护卫", desc: "周期投放精英僚机", color: "#51cf66", attack: "escort", every: 7.5, enemy: "gunner", elite: "charger", maxAdds: 4, scoreMult: 1.14 },
         { key: "ewar", name: "电子战", desc: "周期投放扰频精英机", color: "#15aabf", attack: "escort", every: 8.2, enemy: "jammer", elite: "jammer", maxAdds: 3, scoreMult: 1.18 },
+        { key: "exposedCore", name: "露核", desc: "周期暴露弱点", color: "#ffd43b", attack: "weak", every: 7.2, dur: 2.6, weakDamageMult: 0.35, scoreMult: 1.12 },
         { key: "repair", name: "维修", desc: "周期恢复生命", color: "#38d9a9", attack: "repair", every: 6.8, healPct: 0.035, scoreMult: 1.17 },
         { key: "jammer", name: "扰频", desc: "靠近时武器变慢", color: "#15aabf", jamRadius: 300, weaponSlow: 1.25, scoreMult: 1.13 },
       ],
     },
   },
-  challenge: { rulesVersion: 43, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 44, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
