@@ -15,17 +15,18 @@ sandbox.FloatText = class FloatText { constructor(x, y, text, color) { this.x = 
 sandbox.Shockwave = class Shockwave { constructor(x, y, maxR, color) { this.x = x; this.y = y; this.maxR = maxR; this.color = color; } };
 sandbox.pools = {
   enemy: { get(type, x, y, move, elite) { const cfg = CONFIG.enemy[type], r = cfg.radius; return { type, x, y: cfg.fromBottom ? CONFIG.HEIGHT + r + y : y, move: cfg.move || move, elite, dead: false, isBoss: false, radius: r, cfg }; } },
-  enemyBullet: { get(x, y, vx, vy, damage) { return { x, y, vx, vy, damage, dead: false }; } },
+  enemyBullet: { get(x, y, vx, vy, damage, opts) { return { x, y, vx, vy, damage, dead: false, kind: opts && opts.kind || "", radius: opts && opts.radius || CONFIG.enemyBullet.radius }; } },
   homingShot: { get(x, y, overcharge) { return { x, y, overcharge }; } },
 };
 sandbox.Sound = { powerup() {}, tone() {} };
-vm.runInContext(fs.readFileSync("src/entities.js", "utf8") + "\nglobalThis.Enemy = Enemy; globalThis.Missile = Missile; globalThis.PlayerLaser = PlayerLaser;", sandbox);
-const { Enemy, Missile, PlayerLaser } = sandbox;
+vm.runInContext(fs.readFileSync("src/entities.js", "utf8") + "\nglobalThis.Enemy = Enemy; globalThis.EnemyBullet = EnemyBullet; globalThis.Missile = Missile; globalThis.PlayerLaser = PlayerLaser;", sandbox);
+const { Enemy, EnemyBullet, Missile, PlayerLaser } = sandbox;
 
 const between = (value, min, max, label) => assert(value >= min && value <= max, `${label} ${value} outside ${min}-${max}`);
 const unique = (items, label) => assert.strictEqual(new Set(items).size, items.length, `${label} has duplicate keys`);
 
 assert(CONFIG && CONFIG.player && CONFIG.endless, "CONFIG did not load");
+assert.strictEqual(CONFIG.challenge.rulesVersion, 79, "challenge rules should bump for enemy special hazards");
 
 between(CONFIG.powerup.chipMinEndlessTime, 15, 30, "first endless draft delay");
 between(CONFIG.powerup.chipDraftInterval, 15, 30, "endless draft interval");
@@ -81,6 +82,17 @@ assert(CONFIG.moves.rearChase, "rear chase movement should exist");
 assert.strictEqual(CONFIG.moves.rearChase.warn, 2, "rear chase should warn for 2 seconds");
 assert.strictEqual(CONFIG.moves.rearChase.boost, 2, "rear chase should boost for 2 seconds");
 assert(CONFIG.moves.rearChase.boostMul > CONFIG.moves.rearChase.speedMul, "rear chase boost should be faster than normal chase");
+const beacon = CONFIG.enemy.beacon, gunner = CONFIG.enemy.gunner, mineLayer = CONFIG.enemy.mineLayer, tether = CONFIG.enemy.tether;
+assert(beacon && gunner && mineLayer && tether, "enemy special types should exist");
+between(beacon.homingInterval, 2.8, 5, "beacon homing cadence");
+between(gunner.homingInterval, 3.4, 5.5, "gunner homing cadence");
+between(beacon.homingTurn, 2, 4, "beacon homing turn");
+assert.strictEqual(mineLayer.zoneKind, "fire", "mineLayer should add fire zones in endless");
+between(mineLayer.zoneRadius, 32, 70, "fire zone radius");
+between(mineLayer.zoneDamage, 2, 7, "fire zone damage");
+assert.strictEqual(tether.zoneKind, "ice", "tether should add ice zones in endless");
+between(tether.zoneRadius, 36, 72, "ice zone radius");
+between(tether.slowMult, 0.35, 0.75, "ice slow multiplier");
 const eliteTypes = CONFIG.elite.types || [];
 unique(eliteTypes, "elite types");
 assert(eliteTypes.length >= 5, "elite type variety should include at least 5 types");
@@ -139,6 +151,9 @@ assert(eventKeys.includes("shieldedAmbush"), "endless events should include shie
 assert(eventKeys.includes("sniperCrossfire"), "endless events should include mixed sniper/crossfire pressure");
 assert(eventKeys.includes("blackoutRaid"), "endless events should include jammer elite pressure");
 assert(eventKeys.includes("rearAssault"), "endless events should include rear kamikaze pressure");
+assert(eventKeys.includes("hornetPursuit"), "endless events should include homing missile pressure");
+assert(eventKeys.includes("scorchedLane"), "endless events should include fire zone pressure");
+assert(eventKeys.includes("frostNet"), "endless events should include ice slow pressure");
 const routeNames = new Set(["主炮", "激光", "追踪", "导弹", "生存", "风险"]);
 const drops = new Set(["power", "heal", "bomb", "wing", "chip"]);
 for (const e of CONFIG.endless.events) {
@@ -200,6 +215,15 @@ const rearAssault = CONFIG.endless.events.find(e => e.key === "rearAssault");
 assert.strictEqual(rearAssault.enemyType, "kamikaze", "rear assault should force kamikaze enemies");
 assert(rearAssault.minTime >= 90, "rear assault should be a mid endless event");
 assert.strictEqual(rearAssault.routeBias, "生存", "rear assault should bias survival drafts");
+const hornetPursuit = CONFIG.endless.events.find(e => e.key === "hornetPursuit");
+assert.strictEqual(hornetPursuit.enemyType, "beacon", "homing swarm should force beacon enemies");
+assert(hornetPursuit.minTime >= beacon.homingMinTime, "homing swarm should start after homing is enabled");
+const scorchedLane = CONFIG.endless.events.find(e => e.key === "scorchedLane");
+assert.strictEqual(scorchedLane.enemyType, "mineLayer", "scorched lane should force mine layers");
+assert(scorchedLane.minTime >= mineLayer.zoneMinTime, "scorched lane should start after fire zones are enabled");
+const frostNet = CONFIG.endless.events.find(e => e.key === "frostNet");
+assert.strictEqual(frostNet.enemyType, "tether", "frost net should force tether enemies");
+assert(frostNet.minTime >= tether.zoneMinTime, "frost net should start after ice zones are enabled");
 game.endless = true; game._endlessT = rearAssault.minTime; game.threat = 0; game.currentLevel = 0; game._rng = () => 0.999; game.player = { x: CONFIG.WIDTH / 2, y: CONFIG.HEIGHT - 100 };
 const rearChaser = new Enemy("kamikaze", CONFIG.WIDTH / 2, 0);
 assert.strictEqual(rearChaser.move, "rearChase", "kamikaze instances should default to rear chase");
@@ -212,6 +236,29 @@ const rearSpeedAt = mt => { rearChaser.x = CONFIG.WIDTH / 2; rearChaser.y = CONF
 const rearWarnSpeed = rearSpeedAt(1), rearBoostSpeed = rearSpeedAt(2.2), rearNormalSpeed = rearSpeedAt(4.2);
 assert(rearBoostSpeed > rearWarnSpeed * 1.5, "kamikaze should accelerate after its 2 second warning");
 assert(rearNormalSpeed < rearBoostSpeed, "kamikaze should return to normal speed after its boost");
+game.player = { x: 220, y: 300, radius: 10, hp: 100, takeDamage(d) { this.hp -= d; }, applySlow(mult, dur) { this.slowMult = mult; this.slowTimer = dur; } };
+const homingBullet = new EnemyBullet(120, 300, 0, 160, 5, { kind: "homing", radius: 7, speed: 160, turn: 4, life: 3 });
+homingBullet.update(0.2);
+assert(homingBullet.vx > 0, "enemy homing bullet should turn toward the player");
+const fireZone = new EnemyBullet(game.player.x, game.player.y, 0, 0, 5, { kind: "fire", radius: 42, life: 2, tick: 0.6 });
+fireZone.update(0.1);
+assert.strictEqual(game.player.hp, 95, "fire zone should damage the player without disappearing immediately");
+assert(!fireZone.dead, "fire zone should persist after a hit");
+const iceZone = new EnemyBullet(game.player.x, game.player.y, 0, 0, 2, { kind: "ice", radius: 42, life: 2, slowMult: 0.55, slowDur: 1.2 });
+iceZone.update(0.1);
+assert(game.player.slowMult < 1 && game.player.slowTimer > 0, "ice zone should slow the player");
+game.enemyBullets = []; game.endless = true; game._endlessT = beacon.homingMinTime; game.threat = 0; game._rng = () => 0.99;
+const homingEnemy = new Enemy("beacon", 210, 0);
+homingEnemy.y = 120; homingEnemy._homingSkillTimer = 0; homingEnemy.updateHomingSkill(0);
+assert(game.enemyBullets.some(b => b.kind === "homing"), "beacon should spawn enemy homing bullets in endless");
+game.enemyBullets = []; game._endlessT = mineLayer.zoneMinTime;
+const fireEnemy = new Enemy("mineLayer", 210, 0);
+fireEnemy.y = 140; fireEnemy._zoneTimer = 0; fireEnemy.updateZoneSkill(0);
+assert(game.enemyBullets.some(b => b.kind === "fire"), "mineLayer should spawn fire zones in endless");
+game.enemyBullets = []; game._endlessT = tether.zoneMinTime;
+const iceEnemy = new Enemy("tether", 210, 0);
+iceEnemy.y = 140; iceEnemy._zoneTimer = 0; iceEnemy.updateZoneSkill(0);
+assert(game.enemyBullets.some(b => b.kind === "ice"), "tether should spawn ice zones in endless");
 game.enemyBullets = []; game.floats = []; game.endless = true; game._endlessT = crossfire.minTime; game.threat = 0; game._endlessHazardT = 0; game._rng = () => 0.25;
 assert.strictEqual(game.updateEndlessBulletEvent(0, crossfire), crossfire.bulletRows, "crossfire should spawn one side bullet row set");
 assert.strictEqual(game.enemyBullets.length, crossfire.bulletRows, "crossfire should create enemy bullets");

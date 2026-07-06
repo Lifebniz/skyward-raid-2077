@@ -1493,6 +1493,17 @@ const game = {
     return 1 + Math.min(this._endlessT / e.dmgRampTime, 1) * (e.dmgRampMult - 1);
   },
   spawnEnemyBullet(x, y, vx, vy, baseDamage, opts = null) { this.enemyBullets.push(pools.enemyBullet.get(x, y, vx, vy, baseDamage * this.activeDiff.dmgMult * this.endlessBulletDmgMult() * this.threatDamageMult(), opts)); },
+  spawnEnemyHomingBullet(x, y, speed, turn, damage) {
+    const p = this.player || { x, y: CONFIG.HEIGHT }, a = Math.atan2(p.y - y, p.x - x);
+    this.spawnEnemyBullet(x, y, Math.cos(a) * speed, Math.sin(a) * speed, damage, { kind: "homing", radius: 7, speed, turn, life: 4.2, color: "#ffd43b" });
+  },
+  spawnEnemyZone(x, y, kind, cfg) {
+    const fire = kind === "fire", color = fire ? "#ff922b" : "#74c0fc";
+    this.spawnEnemyBullet(x, clamp(y, 80, CONFIG.HEIGHT - 110), 0, 0, cfg.zoneDamage || (fire ? 4 : 2), {
+      kind, radius: cfg.zoneRadius || (fire ? 44 : 52), life: cfg.zoneDuration || 4, color,
+      slowMult: cfg.slowMult || 0.6, slowDur: cfg.slowDuration || 1.1, tick: fire ? 0.65 : 0.85,
+    });
+  },
   fireFan(x, y, baseAngle, spread, count, speed, damage) { for (let i = 0; i < count; i++) { const a = count === 1 ? baseAngle : baseAngle - spread / 2 + spread * (i / (count - 1)); this.spawnEnemyBullet(x, y, Math.cos(a) * speed, Math.sin(a) * speed, damage); } },
   fireRing(x, y, count, speed, damage) { for (let i = 0; i < count; i++) { const a = (i / count) * Math.PI * 2; this.spawnEnemyBullet(x, y, Math.cos(a) * speed, Math.sin(a) * speed, damage); } },
   burst(x, y, color, count, speed) { for (let i = 0; i < count; i++) { const a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random() * 0.7); this.particles.push(pools.particle.get(x, y, Math.cos(a) * s, Math.sin(a) * s, color)); } },
@@ -1829,7 +1840,7 @@ const game = {
       }
     }
     for (const e of this.enemies) { if (e.dead) continue; if (hit(e, this.player)) { if (!e.isBoss) { e.dead = true; this.burst(e.x, e.y, e.color, 10, 160); } this.player.takeDamage((e.cfg && e.cfg.crashDamage || CONFIG.crashDamage) * this.activeDiff.dmgMult * this.threatDamageMult()); } }
-    for (const b of this.enemyBullets) { if (b.dead) continue; if (hit(b, this.player)) { b.dead = true; this.player.takeDamage(b.damage); } }
+    for (const b of this.enemyBullets) { if (b.dead || b.kind === "fire" || b.kind === "ice") continue; if (hit(b, this.player)) { b.dead = true; this.player.takeDamage(b.damage); } }
     for (const p of this.powerups) {
       if (p.dead) continue;
       if (hit(p, this.player)) {

@@ -38,7 +38,7 @@ const CONFIG = {
     medium: { hp: 5,  speed: 120, radius: 23, score: 300, color: "#ffa94d", fireInterval: 1.8, bulletSpeed: 280, damage: 8, shots: 1 },
     large:  { hp: 16, speed: 80,  radius: 33, score: 700, color: "#f06595", fireInterval: 2.4, bulletSpeed: 250, damage: 8, shots: 3 },
     // D:新增两种。gunner 重炮机(高血/双发瞄准);splitter 分裂机(死亡裂成小型机)
-    gunner:   { hp: 10, speed: 90,  radius: 26, score: 500, color: "#748ffc", fireInterval: 1.2, bulletSpeed: 300, damage: 9, shots: 2 },
+    gunner:   { hp: 10, speed: 90,  radius: 26, score: 500, color: "#748ffc", fireInterval: 1.2, bulletSpeed: 300, damage: 9, shots: 2, homingInterval: 4.4, homingMinTime: 150, homingSpeed: 210, homingTurn: 2.7, homingDamage: 7 },
     splitter: { hp: 8,  speed: 100, radius: 26, score: 400, color: "#20c997", fireInterval: 0,   bulletSpeed: 0,   damage: 0, splits: 3 },
     // Z:世界4 新增两种。sniper 狙击机(慢速/低频但单发高伤精准狙击,shots:1 时 fireFan 天然退化为直线瞄准);
     //   detonator 雷机(自身不开火,死亡时炸出一圈弹幕,onEnemyKilled 里按 ringCount/ringSpeed/ringDamage 处理)
@@ -52,11 +52,11 @@ const CONFIG = {
     jammer:   { hp: 12, speed: 72,  radius: 25, score: 650, color: "#15aabf", fireInterval: 2.2, bulletSpeed: 260, damage: 7, shots: 2, jamRadius: 320, weaponSlow: 1.35 },
     support:  { hp: 12, speed: 62,  radius: 25, score: 700, color: "#51cf66", fireInterval: 0,   bulletSpeed: 0,   damage: 0, repairInterval: 2.4, repairRadius: 150, repairAmount: 4 },
     kamikaze: { hp: 5,  speed: 155, radius: 21, score: 520, color: "#ff6b6b", fireInterval: 0,   bulletSpeed: 0,   damage: 0, move: "rearChase", fromBottom: true, crashDamage: 45 },
-    beacon:   { hp: 6,  speed: 95,  radius: 21, score: 520, color: "#ffd43b", fireInterval: 0,   bulletSpeed: 300, damage: 8, markInterval: 2.8, markDelay: 0.75, markShots: 3 },
-    mineLayer:{ hp: 13, speed: 68,  radius: 27, score: 760, color: "#ff922b", fireInterval: 0,   bulletSpeed: 0,   damage: 9, mineInterval: 2.2, mineRadius: 18, triggerRadius: 70, mineFuse: 0.45, ringCount: 8, ringSpeed: 170 },
+    beacon:   { hp: 6,  speed: 95,  radius: 21, score: 520, color: "#ffd43b", fireInterval: 0,   bulletSpeed: 300, damage: 8, markInterval: 2.8, markDelay: 0.75, markShots: 3, homingInterval: 3.6, homingMinTime: 95, homingSpeed: 225, homingTurn: 3.0, homingDamage: 7 },
+    mineLayer:{ hp: 13, speed: 68,  radius: 27, score: 760, color: "#ff922b", fireInterval: 0,   bulletSpeed: 0,   damage: 9, mineInterval: 2.2, mineRadius: 18, triggerRadius: 70, mineFuse: 0.45, ringCount: 8, ringSpeed: 170, zoneKind: "fire", zoneMinTime: 125, zoneInterval: 4.2, zoneRadius: 46, zoneDuration: 4.3, zoneDamage: 4 },
     phaseWing:{ hp: 8,  speed: 120, radius: 22, score: 680, color: "#be4bdb", fireInterval: 0,   bulletSpeed: 275, damage: 8, blinkInterval: 2.4, blinkDelay: 0.55, blinkRange: 170, shots: 5 },
     mirrorDrone:{ hp: 7, speed: 105, radius: 20, score: 650, color: "#74c0fc", fireInterval: 0, bulletSpeed: 230, damage: 7, reflectCd: 0.9 },
-    tether:   { hp: 14, speed: 62,  radius: 26, score: 820, color: "#20c997", fireInterval: 0,   bulletSpeed: 0,   damage: 0, pullRadius: 260, pullStrength: 95 },
+    tether:   { hp: 14, speed: 62,  radius: 26, score: 820, color: "#20c997", fireInterval: 0,   bulletSpeed: 0,   damage: 0, pullRadius: 260, pullStrength: 95, zoneKind: "ice", zoneMinTime: 185, zoneInterval: 5.0, zoneRadius: 54, zoneDuration: 4.0, zoneDamage: 2, slowMult: 0.56, slowDuration: 1.2 },
     warden:   { hp: 18, speed: 58,  radius: 30, score: 920, color: "#91a7ff", fireInterval: 0,   bulletSpeed: 0,   damage: 0, guardRadius: 155, guardShield: 8, maxTargets: 4 },
     harvester:{ hp: 10, speed: 155, radius: 23, score: 720, color: "#fcc419", fireInterval: 0,   bulletSpeed: 0,   damage: 0, stealRadius: 210, escapeSpeed: 230, bonusDropChance: 0.25 },
   },
@@ -331,7 +331,10 @@ const CONFIG = {
       { key: "blackoutRaid", name: "黑障突袭", color: "#15aabf", sub: "扰频精英和信标机增多", routeBias: "追踪", minTime: 160, enemyType: "beacon", enemyChance: 0.34, jammerChance: 0.25, eliteChance: 0.45, spawnBonus: 1, scoreBonus: 0.10 },
       { key: "rearAssault", name: "尾后突袭", color: "#ff6b6b", sub: "自爆机从身后追袭", routeBias: "生存", minTime: 130, enemyType: "kamikaze", enemyChance: 0.46, spawnBonus: 1, powerupChanceAdd: 0.02, scoreBonus: 0.10 },
       { key: "mineLayerRun", name: "浮雷航道", color: "#ff922b", sub: "布雷机封锁安全线", routeBias: "导弹", minTime: 160, enemyType: "mineLayer", enemyChance: 0.42, spawnBonus: 1, scoreBonus: 0.11, threatGainMult: 1.08 },
+      { key: "hornetPursuit", name: "黄蜂追迹", color: "#ffd43b", sub: "信标机与重炮机释放追踪弹", routeBias: "生存", minTime: 150, enemyType: "beacon", enemyChance: 0.48, spawnBonus: 1, scoreBonus: 0.10, threatGainMult: 1.08 },
+      { key: "scorchedLane", name: "燃烧航道", color: "#ff922b", sub: "布雷机留下持续火区", routeBias: "生存", minTime: 175, enemyType: "mineLayer", enemyChance: 0.46, spawnBonus: 1, enemyHpMult: 0.08, scoreBonus: 0.11, threatGainMult: 1.10 },
       { key: "tetherNet", name: "牵引网", color: "#20c997", sub: "牵引机轻拉航线", routeBias: "生存", minTime: 190, enemyType: "tether", enemyChance: 0.36, spawnBonus: 1, powerupChanceAdd: 0.03, scoreBonus: 0.10 },
+      { key: "frostNet", name: "冰冻网", color: "#74c0fc", sub: "牵引机留下减速冰区", routeBias: "生存", minTime: 220, enemyType: "tether", enemyChance: 0.44, spawnBonus: 1, enemyHpMult: 0.08, scoreBonus: 0.11 },
       { key: "harvestRush", name: "收割突袭", color: "#fcc419", sub: "收割机抢夺补给", routeBias: "风险", minTime: 210, enemyType: "harvester", enemyChance: 0.34, spawnBonus: 1, powerupChanceAdd: 0.06, scoreBonus: 0.13 },
     ],
     boss: {
@@ -362,7 +365,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 78, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 79, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

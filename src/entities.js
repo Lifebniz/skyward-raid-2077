@@ -18,17 +18,20 @@ class Player {
     this.invulnAmount = game.activeDiff.invuln;
     this._fireTimer = 0; this._homingTimer = 0; this._laserTimer = 0; this._missileTimer = 0;
     this.charge = 0; this.charging = false; this.chargeCooldown = 0;
+    this.slowTimer = 0; this.slowMult = 1;
     this.invulnTimer = 0; this._flameTimer = 0;   // RR:引擎尾焰粒子发射计时
     // X4:机型专属必杀状态——护盾(防御型)/隐身(侦查型)。攻击型必杀(全屏重伤)/平衡型必杀(冲击波)不需要常驻状态,现开现用。
     this.shieldHp = 0; this.shieldMax = 0; this.shieldTimer = 0; this.stealthTimer = 0;
   }
   update(dt) {
     const c = CONFIG.player;
+    if (this.slowTimer > 0) { this.slowTimer -= dt; if (this.slowTimer <= 0) this.slowMult = 1; }
+    const moveSlow = this.slowTimer > 0 ? this.slowMult : 1;
     if (Settings.data.controlMode === "joystick") {   // KK:定速推杆,而非贴向触点位置
-      const speed = CONFIG.joystick.maxSpeed * (this.ship.lerpMult || 1);
+      const speed = CONFIG.joystick.maxSpeed * (this.ship.lerpMult || 1) * moveSlow;
       this.x += input.joyDX * speed * dt; this.y += input.joyDY * speed * dt;
     } else {
-      const lerp = c.lerp * (this.ship.lerpMult || 1);
+      const lerp = c.lerp * (this.ship.lerpMult || 1) * moveSlow;
       this.x += (input.targetX - this.x) * lerp; this.y += (input.targetY - this.y) * lerp;
     }
     const pull = game.pullVectorAt(this.x, this.y);
@@ -136,6 +139,10 @@ class Player {
   addWing()    { this.wings = clamp(this.wings + 1, 0, CONFIG.wingMax); }
   addEnergy(n) { this.energy = clamp(this.energy + n * (this.ship.energyMult || 1), 0, 100); }
   heal(n)      { this.hp = clamp(this.hp + n, 0, this.maxHp); }
+  applySlow(mult, dur) {
+    this.slowMult = Math.min(this.slowTimer > 0 ? this.slowMult : 1, mult || 1);
+    this.slowTimer = Math.max(this.slowTimer || 0, dur || 0);
+  }
   grantShield(n, dur) {
     this.shieldHp = Math.max(this.shieldHp, n);
     this.shieldMax = Math.max(this.shieldMax, n);
@@ -251,8 +258,16 @@ class EnemyBullet {
   init(x, y, vx, vy, damage, opts = null) {
     this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.damage = damage; this.kind = opts && opts.kind || ""; this.radius = opts && opts.radius || CONFIG.enemyBullet.radius; this.dead = false;
     this.triggerRadius = opts && opts.triggerRadius || 0; this.fuse = opts && opts.fuse || 0; this.ringCount = opts && opts.ringCount || 0; this.ringSpeed = opts && opts.ringSpeed || 0; this.ringDamage = opts && opts.ringDamage || damage; this._armed = false;
+    this.life = opts && opts.life || 0; this.maxLife = this.life; this.speed = opts && opts.speed || Math.hypot(vx, vy); this.turn = opts && opts.turn || 0; this.color = opts && opts.color || "";
+    this.slowMult = opts && opts.slowMult || 1; this.slowDur = opts && opts.slowDur || 0; this.tick = opts && opts.tick || 0.7; this._tickT = 0;
   }
   update(dt) {
+    if (this.kind === "homing" && game.player) {
+      const a = Math.atan2(game.player.y - this.y, game.player.x - this.x), sp = this.speed || Math.hypot(this.vx, this.vy);
+      const k = clamp((this.turn || 0) * dt, 0, 1);
+      this.vx += (Math.cos(a) * sp - this.vx) * k;
+      this.vy += (Math.sin(a) * sp - this.vy) * k;
+    }
     this.x += this.vx * dt; this.y += this.vy * dt;
     if (this.kind === "mine" && game.player) {
       const dx = game.player.x - this.x, dy = game.player.y - this.y;
@@ -262,6 +277,17 @@ class EnemyBullet {
         if (this.fuse <= 0) { game.fireRing(this.x, this.y, this.ringCount || 8, this.ringSpeed || 170, this.ringDamage || this.damage); game.spawnShockwave(this.x, this.y, this.triggerRadius || 70, "#ff922b"); this.dead = true; }
       }
     }
+    if ((this.kind === "fire" || this.kind === "ice") && game.player) {
+      this.life -= dt;
+      if (hit(this, game.player)) {
+        this._tickT -= dt;
+        if (this.kind === "ice" && game.player.applySlow) game.player.applySlow(this.slowMult || 0.6, this.slowDur || 1);
+        if (this._tickT <= 0) { game.player.takeDamage(this.damage); this._tickT = this.tick || 0.7; }
+      }
+      if (this.life <= 0) this.dead = true;
+      return;
+    }
+    if (this.life > 0) { this.life -= dt; if (this.life <= 0) this.dead = true; }
     if (this.y > CONFIG.HEIGHT + 20 || this.y < -20 || this.x < -20 || this.x > CONFIG.WIDTH + 20) this.dead = true;
   }
   // QQ:双色平涂改一个径向渐变(白热核心→暗红边缘),一次 fill 顺带比原来两次 fill 还省一点
@@ -270,6 +296,26 @@ class EnemyBullet {
       ctx.save(); ctx.globalAlpha = this._armed ? 0.75 + 0.25 * Math.sin(game.titleT * 24) ** 2 : 0.85;
       ctx.fillStyle = this._armed ? "#ffd43b" : "#ff922b"; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = "#212529"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(this.x - this.radius * 0.55, this.y); ctx.lineTo(this.x + this.radius * 0.55, this.y); ctx.moveTo(this.x, this.y - this.radius * 0.55); ctx.lineTo(this.x, this.y + this.radius * 0.55); ctx.stroke();
+      ctx.restore(); return;
+    }
+    if (this.kind === "fire" || this.kind === "ice") {
+      const fire = this.kind === "fire", a = this.maxLife ? clamp(this.life / this.maxLife, 0, 1) : 1;
+      ctx.save(); ctx.globalAlpha = 0.18 + a * 0.34;
+      const g = ctx.createRadialGradient(this.x, this.y, 4, this.x, this.y, this.radius);
+      g.addColorStop(0, fire ? "rgba(255,236,153,.9)" : "rgba(255,255,255,.85)");
+      g.addColorStop(0.45, fire ? "rgba(255,146,43,.55)" : "rgba(116,192,252,.52)");
+      g.addColorStop(1, fire ? "rgba(224,49,49,0)" : "rgba(34,211,238,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.55 + 0.25 * Math.sin(game.titleT * 8) ** 2; ctx.strokeStyle = fire ? "#ff922b" : "#74c0fc"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(this.x, this.y, this.radius * (0.86 + 0.08 * Math.sin(game.titleT * 5)), 0, Math.PI * 2); ctx.stroke();
+      ctx.restore(); return;
+    }
+    if (this.kind === "homing") {
+      const a = Math.atan2(this.vy, this.vx);
+      ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(a + Math.PI / 2);
+      const trail = ctx.createLinearGradient(0, -8, 0, 22);
+      trail.addColorStop(0, "#fff9db"); trail.addColorStop(0.45, "#ffd43b"); trail.addColorStop(1, "rgba(255,212,59,0)");
+      ctx.fillStyle = trail; ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(-5, 5); ctx.lineTo(0, 22); ctx.lineTo(5, 5); ctx.closePath(); ctx.fill();
       ctx.restore(); return;
     }
     const g = ctx.createRadialGradient(this.x - 1, this.y - 1, 0.5, this.x, this.y, this.radius);
@@ -392,6 +438,7 @@ class Enemy {
     this._beaconTimer = (t.markInterval || 0) * (0.45 + game.rng() * 0.35); this._beaconWarn = 0; this._beaconX = 0;
     this._mineTimer = (t.mineInterval || 0) * (0.55 + game.rng() * 0.35);
     this._phaseTimer = (t.blinkInterval || 0) * (0.45 + game.rng() * 0.35); this._phaseWarn = 0; this._phaseTargetX = 0;
+    this._homingSkillTimer = (t.homingInterval || 0) * (0.5 + game.rng() * 0.35); this._zoneTimer = (t.zoneInterval || 0) * (0.5 + game.rng() * 0.35);
     this._reflectCd = 0; this.guardShield = 0; this.guardedBy = null; this._wardenPulse = 0; this._stolenKind = ""; this._escapeTimer = 0;
   }
   rollElite() {
@@ -455,6 +502,8 @@ class Enemy {
     this.updateBeacon(dt);
     this.updateMineLayer(dt);
     this.updatePhaseWing(dt);
+    this.updateHomingSkill(dt);
+    this.updateZoneSkill(dt);
     this.updateWarden(dt);
     if (this._reflectCd > 0) this._reflectCd -= dt;
     if (this.y >= -this.radius && this.y <= CONFIG.HEIGHT + this.radius) this._entered = true;
@@ -548,6 +597,25 @@ class Enemy {
       this._phaseTargetX = clamp(game.player.x + side * (this.cfg.blinkRange || 170), this.radius + 18, CONFIG.WIDTH - this.radius - 18);
       this._phaseWarn = this.cfg.blinkDelay || 0.55;
     }
+  }
+  canUseEndlessSkill(minTime = 0) {
+    return game.endless && (!minTime || game._endlessT >= minTime) && this.y > 0 && this.y < CONFIG.HEIGHT * 0.76 && game.player;
+  }
+  updateHomingSkill(dt) {
+    if (!this.cfg.homingInterval || !this.canUseEndlessSkill(this.cfg.homingMinTime || 0)) return;
+    this._homingSkillTimer -= dt;
+    if (this._homingSkillTimer > 0) return;
+    this._homingSkillTimer = this.cfg.homingInterval || 4;
+    game.spawnEnemyHomingBullet(this.x, this.y + this.radius * 0.45, this.cfg.homingSpeed || 220, this.cfg.homingTurn || 2.8, this.cfg.homingDamage || this.cfg.damage || 7);
+    Sound.tone(720, 0.08, "triangle", 0.1, 180);
+  }
+  updateZoneSkill(dt) {
+    if (!this.cfg.zoneKind || !this.canUseEndlessSkill(this.cfg.zoneMinTime || 0)) return;
+    this._zoneTimer -= dt;
+    if (this._zoneTimer > 0) return;
+    this._zoneTimer = this.cfg.zoneInterval || 4.5;
+    game.spawnEnemyZone(this.x, this.y + this.radius * 0.35, this.cfg.zoneKind, this.cfg);
+    Sound.tone(this.cfg.zoneKind === "ice" ? 520 : 300, 0.08, "sawtooth", 0.09, 160);
   }
   updateWarden(dt) {
     if (this.type !== "warden" || this.y <= 0 || this.y >= CONFIG.HEIGHT * 0.78) return;
