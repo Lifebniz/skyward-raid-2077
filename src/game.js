@@ -11,7 +11,7 @@ const game = {
   flashTimer: 0, bannerText: "", bannerSub: "", bannerTimer: 0, warningTimer: 0, titleT: 0, _sliderDrag: false,
   dlgName: "", dlgText: "", dlgTimer: 0,   // P:BOSS 台词
   topScores: [], _recorded: false,
-  farming: false, _reached: false, _farmTimer: 0, _farmWaveN: 0, _clearScore: 0, settleResult: null, _resetArmed: false,
+  farming: false, _reached: false, _farmTimer: 0, _farmWaveN: 0, _clearScore: 0, settleResult: null, _resetArmed: false, _settingsReturnState: "title",
   _itemSpawnTimer: 0,   // Q:常规关卡(非无尽)每隔 CONFIG.powerup.autoInterval 秒自动刷新一个道具
   _bombsUsedThisLevel: 0,   // OO:本关用了几个炸弹(给"轻装上阵"成就用)
   _shipIdx: 0, _shipDragStartX: 0, _shipDragging: false,   // R:首页机型选择(左右滑动)
@@ -124,9 +124,9 @@ const game = {
   pause()  { if (this.state === "playing") { this.state = "paused"; input.dragging = false; } },
   resume() { if (this.state === "paused") this.state = "playing"; },
   togglePause() { if (this.state === "playing") this.pause(); else if (this.state === "paused") this.resume(); },
-  // 暂停菜单按钮:0=继续 1=返回首页
+  // 暂停菜单按钮:0=继续 1=设置 2=返回首页
   pauseMenuRect(i) { const w = 240, h = 54, x = (CONFIG.WIDTH - w) / 2, y = 440 + i * 74; return { x, y, w, h }; },
-  pauseMenuHit(px, py) { for (let i = 0; i < 2; i++) { const r = this.pauseMenuRect(i); if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return i; } return -1; },
+  pauseMenuHit(px, py) { for (let i = 0; i < 3; i++) { const r = this.pauseMenuRect(i); if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return i; } return -1; },
   pauseButtonHit(x, y) { const b = this.pauseBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
   // 开始某一关(索引)
   startLevel(i) {
@@ -1989,7 +1989,8 @@ const game = {
     ctx.fillStyle = "#fff"; ctx.font = "bold 48px 'Segoe UI', sans-serif"; ctx.fillText("暂停", cx, 340);
     ctx.fillStyle = "#adb5bd"; ctx.font = "16px 'Segoe UI', sans-serif"; ctx.fillText("P / Esc 键也可继续", cx, 380);
     UI.button(ctx, this.pauseMenuRect(0), { label: "继续 RESUME", color: "#38d9a9", active: true, font: 21 });
-    UI.button(ctx, this.pauseMenuRect(1), { label: "返回首页 HOME", color: "#adb5bd", font: 21 });
+    UI.button(ctx, this.pauseMenuRect(1), { label: "⚙ 设置 SETTINGS", color: "#4dabf7", font: 19 });
+    UI.button(ctx, this.pauseMenuRect(2), { label: "返回首页 HOME", color: "#adb5bd", font: 21 });
     ctx.textAlign = "left";
   },
 
@@ -2212,7 +2213,12 @@ const game = {
     ctx.font = "56px 'Segoe UI', sans-serif"; ctx.fillStyle = "#fff"; ctx.fillText(p.icon, cx, cardY + 74);
     ctx.fillStyle = "#4dabf7"; ctx.font = "bold 22px 'Segoe UI', sans-serif"; ctx.fillText(p.title, cx, cardY + 118);
     ctx.fillStyle = "#dee2e6"; ctx.font = "15px 'Segoe UI', sans-serif";
-    p.lines.forEach((line, i) => ctx.fillText(line, cx, cardY + 160 + i * 30));
+    // BB:教程正文有几行较长(如机型技能说明),原来按固定行距整行绘制会撑出卡片边框;
+    //   改用 UI.wrapText 按卡片可用宽度逐字断行,再按实际子行数累加行距。
+    let lineY = cardY + 138;
+    p.lines.forEach((line) => {
+      UI.wrapText(ctx, line, cardW - 40, 3).forEach((sub) => { lineY += 22; ctx.fillText(sub, cx, lineY); });
+    });
 
     for (let i = 0; i < n; i++) {
       const dx = cx + (i - (n - 1) / 2) * 22, dy = cardY + cardH + 26;
@@ -2477,7 +2483,7 @@ const game = {
       else this._resetArmed = true;
       return;
     }
-    if (inR(R.back))    { this._resetArmed = false; this.state = "title"; return; }
+    if (inR(R.back))    { this._resetArmed = false; this.state = this._settingsReturnState || "title"; return; }
   },
   drawSettings(ctx) {
     const cx = CONFIG.WIDTH / 2, R = this.settingsRects();

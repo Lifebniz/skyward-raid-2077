@@ -44,7 +44,7 @@ function toggleMute() {
 canvas.addEventListener("pointerdown", (e) => {
   Sound.resume(); Music.resume(true);
   const p = toLogic(e.clientX, e.clientY);
-  if (game.state === "title") { if (game.titleSettingsHit(p.x, p.y)) { game._resetArmed = false; game.state = "settings"; return; } if (game.titleCodexHit(p.x, p.y)) { game.toCodex(); return; } if (game.titleHelpHit(p.x, p.y)) { game.toTutorial(); return; } if (game.titleShipHit(p.x, p.y)) { game.toShipSelect(); return; } if (game.titleChallengeHit(p.x, p.y)) { game.openChallengePrompt(); return; } if (game.titleEndlessHit(p.x, p.y)) { game.startEndless(); return; } if (game.titleStartHit(p.x, p.y)) game.toMap(); return; }
+  if (game.state === "title") { if (game.titleSettingsHit(p.x, p.y)) { game._resetArmed = false; game._settingsReturnState = "title"; game.state = "settings"; return; } if (game.titleCodexHit(p.x, p.y)) { game.toCodex(); return; } if (game.titleHelpHit(p.x, p.y)) { game.toTutorial(); return; } if (game.titleShipHit(p.x, p.y)) { game.toShipSelect(); return; } if (game.titleChallengeHit(p.x, p.y)) { game.openChallengePrompt(); return; } if (game.titleEndlessHit(p.x, p.y)) { game.startEndless(); return; } if (game.titleStartHit(p.x, p.y)) game.toMap(); return; }
   if (game.state === "endlessover") { if (game.endlessChallengeHit(p.x, p.y)) { game.copyEndlessChallenge(); return; } game.endless = false; game.toTitle(); return; }
   if (game.state === "settings") { game.settingsPointerDown(p.x, p.y); return; }
   if (game.state === "shipselect") { game.shipSelectPointerDown(p.x, p.y); return; }
@@ -63,7 +63,7 @@ canvas.addEventListener("pointerdown", (e) => {
     const i = game.clearedMenuHit(p.x, p.y); if (i === 0) game.settle(game.autoNext); else if (i === 1) game.startFarm(); return;
   }
   // UU:BUG修复——按钮文案是"返回首页"但之前调的是 toMap()(尤其无尽模式下,无尽没有"当前关卡"概念,落到地图页很莫名其妙)
-  if (game.state === "paused") { const i = game.pauseMenuHit(p.x, p.y); if (i === 0) game.resume(); else if (i === 1) { game.endless = false; game.toTitle(); } return; }
+  if (game.state === "paused") { const i = game.pauseMenuHit(p.x, p.y); if (i === 0) game.resume(); else if (i === 1) { game._resetArmed = false; game._settingsReturnState = "paused"; game.state = "settings"; } else if (i === 2) { game.endless = false; game.toTitle(); } return; }
   if (game.state !== "playing") { game.toMap(); return; }                                            // 结算/失败界面 → 返回地图
   if (game.farming && game.settleButtonHit(p.x, p.y)) { game.settle(); return; }                     // 刷分中点结算
   if (game.specialButtonHit(p.x, p.y)) { game.useSpecial(); return; }                                // 必杀按钮
