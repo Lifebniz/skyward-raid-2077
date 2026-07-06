@@ -67,6 +67,7 @@ const eventKeys = CONFIG.endless.events.map(e => e.key);
 unique(eventKeys, "endless events");
 assert(eventKeys.includes("repairConvoy"), "endless events should include repair convoy pressure");
 assert(eventKeys.includes("phantomWing"), "endless events should include phantom pressure");
+assert(eventKeys.includes("carrierRaid"), "endless events should include carrier split pressure");
 const routeNames = new Set(["主炮", "激光", "追踪", "导弹", "生存", "风险"]);
 const drops = new Set(["power", "heal", "bomb", "wing", "chip"]);
 for (const e of CONFIG.endless.events) {
@@ -94,6 +95,10 @@ const phantomWing = CONFIG.endless.events.find(e => e.key === "phantomWing");
 assert.strictEqual(phantomWing.enemyType, "phantom", "phantom wing should force phantom enemies");
 assert(phantomWing.minTime >= 120, "phantom wing should be a late endless event");
 assert(phantomWing.routeBias, "phantom wing should bias draft choices");
+const carrierRaid = CONFIG.endless.events.find(e => e.key === "carrierRaid");
+assert.strictEqual(carrierRaid.enemyType, "carrier", "carrier raid should force carrier enemies");
+assert(carrierRaid.minTime >= 150, "carrier raid should be a late endless event");
+assert(CONFIG.enemy.carrier.spawns, "carrier raid should rely on carrier split adds");
 const recentEventKeys = CONFIG.endless.events.slice(0, 2).map(e => e.key);
 game.endless = true; game._endlessT = 999; game._endlessEvent = null; game._endlessRecentEvents = recentEventKeys.slice(); game._endlessEventsSeen = []; game._endlessStats = { events: 0, hits: 0 }; game._rng = () => 0;
 game.triggerEndlessEvent();
