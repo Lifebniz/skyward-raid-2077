@@ -15,11 +15,12 @@ sandbox.FloatText = class FloatText { constructor(x, y, text, color) { this.x = 
 sandbox.Shockwave = class Shockwave { constructor(x, y, maxR, color) { this.x = x; this.y = y; this.maxR = maxR; this.color = color; } };
 sandbox.pools = {
   enemy: { get(type, x, y, move, elite) { return { type, x, y, move, elite, dead: false, isBoss: false, radius: CONFIG.enemy[type].radius }; } },
+  enemyBullet: { get(x, y, vx, vy, damage) { return { x, y, vx, vy, damage, dead: false }; } },
   homingShot: { get(x, y, overcharge) { return { x, y, overcharge }; } },
 };
 sandbox.Sound = { powerup() {}, tone() {} };
-vm.runInContext(fs.readFileSync("src/entities.js", "utf8") + "\nglobalThis.Enemy = Enemy;", sandbox);
-const { Enemy } = sandbox;
+vm.runInContext(fs.readFileSync("src/entities.js", "utf8") + "\nglobalThis.Enemy = Enemy; globalThis.Missile = Missile; globalThis.PlayerLaser = PlayerLaser;", sandbox);
+const { Enemy, Missile, PlayerLaser } = sandbox;
 
 const between = (value, min, max, label) => assert(value >= min && value <= max, `${label} ${value} outside ${min}-${max}`);
 const unique = (items, label) => assert.strictEqual(new Set(items).size, items.length, `${label} has duplicate keys`);
@@ -80,6 +81,10 @@ assert(eventKeys.includes("repairConvoy"), "endless events should include repair
 assert(eventKeys.includes("shieldWall"), "endless events should include shield carrier pressure");
 assert(eventKeys.includes("phantomWing"), "endless events should include phantom pressure");
 assert(eventKeys.includes("carrierRaid"), "endless events should include carrier split pressure");
+assert(eventKeys.includes("annihilationOrder"), "endless events should include a kill-goal objective");
+assert(eventKeys.includes("aceHunt"), "endless events should include an elite hunt objective");
+assert(eventKeys.includes("noHitRun"), "endless events should include a no-hit objective");
+assert(eventKeys.includes("crossfire"), "endless events should include a side bullet hazard");
 const routeNames = new Set(["主炮", "激光", "追踪", "导弹", "生存", "风险"]);
 const drops = new Set(["power", "heal", "bomb", "wing", "chip"]);
 for (const e of CONFIG.endless.events) {
@@ -88,7 +93,11 @@ for (const e of CONFIG.endless.events) {
   if (e.minTime != null) between(e.minTime, 0, 300, `event ${e.key} minTime`);
   if (e.enemyType) assert(enemyKeys.has(e.enemyType), `event ${e.key} references missing enemy ${e.enemyType}`);
   if (e.enemyChance != null) between(e.enemyChance, 0, 0.75, `event ${e.key} enemyChance`);
+  if (e.eliteChance != null) between(e.eliteChance, 0, 0.9, `event ${e.key} eliteChance`);
   if (e.spawnBonus != null) between(e.spawnBonus, 0, 3, `event ${e.key} spawnBonus`);
+  if (e.killGoal != null) between(e.killGoal, 6, 30, `event ${e.key} killGoal`);
+  if (e.eliteGoal != null) between(e.eliteGoal, 2, 10, `event ${e.key} eliteGoal`);
+  if (e.noHitGoal != null) assert.strictEqual(e.noHitGoal, true, `event ${e.key} noHitGoal should be true when present`);
   if (e.scoreBonus != null) between(e.scoreBonus, 0, 0.35, `event ${e.key} scoreBonus`);
   if (e.threatGainMult != null) between(e.threatGainMult, 1, 1.5, `event ${e.key} threatGainMult`);
   if (e.forceDrop) assert(drops.has(e.forceDrop), `event ${e.key} has invalid forceDrop ${e.forceDrop}`);
@@ -98,6 +107,12 @@ for (const e of CONFIG.endless.events) {
     between(e.laserEvery, 3, 7, `event ${e.key} laserEvery`);
     between(e.warn || 0, 0.4, 1.2, `event ${e.key} laser warn`);
     between(e.width || 0, 20, 70, `event ${e.key} laser width`);
+  }
+  if (e.bulletEvery) {
+    between(e.bulletEvery, 2.5, 6, `event ${e.key} bulletEvery`);
+    between(e.bulletRows || 0, 3, 8, `event ${e.key} bulletRows`);
+    between(e.bulletSpeed || 0, 160, 360, `event ${e.key} bulletSpeed`);
+    between(e.bulletDamage || 0, 3, 12, `event ${e.key} bulletDamage`);
   }
 }
 const repairConvoy = CONFIG.endless.events.find(e => e.key === "repairConvoy");
@@ -115,6 +130,23 @@ const shieldWall = CONFIG.endless.events.find(e => e.key === "shieldWall");
 assert.strictEqual(shieldWall.enemyType, "shieldCarrier", "shield wall should force shield carriers");
 assert(shieldWall.minTime >= 120, "shield wall should be a mid/late endless event");
 assert(CONFIG.endless.pools.slice(3).some(pool => pool.enemies.includes("shieldCarrier")), "late endless pools should include shield carriers");
+const aceHunt = CONFIG.endless.events.find(e => e.key === "aceHunt");
+assert.strictEqual(aceHunt.enemyType, "gunner", "ace hunt should force durable gunner elites");
+assert(aceHunt.minTime >= 90, "ace hunt should be a mid endless event");
+assert(aceHunt.eliteChance >= 0.6, "ace hunt should reliably spawn elites");
+assert(aceHunt.eliteGoal >= 3, "ace hunt should require multiple elite kills");
+const noHitRun = CONFIG.endless.events.find(e => e.key === "noHitRun");
+assert(noHitRun.minTime >= 60, "no-hit run should not appear immediately");
+assert.strictEqual(noHitRun.routeBias, "生存", "no-hit run should bias survival drafts");
+assert.strictEqual(noHitRun.noHitGoal, true, "no-hit run should require no hits");
+const crossfire = CONFIG.endless.events.find(e => e.key === "crossfire");
+assert(crossfire.minTime >= 90, "crossfire should be a mid endless hazard");
+assert.strictEqual(crossfire.routeBias, "生存", "crossfire should bias survival drafts");
+game.enemyBullets = []; game.floats = []; game.endless = true; game._endlessT = crossfire.minTime; game.threat = 0; game._endlessHazardT = 0; game._rng = () => 0.25;
+assert.strictEqual(game.updateEndlessBulletEvent(0, crossfire), crossfire.bulletRows, "crossfire should spawn one side bullet row set");
+assert.strictEqual(game.enemyBullets.length, crossfire.bulletRows, "crossfire should create enemy bullets");
+assert(game.enemyBullets.every(b => b.vx > 0), "crossfire side bullets should move horizontally from the side");
+assert(game.endlessEventHUDDetail(crossfire).includes("侧弹"), "crossfire HUD should show bullet cadence");
 const recentEventKeys = CONFIG.endless.events.slice(0, 2).map(e => e.key);
 game.endless = true; game._endlessT = 999; game._endlessEvent = null; game._endlessRecentEvents = recentEventKeys.slice(); game._endlessEventsSeen = []; game._endlessStats = { events: 0, hits: 0 }; game._rng = () => 0;
 game.triggerEndlessEvent();
@@ -130,7 +162,41 @@ assert.strictEqual(game._bonusRerolls, 0, "hit event clear should not grant bonu
 assert.strictEqual(game._endlessStats.eventClears, 1, "event clear should be tracked");
 assert.strictEqual(game._endlessStats.cleanEvents || 0, 0, "hit event clear should not count as clean");
 assert.strictEqual(game._endlessStats.eventScore, eventHitGain, "event score should be tracked");
-game.score = 0; game.floats = []; game._endlessStats = { hits: 1 }; game._endlessEventStartHits = 1;
+const killGoalEvent = CONFIG.endless.events.find(e => e.key === "annihilationOrder");
+game.score = 0; game.floats = []; game._endlessStats = { hits: 0, kills: 3, eventClears: 0, eventScore: 0 }; game._endlessEventStartHits = 0; game._endlessEventStartKills = 0;
+assert.strictEqual(game.finishEndlessEvent(killGoalEvent), 0, "kill-goal event should fail without enough kills");
+assert.strictEqual(game._endlessStats.eventClears, 0, "failed kill-goal event should not count as cleared");
+assert.strictEqual(game._endlessStats.eventFails, 1, "failed kill-goal event should be tracked");
+assert(game.floats.some(f => f.text.includes("目标未达成")), "failed kill-goal event should show feedback");
+game._endlessStats.kills = 7; game._endlessEventStartKills = 3;
+assert(game.endlessEventHUDDetail(killGoalEvent).includes("4/" + killGoalEvent.killGoal), "kill-goal event HUD should show live progress");
+assert(game.endlessReviewTags({ telemetry: game._endlessStats, time: 60, bonuses: {} }).some(t => t.includes("目标失败")), "failed kill-goal events should appear in review tags");
+game.score = 0; game.floats = []; game._endlessStats = { hits: 0, kills: killGoalEvent.killGoal, eventClears: 0, eventScore: 0 }; game._endlessEventStartHits = 0; game._endlessEventStartKills = 0;
+assert(game.finishEndlessEvent(killGoalEvent) > 0, "kill-goal event should clear after enough kills");
+assert.strictEqual(game._endlessStats.eventClears, 1, "cleared kill-goal event should count as cleared");
+assert(game.endlessEventHUDDetail(killGoalEvent).includes(killGoalEvent.killGoal + "/" + killGoalEvent.killGoal), "kill-goal event HUD should show objective");
+game.score = 0; game.floats = []; game._endlessStats = { hits: 0, eliteKills: 1, eventClears: 0, eventScore: 0 }; game._endlessEventStartHits = 0; game._endlessEventStartEliteKills = 0;
+assert.strictEqual(game.finishEndlessEvent(aceHunt), 0, "elite-goal event should fail without enough elite kills");
+assert.strictEqual(game._endlessStats.eventClears, 0, "failed elite-goal event should not count as cleared");
+assert.strictEqual(game._endlessStats.eventFails, 1, "failed elite-goal event should be tracked");
+assert(game.floats.some(f => f.text.includes("王牌未击破")), "failed elite-goal event should show feedback");
+game._endlessStats.eliteKills = 3; game._endlessEventStartEliteKills = 1;
+assert(game.endlessEventHUDDetail(aceHunt).includes("2/" + aceHunt.eliteGoal), "elite-goal event HUD should show live progress");
+game.score = 0; game.floats = []; game._endlessStats = { hits: 0, eliteKills: aceHunt.eliteGoal, eventClears: 0, eventScore: 0 }; game._endlessEventStartHits = 0; game._endlessEventStartEliteKills = 0;
+assert(game.finishEndlessEvent(aceHunt) > 0, "elite-goal event should clear after enough elite kills");
+assert.strictEqual(game._endlessStats.eventClears, 1, "cleared elite-goal event should count as cleared");
+assert(game.endlessReviewTags({ telemetry: { eliteKills: 8 }, time: 90, bonuses: {} }).some(t => t.includes("精英猎手")), "elite kill review should tag elite hunters");
+game.score = 0; game.floats = []; game._endlessStats = { hits: 2, eventClears: 0, eventScore: 0 }; game._endlessEventStartHits = 1;
+assert.strictEqual(game.finishEndlessEvent(noHitRun), 0, "no-hit event should fail after taking a hit");
+assert.strictEqual(game._endlessStats.eventClears, 0, "failed no-hit event should not count as cleared");
+assert.strictEqual(game._endlessStats.eventFails, 1, "failed no-hit event should be tracked");
+assert(game.floats.some(f => f.text.includes("无伤失败")), "failed no-hit event should show feedback");
+assert(game.endlessEventHUDDetail(noHitRun).includes("受击1/1"), "no-hit event HUD should show failed hit progress");
+game.score = 0; game.floats = []; game._endlessStats = { hits: 1, eventClears: 0, eventScore: 0 }; game._endlessEventStartHits = 1;
+assert(game.endlessEventHUDDetail(noHitRun).includes("受击0/1"), "no-hit event HUD should show clean progress");
+assert(game.finishEndlessEvent(noHitRun) > 0, "no-hit event should clear without hits");
+assert.strictEqual(game._endlessStats.eventClears, 1, "cleared no-hit event should count as cleared");
+game.score = 0; game.floats = []; game._bonusRerolls = 0; game._endlessStats = { hits: 1 }; game._endlessEventStartHits = 1;
 const eventCleanGain = game.finishEndlessEvent(CONFIG.endless.events[0]);
 assert(eventCleanGain > eventHitGain, "clean event clear should grant bonus score");
 assert(game.player.shieldHp >= CONFIG.endless.eventCleanShield, "clean event clear should grant shield");
@@ -183,6 +249,14 @@ assert(game.draftCardWeight("bonus:shieldBreaker") > shieldBreakerBaseWeight, "s
 game.drawChipChoices();
 assert(game._chipChoices.includes("bonus:shieldBreaker"), "shield pressure draft should include shieldBreaker");
 assert(game.draftShieldText(game.cardInfo("bonus:shieldBreaker")).includes("破盾"), "shield pressure cards should show counter text");
+game._endlessEvent = null; game._endlessEventTimer = 0; game.enemies = []; game.bonuses = {}; game.chips = {}; game._chipChoices = []; game._rng = () => 0.999;
+const eliteHunterBaseWeight = game.draftCardWeight("bonus:eliteHunter");
+game._endlessEvent = aceHunt; game._endlessEventTimer = 10;
+assert(game.hasElitePressure(), "ace hunt should count as elite pressure");
+assert(game.draftCardWeight("bonus:eliteHunter") > eliteHunterBaseWeight, "elite pressure should weight eliteHunter higher");
+game.drawChipChoices();
+assert(game._chipChoices.includes("bonus:eliteHunter"), "elite pressure draft should include eliteHunter");
+assert(game.draftEliteText(game.cardInfo("bonus:eliteHunter")).includes("精英"), "elite pressure cards should show counter text");
 game.state = "playing"; game._endlessT = CONFIG.powerup.chipMinEndlessTime - 0.01; game._lastChipDraftAt = -Infinity; game._nextChipDraftAt = 0; game._endlessStats = { drafts: 0 };
 assert.strictEqual(game.updateChipDraftTimer(), false, "draft timer should wait until the fixed delay");
 game._endlessT = CONFIG.powerup.chipMinEndlessTime;
@@ -227,12 +301,20 @@ assert(affixes.some(a => a.key === "exposedCore"), "boss affixes should include 
 assert(affixes.some(a => a.key === "shieldEscort"), "boss affixes should include shield escort pressure");
 assert(affixes.some(a => a.key === "phantomEscort"), "boss affixes should include phantom escort pressure");
 assert(affixes.some(a => a.key === "swarmEscort"), "boss affixes should include swarm add pressure");
+assert(affixes.some(a => a.key === "aceEscort"), "boss affixes should include elite ace pressure");
 const shieldEscort = affixes.find(a => a.key === "shieldEscort");
 game._endlessEvent = null; game._endlessEventTimer = 0; game.boss = { dead: false, affix: shieldEscort }; game.bonuses = {}; game.chips = {}; game._chipChoices = []; game._rng = () => 0.999;
 assert(game.hasShieldPressure(), "shield escort boss should count as shield pressure");
 game.drawChipChoices();
 assert(game._chipChoices.includes("bonus:shieldBreaker"), "shield escort boss draft should include shieldBreaker");
 game.boss = null;
+const aceEscort = affixes.find(a => a.key === "aceEscort");
+assert.strictEqual(aceEscort.enemy, "gunner", "ace escort should spawn durable gunners");
+assert(aceEscort.elite, "ace escort should spawn elite adds");
+game._endlessEvent = null; game._endlessEventTimer = 0; game.enemies = []; game.boss = { dead: false, affix: aceEscort }; game.bonuses = {}; game.chips = {}; game._chipChoices = []; game._rng = () => 0.999;
+assert(game.hasElitePressure(), "ace escort boss should count as elite pressure");
+game.drawChipChoices();
+assert(game._chipChoices.includes("bonus:eliteHunter"), "ace escort boss draft should include eliteHunter");
 const recentAffixKeys = affixes.slice(0, 2).map(a => a.key);
 game._endlessRecentBossAffixes = recentAffixKeys.slice(); game._rng = () => 0;
 const pickedAffix = game.pickEndlessBossAffix(affixes);
@@ -279,15 +361,19 @@ const swarmEscort = affixes.find(a => a.key === "swarmEscort");
 game.enemies = []; game.floats = []; game.boss = { x: 220, y: 120, radius: 50 };
 assert.strictEqual(game.spawnBossEscort(game.boss, swarmEscort), swarmEscort.adds, "swarmEscort should spawn multiple adds");
 assert.strictEqual(game.enemies.filter(e => e.type === "small").length, swarmEscort.adds, "swarmEscort should spawn small swarm adds");
+game.enemies = []; game.floats = []; game.boss = { x: 220, y: 120, radius: 50 };
+game.spawnBossEscort(game.boss, aceEscort);
+assert(game.enemies.some(e => e.type === "gunner" && e.elite === aceEscort.elite), "aceEscort should spawn elite gunner adds");
 game.floats = []; game._endlessBossAffixesSeen = []; game._endlessRecentBossAffixes = [];
 game.applyEndlessBossAffix({ x: 100, radius: 40, hp: 100, maxHp: 100, score: 100, _fireScale: 1, def: { name: "Test", enterY: 120 } }, phantomEscort);
 assert.strictEqual(game._endlessRecentBossAffixes[0], phantomEscort.key, "applied boss affix should be remembered");
 
 const bonusKeys = new Set(Object.keys(CONFIG.bonuses));
 for (const key of CONFIG.bonusOrder) assert(bonusKeys.has(key), `bonusOrder references missing bonus ${key}`);
-for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "painConverter", "armorCaliber", "vitalReactor", "stableFire", "shieldAmplifier", "shieldBreaker", "signalFilter"]) {
+for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "medicalReservoir", "painConverter", "armorCaliber", "vitalReactor", "stableFire", "perfectLine", "shieldAmplifier", "shieldBreaker", "signalFilter"]) {
   assert(bonusKeys.has(key), `missing survival/build bonus ${key}`);
 }
+assert(bonusKeys.has("eliteHunter"), "missing elite counter build bonus");
 assert(CONFIG.bonuses.armorCaliber.hpPerDamage > 0, "armorCaliber hpPerDamage must be positive");
 between(CONFIG.bonuses.armorCaliber.maxDamage, 2, 8, "armorCaliber maxDamage");
 assert(CONFIG.bonuses.vitalReactor.hpPerDamageMult > 0, "vitalReactor hpPerDamageMult must be positive");
@@ -295,11 +381,15 @@ between(CONFIG.bonuses.vitalReactor.damageMult, 0.02, 0.08, "vitalReactor damage
 between(CONFIG.bonuses.vitalReactor.maxDamageMult, 0.1, 0.4, "vitalReactor maxDamageMult");
 between(CONFIG.bonuses.stableFire.hpThreshold, 0.55, 0.85, "stableFire hpThreshold");
 between(CONFIG.bonuses.stableFire.damageMult, 0.08, 0.3, "stableFire damageMult");
+between(CONFIG.bonuses.perfectLine.delay, 5, 12, "perfectLine delay");
+between(CONFIG.bonuses.perfectLine.damageMult, 0.08, 0.25, "perfectLine damageMult");
+between(CONFIG.bonuses.perfectLine.cooldownMult, 0.04, 0.16, "perfectLine cooldownMult");
 between(CONFIG.bonuses.shieldAmplifier.damageMult, 0.08, 0.3, "shieldAmplifier damageMult");
 between(CONFIG.bonuses.shieldBreaker.shieldDamageMult, 0.25, 1.0, "shieldBreaker shieldDamageMult");
 between(CONFIG.bonuses.shieldBreaker.breakDamage, 3, 14, "shieldBreaker breakDamage");
 between(CONFIG.bonuses.shieldBreaker.range, 100, 220, "shieldBreaker range");
 between(CONFIG.bonuses.signalFilter.jamResist, 0.08, 0.3, "signalFilter jamResist");
+between(CONFIG.bonuses.eliteHunter.eliteDamageMult, 0.15, 0.6, "eliteHunter eliteDamageMult");
 between(CONFIG.bonuses.repairLoop.every, 8, 22, "repairLoop interval");
 between(CONFIG.bonuses.repairLoop.healPct, 0.03, 0.12, "repairLoop healPct");
 between(CONFIG.bonuses.repairLoop.shield, 4, 16, "repairLoop shield");
@@ -311,6 +401,8 @@ between(CONFIG.bonuses.weakScanner.weakDuration, 0.2, 1.2, "weakScanner weakDura
 between(CONFIG.bonuses.livingArmor.every, 8, 18, "livingArmor kill interval");
 between(CONFIG.bonuses.livingArmor.hp, 1, 6, "livingArmor hp gain");
 between(CONFIG.bonuses.livingArmor.maxHp, 18, 60, "livingArmor max HP per stack");
+between(CONFIG.bonuses.medicalReservoir.hp, 1, 5, "medicalReservoir hp gain");
+between(CONFIG.bonuses.medicalReservoir.maxHp, 12, 50, "medicalReservoir max HP per stack");
 game.bonuses = {}; game._bonusStats = {}; game._bonusHpGain = {}; game.floats = []; game.player = { x: 100, y: 100, hp: 80, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
 game.activateBonus("maxHp");
 game.activateBonus("reinforcedHull");
@@ -326,6 +418,17 @@ assert(game.player.maxHp > 100 && game._bonusHpGain.livingArmor > 0, "livingArmo
 game._bonusHpGain.livingArmor = CONFIG.bonuses.livingArmor.maxHp;
 game._bonusKillN += CONFIG.bonuses.livingArmor.every;
 assert.strictEqual(game.triggerLivingArmorGrowth(), 0, "livingArmor should respect max HP cap");
+game.score = 0; game.threat = 0; game._maxThreatLevel = 0; game.bonuses = { medicalReservoir: 1 }; game._bonusHpGain = {}; game.floats = []; game.enemies = []; game.chips = {};
+game.player = { x: 100, y: 100, hp: 100, maxHp: 100, baseMaxHp: 100, shieldHp: 0, grantShield(n, dur) { this.shieldHp = n; this.shieldTimer = dur; } };
+game.collectPowerup("heal");
+assert.strictEqual(game.player.maxHp, 100 + CONFIG.bonuses.medicalReservoir.hp, "medicalReservoir should grow max HP from full HP heals");
+assert.strictEqual(game._bonusHpGain.medicalReservoir, CONFIG.bonuses.medicalReservoir.hp, "medicalReservoir should record gained HP");
+assert(game.player.shieldHp > 0, "medicalReservoir should keep the normal full HP shield reward");
+assert(game.bonusHUDText("medicalReservoir").includes("HP"), "medicalReservoir HUD should show gained HP");
+assert(game.draftStatPreviewText(game.cardInfo("bonus:medicalReservoir")).includes("HP"), "medicalReservoir draft preview should show HP cap");
+game._bonusHpGain.medicalReservoir = CONFIG.bonuses.medicalReservoir.maxHp; const cappedHp = game.player.maxHp;
+game.collectPowerup("heal");
+assert.strictEqual(game.player.maxHp, cappedHp, "medicalReservoir should respect max HP cap");
 const repairLoop = CONFIG.bonuses.repairLoop;
 game.bonuses = { repairLoop: 1 }; game.chips = {}; game.combo = 0; game.threat = 0; game._maxThreatLevel = 0; game._noHitT = 0; game._fieldRepairT = 0; game._repairLoopT = repairLoop.every - 0.01; game.floats = [];
 game.player = { x: 100, y: 100, hp: 70, maxHp: 100, power: 1, overcharge: 0, shieldHp: 0, heal(n) { this.hp = Math.min(this.maxHp, this.hp + n); }, grantShield(n, dur) { this.shieldHp = n; this.shieldTimer = dur; } };
@@ -344,6 +447,11 @@ game.bonuses = { shieldAmplifier: 1 }; game.chips = {}; game.player = { hp: 100,
 assert.strictEqual(game.playerDamage(100), 100, "shieldAmplifier should not add damage without shield");
 game.player.shieldHp = 10;
 assert(game.playerDamage(100) > 100, "shieldAmplifier should add damage while shielded");
+game.bonuses = { eliteHunter: 1 }; game.chips = {}; game.player = { hp: 100, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
+assert.strictEqual(game.playerDamage(100, { hp: 100, maxHp: 100 }), 100, "eliteHunter should not add damage to normal enemies");
+assert(game.playerDamage(100, { elite: "shield", hp: 100, maxHp: 100 }) > 100, "eliteHunter should add damage to elite enemies");
+assert(game.draftStatPreviewText(game.cardInfo("bonus:eliteHunter")).includes("%"), "eliteHunter draft preview should show damage");
+assert(game.bonusHUDText("eliteHunter").includes("%"), "eliteHunter HUD should show elite damage");
 game.bonuses = { stableFire: 1 }; game.chips = {}; game.player = { hp: 100, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
 assert(game.playerDamage(100) > 100, "stableFire should add damage while HP is high");
 assert(game.draftStatPreviewText(game.cardInfo("bonus:stableFire")).includes("%"), "stableFire draft preview should show damage");
@@ -351,6 +459,15 @@ assert(game.bonusHUDText("stableFire").includes("激活"), "stableFire HUD shoul
 game.player.hp = 40;
 assert.strictEqual(game.stableFireDamageMult(), 0, "stableFire should turn off at low HP");
 assert(game.bonusHUDText("stableFire").includes("待机"), "stableFire HUD should show inactive state");
+game.bonuses = { perfectLine: 1 }; game.chips = {}; game.enemies = []; game.boss = null; game._noHitT = CONFIG.bonuses.perfectLine.delay - 0.01; game.player = { x: 100, y: 100, hp: 100, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
+assert.strictEqual(game.playerDamage(100), 100, "perfectLine should wait for no-hit delay");
+assert.strictEqual(game.perfectLineValue("cooldownMult"), 0, "perfectLine cooldown should wait for no-hit delay");
+assert(game.bonusHUDText("perfectLine").includes("s"), "perfectLine HUD should show pending timer");
+game._noHitT = CONFIG.bonuses.perfectLine.delay;
+assert(game.playerDamage(100) > 100, "perfectLine should add damage after no-hit delay");
+assert(game.weaponCooldownMult() < 1, "perfectLine should speed weapons after no-hit delay");
+assert(game.draftStatPreviewText(game.cardInfo("bonus:perfectLine")).includes("%"), "perfectLine draft preview should show gains");
+assert(game.bonusHUDText("perfectLine").includes("%"), "perfectLine HUD should show active state");
 game.endless = false; game.currentLevel = 1; game._rng = () => 0.999; game.bonuses = { shieldBreaker: 1 }; game.chips = {}; game.floats = []; game.shockwaves = [];
 const shielded = new Enemy("shieldCarrier", 100, 0, "straight"); shielded.y = 100;
 const splashTarget = { dead: false, x: 130, y: 100, radius: 12, hp: 30, maxHp: 30, damage(d) { this.hp -= d; if (this.hp <= 0) { this.dead = true; return true; } return false; } };
@@ -375,6 +492,15 @@ assert(game.draftStatPreviewText(game.cardInfo("bonus:comboBarrage")).includes("
 game.bonuses = {}; assert.strictEqual(game.missileVolleyBonus(), 0, "missile route should not add volley before ready");
 game.bonuses = { missileRack: 3 }; assert.strictEqual(game.missileVolleyBonus(), 1, "missile route should add one missile when ready");
 assert(game.routeEffectText().includes("导弹+1"), "missile route resonance text should show the extra missile");
+game.bonuses = {}; const baseMissile = new Missile(100, 100, 0);
+game.bonuses = { missileRack: 3 }; const routeMissile = new Missile(100, 100, 0);
+assert(routeMissile.damage > baseMissile.damage && routeMissile.splash > baseMissile.splash, "missile route should increase missile damage and splash");
+game.bonuses = {}; const baseLaser = new PlayerLaser(100, 100, 0);
+game.bonuses = { laserLens: 3 }; const routeLaser = new PlayerLaser(100, 100, 0);
+assert(routeLaser.damage > baseLaser.damage && routeLaser.life > baseLaser.life, "laser route should increase laser damage and duration");
+game.bonuses = {}; assert.strictEqual(game.homingVolleyBonus(), 0, "homing route should not add shots before ready");
+game.bonuses = { swarmCore: 3 }; assert.strictEqual(game.homingVolleyBonus(), 1, "homing route should add one homing shot when ready");
+assert(game.homingCooldownMult() < 1 && game.routeEffectText().includes("追踪+1"), "homing route should speed up and show resonance text");
 game.bonuses = { missileRack: 2 };
 assert(game.routeProgressText().includes("/7"), "route progress should show resonance threshold");
 assert(game.routePreviewText(game.cardInfo("bonus:missileRack")).includes("解锁共鸣"), "draft route preview should show resonance unlock");

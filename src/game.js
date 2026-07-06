@@ -24,7 +24,7 @@ const game = {
   _mapScrollY: 0, _mapDragStartX: 0, _mapDragStartY: 0, _mapDragStartScrollY: 0, _mapDragging: false, _mapDragMoved: false,
   _mapHighlightId: null, _mapHighlightT: 0,   // MM:从图鉴跳转过来时高亮提示的关卡
   _levelTransX: 0, _levelTransY: 0, _levelTransT: 0,   // NN:进入关卡的聚焦扩散过渡(从点击处展开)
-  autoNext: true, endless: false, challengeSeed: "", challengeMode: false, challengeDaily: false, challengeTarget: null, challengeSplits: [], rivalInterference: null, _rng: null, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0, _endlessEventT: 0, _endlessEventTimer: 0, _endlessEvent: null, _endlessHazardT: 0, _endlessEventStartHits: 0, _endlessEventsSeen: [], _endlessRecentEvents: [], _endlessStats: null, _endlessTimeline: [], _endlessMarkIdx: 0,
+  autoNext: true, endless: false, challengeSeed: "", challengeMode: false, challengeDaily: false, challengeTarget: null, challengeSplits: [], rivalInterference: null, _rng: null, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0, _endlessEventT: 0, _endlessEventTimer: 0, _endlessEvent: null, _endlessHazardT: 0, _endlessEventStartHits: 0, _endlessEventStartKills: 0, _endlessEventStartEliteKills: 0, _endlessEventsSeen: [], _endlessRecentEvents: [], _endlessStats: null, _endlessTimeline: [], _endlessMarkIdx: 0,
   _endlessBossAffixesSeen: [], _endlessRecentBossAffixes: [],
   _shake: 0, _shakeT: 0, _hitStopT: 0,   // N:打击感
   // 触控按钮放大,便于拇指操作
@@ -130,7 +130,7 @@ const game = {
   pauseButtonHit(x, y) { const b = this.pauseBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
   // 开始某一关(索引)
   startLevel(i) {
-    this.currentLevel = i; this.world = LEVELS[i].world; this.endless = false; this.challengeSeed = ""; this.challengeMode = false; this.challengeDaily = false; this.challengeTarget = null; this.challengeSplits = []; this.rivalInterference = null; this._rng = null; this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = 0; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessStats = null; this._endlessTimeline = []; this._endlessMarkIdx = 0;
+    this.currentLevel = i; this.world = LEVELS[i].world; this.endless = false; this.challengeSeed = ""; this.challengeMode = false; this.challengeDaily = false; this.challengeTarget = null; this.challengeSplits = []; this.rivalInterference = null; this._rng = null; this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = 0; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventStartKills = 0; this._endlessEventStartEliteKills = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessStats = null; this._endlessTimeline = []; this._endlessMarkIdx = 0;
     this.state = "playing";
     this.player = new Player(); this.boss = null;
     this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.floats = []; this.lasers = []; this.shockwaves = []; this.specialWaves = [];
@@ -166,7 +166,7 @@ const game = {
     this.resetDepthSystems();
     this.flashTimer = 0; this.warningTimer = 0; this._hpTrailRatio = 1;
     this._endlessT = 0; this._endlessSpawnT = CONFIG.endless.spawn.initialDelay; this._endlessBossT = CONFIG.endless.boss.firstDelay; this._endlessBossN = 0;
-    this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = CONFIG.endless.eventInterval * 0.65; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessBossAffixesSeen = []; this._endlessRecentBossAffixes = [];
+    this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = CONFIG.endless.eventInterval * 0.65; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventStartKills = 0; this._endlessEventStartEliteKills = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessBossAffixesSeen = []; this._endlessRecentBossAffixes = [];
     this.resetEndlessTelemetry();
     director.begin(null);
     input.targetX = CONFIG.player.startX; input.targetY = CONFIG.player.startY;
@@ -204,7 +204,8 @@ const game = {
     const pool = base.filter(e => e.key !== currentKey);
     const fresh = pool.filter(e => !recent.includes(e.key));
     const e = this.pick(fresh.length ? fresh : (pool.length ? pool : base));
-    this._endlessEvent = e; this._endlessEventTimer = CONFIG.endless.eventDuration; this._endlessEventT = CONFIG.endless.eventInterval; this._endlessHazardT = e.laserEvery ? (e.laserDelay || 1) : 0; this._endlessEventStartHits = this._endlessStats ? this._endlessStats.hits : 0;
+    const hazardDelay = e.laserEvery ? (e.laserDelay || 1) : e.bulletEvery ? (e.bulletDelay || 1) : 0;
+    this._endlessEvent = e; this._endlessEventTimer = CONFIG.endless.eventDuration; this._endlessEventT = CONFIG.endless.eventInterval; this._endlessHazardT = hazardDelay; this._endlessEventStartHits = this._endlessStats ? this._endlessStats.hits : 0; this._endlessEventStartKills = this._endlessStats ? (this._endlessStats.kills || 0) : 0; this._endlessEventStartEliteKills = this._endlessStats ? (this._endlessStats.eliteKills || 0) : 0;
     this._endlessEventsSeen.push(e.name || e.key);
     this._endlessRecentEvents = [e.key].concat(recent.filter(k => k !== e.key)).slice(0, 2);
     if (this._endlessStats) this._endlessStats.events++;
@@ -215,6 +216,7 @@ const game = {
     if (this._endlessEventTimer > 0) {
       this._endlessEventTimer -= dt;
       if (this._endlessEvent && this._endlessEvent.laserEvery) this.updateEndlessLaserEvent(dt, this._endlessEvent);
+      if (this._endlessEvent && this._endlessEvent.bulletEvery) this.updateEndlessBulletEvent(dt, this._endlessEvent);
       if (this._endlessEventTimer <= 0) { this.finishEndlessEvent(this._endlessEvent); this._endlessEvent = null; this._endlessHazardT = 0; }
     }
     this._endlessEventT -= dt;
@@ -222,6 +224,12 @@ const game = {
   },
   finishEndlessEvent(e) {
     if (!e || !this.player) return 0;
+    const hits = this._endlessStats ? (this._endlessStats.hits || 0) - (this._endlessEventStartHits || 0) : 0;
+    const kills = this._endlessStats ? (this._endlessStats.kills || 0) - (this._endlessEventStartKills || 0) : 0;
+    const eliteKills = this._endlessStats ? (this._endlessStats.eliteKills || 0) - (this._endlessEventStartEliteKills || 0) : 0;
+    if (e.noHitGoal && hits > 0) { if (this._endlessStats) this._endlessStats.eventFails = (this._endlessStats.eventFails || 0) + 1; this.floats.push(new FloatText(this.player.x, this.player.y - 78, "无伤失败 受击" + hits, e.color || "#adb5bd")); return 0; }
+    if (e.killGoal && kills < e.killGoal) { if (this._endlessStats) this._endlessStats.eventFails = (this._endlessStats.eventFails || 0) + 1; this.floats.push(new FloatText(this.player.x, this.player.y - 78, "目标未达成 " + kills + "/" + e.killGoal, e.color || "#adb5bd")); return 0; }
+    if (e.eliteGoal && eliteKills < e.eliteGoal) { if (this._endlessStats) this._endlessStats.eventFails = (this._endlessStats.eventFails || 0) + 1; this.floats.push(new FloatText(this.player.x, this.player.y - 78, "王牌未击破 " + eliteKills + "/" + e.eliteGoal, e.color || "#adb5bd")); return 0; }
     const cfg = CONFIG.endless, clean = this._endlessStats && this._endlessStats.hits === this._endlessEventStartHits;
     const gain = Math.round((cfg.eventClearScore || 0) * (clean ? 1.5 : 1) * this.threatScoreMult());
     if (this._endlessStats) { this._endlessStats.eventClears = (this._endlessStats.eventClears || 0) + 1; this._endlessStats.eventScore = (this._endlessStats.eventScore || 0) + gain; if (clean) this._endlessStats.cleanEvents = (this._endlessStats.cleanEvents || 0) + 1; }
@@ -242,6 +250,19 @@ const game = {
     const dmg = (e.damage || 7) * this.activeDiff.dmgMult * this.endlessBulletDmgMult() * this.threatDamageMult();
     this.spawnBossLaser(x, e.warn || 0.7, e.dur || 0.5, e.width || 34, dmg);
     this.floats.push(new FloatText(x, 110, e.name, e.color || "#cc5de8"));
+  },
+  updateEndlessBulletEvent(dt, e) {
+    this._endlessHazardT -= dt;
+    if (this._endlessHazardT > 0) return 0;
+    this._endlessHazardT += e.bulletEvery || 4;
+    const rows = e.bulletRows || 4, speed = e.bulletSpeed || 240, fromLeft = this.rng() < 0.5;
+    const x = fromLeft ? -18 : CONFIG.WIDTH + 18, vx = (fromLeft ? 1 : -1) * speed;
+    for (let i = 0; i < rows; i++) {
+      const y = 180 + i * ((CONFIG.HEIGHT - 360) / Math.max(1, rows - 1)) + (this.rng() - 0.5) * 36;
+      this.spawnEnemyBullet(x, clamp(y, 120, CONFIG.HEIGHT - 120), vx, (this.rng() - 0.5) * 55, e.bulletDamage || 6);
+    }
+    this.floats.push(new FloatText(CONFIG.WIDTH / 2, 124, e.name, e.color || "#ff922b"));
+    return rows;
   },
   updateRivalInterference() {
     if (!this.rivalInterference || typeof RivalInterference === "undefined") return;
@@ -314,13 +335,13 @@ const game = {
   startDailyChallenge() { this.startEndless({ seed: Challenge.dailySeed(), challenge: true, daily: true }); },
   challengeSplitMarks() { return CONFIG.challenge.splits; },
   resetEndlessTelemetry() {
-    this._endlessStats = { kills: 0, bossKills: 0, hits: 0, blocked: 0, damageTaken: 0, bombs: 0, drafts: 0, picks: 0, skips: 0, rerolls: 0, events: 0, eventClears: 0, cleanEvents: 0, eventScore: 0, jammed: 0 };
+    this._endlessStats = { kills: 0, eliteKills: 0, bossKills: 0, hits: 0, blocked: 0, damageTaken: 0, bombs: 0, drafts: 0, picks: 0, skips: 0, rerolls: 0, events: 0, eventClears: 0, cleanEvents: 0, eventFails: 0, eventScore: 0, jammed: 0 };
     this._endlessTimeline = []; this._endlessMarkIdx = 0;
   },
   endlessTelemetryMarks() { return [60, 120, 180, 300]; },
   endlessTelemetrySnapshot(t) {
     const s = this._endlessStats, p = this.player, hp = p && p.maxHp ? Math.round(p.hp / p.maxHp * 100) : 0;
-    return { t, score: Math.round(this.score * this.activeDiff.scoreMult), kills: s.kills, boss: s.bossKills, hits: s.hits, dmg: Math.round(s.damageTaken), drafts: s.drafts || 0, picks: s.picks || 0, skips: s.skips || 0, rerolls: s.rerolls || 0, jam: Math.round(s.jammed || 0), threat: this.threatLevel(), hp };
+    return { t, score: Math.round(this.score * this.activeDiff.scoreMult), kills: s.kills, elite: s.eliteKills || 0, boss: s.bossKills, hits: s.hits, dmg: Math.round(s.damageTaken), drafts: s.drafts || 0, picks: s.picks || 0, skips: s.skips || 0, rerolls: s.rerolls || 0, jam: Math.round(s.jammed || 0), threat: this.threatLevel(), hp };
   },
   recordEndlessTelemetry() {
     if (!this.endless || !this._endlessStats) return;
@@ -554,12 +575,21 @@ const game = {
     const cfg = CONFIG.bonuses.stableFire, p = this.player, stacks = this.bonusStacks("stableFire");
     return cfg && p && p.maxHp && p.hp / p.maxHp >= (cfg.hpThreshold || 0.7) ? stacks * (cfg.damageMult || 0) : 0;
   },
+  perfectLineActive() {
+    const cfg = CONFIG.bonuses.perfectLine;
+    return !!(cfg && this.bonusStacks("perfectLine") > 0 && this._noHitT >= (cfg.delay || 8));
+  },
+  perfectLineValue(prop) {
+    const cfg = CONFIG.bonuses.perfectLine;
+    return this.perfectLineActive() && cfg ? this.bonusStacks("perfectLine") * (cfg[prop] || 0) : 0;
+  },
   shieldDamageMult() {
     const p = this.player;
     return p && p.shieldHp > 0 ? this.bonusValue("shieldAmplifier", "damageMult") : 0;
   },
   playerDamage(d, target = null) {
-    let m = 1 + this.bonusValue("damage", "damageMult") + this.bonusValue("glassCannon", "damageMult") + this.vitalReactorDamageMult() + this.stableFireDamageMult() + this.shieldDamageMult() + this.adrenalineValue("damageMult");
+    let m = 1 + this.bonusValue("damage", "damageMult") + this.bonusValue("glassCannon", "damageMult") + this.vitalReactorDamageMult() + this.stableFireDamageMult() + this.perfectLineValue("damageMult") + this.shieldDamageMult() + this.adrenalineValue("damageMult");
+    if (target && target.elite) m += this.bonusValue("eliteHunter", "eliteDamageMult");
     if (target && target.isBoss) m += this.bonusValue("bossHunter", "bossDamageMult");
     if (target && target.isBoss && target._weakTimer > 0) m += (target._weakDamageMult || (target.affix && target.affix.weakDamageMult) || CONFIG.bossPhase.weakDamageMult || 0) + this.bonusValue("weakScanner", "weakDamageMult");
     if (target && target.maxHp && target.hp / target.maxHp <= (CONFIG.bonuses.executioner.threshold || 0)) m += this.bonusValue("executioner", "damageMult");
@@ -567,7 +597,7 @@ const game = {
   },
   weaponCooldownMult() {
     const p = this.player, jam = p ? this.jamFactor(p.x, p.y) : 1;
-    return Math.max(0.45, 1 - this.bonusValue("fireRate", "cooldownMult") - this.bonusValue("overdrive", "cooldownMult") - this.adrenalineValue("cooldownMult")) * jam;
+    return Math.max(0.45, 1 - this.bonusValue("fireRate", "cooldownMult") - this.bonusValue("overdrive", "cooldownMult") - this.perfectLineValue("cooldownMult") - this.adrenalineValue("cooldownMult")) * jam;
   },
   mainGunCooldownMult() { return this.weaponCooldownMult() * (1 + this.bonusValue("heavyRounds", "mainCooldownPenalty")); },
   damageTakenMult() { return Math.max(0.55, 1 + this.bonusValue("glassCannon", "damageTakenMult") + this.bonusValue("overdrive", "damageTakenMult") - this.bonusValue("armorPlating", "damageReductionMult") - this.routeBonus("生存", 0.10)); },
@@ -610,12 +640,12 @@ const game = {
   },
   buildRouteSummary(source = this.bonuses) {
     const routes = [
-      { name: "主炮", color: "#ffd43b", weights: { damage: 1, fireRate: 1, pierce: 2, kineticAmmo: 2, heavyRounds: 3, armorPiercer: 3, armorCaliber: 2, vitalReactor: 1, stableFire: 1, sideCannons: 3, chainSpark: 1, pointDefense: 1, shieldAmplifier: 1, shieldBreaker: 2, executioner: 1, glassCannon: 1, weakScanner: 1, overdrive: 1 } },
+      { name: "主炮", color: "#ffd43b", weights: { damage: 1, fireRate: 1, pierce: 2, kineticAmmo: 2, heavyRounds: 3, armorPiercer: 3, armorCaliber: 2, vitalReactor: 1, stableFire: 1, perfectLine: 1, sideCannons: 3, chainSpark: 1, pointDefense: 1, shieldAmplifier: 1, shieldBreaker: 2, executioner: 1, eliteHunter: 2, glassCannon: 1, weakScanner: 1, overdrive: 1 } },
       { name: "激光", color: "#cc5de8", weights: { damage: 1, range: 1, laserLens: 3, laserSplitter: 3, chargeAmp: 1, bossHunter: 1, weakScanner: 2, glassCannon: 1 } },
       { name: "追踪", color: "#4dabf7", weights: { range: 1, fireRate: 1, swarmCore: 3, homingShards: 3, signalFilter: 2, magnetCore: 1, comboBattery: 1, comboBarrage: 3, comboSurge: 1 } },
       { name: "导弹", color: "#ff922b", weights: { missileRack: 3, explosivePayload: 3, clusterWarheads: 3, missileInterceptor: 2, fireRate: 1, range: 1, bossHunter: 1, weakScanner: 2 } },
-      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, armorPlating: 3, fieldRepair: 3, repairLoop: 3, repairPulse: 2, leech: 2, livingArmor: 3, painConverter: 1, salvage: 2, shieldAmplifier: 3, shieldBreaker: 1, armorCaliber: 2, vitalReactor: 3, stableFire: 3, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1, signalFilter: 1 } },
-      { name: "风险", color: "#ff6b6b", weights: { glassCannon: 3, overdrive: 3, adrenaline: 3, painConverter: 2, comboBarrage: 1, comboSurge: 2, executioner: 1, bossHunter: 1, weakScanner: 1 } },
+      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, armorPlating: 3, fieldRepair: 3, repairLoop: 3, repairPulse: 2, leech: 2, livingArmor: 3, medicalReservoir: 3, painConverter: 1, salvage: 2, shieldAmplifier: 3, shieldBreaker: 1, armorCaliber: 2, vitalReactor: 3, stableFire: 3, perfectLine: 3, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1, signalFilter: 1 } },
+      { name: "风险", color: "#ff6b6b", weights: { glassCannon: 3, overdrive: 3, adrenaline: 3, painConverter: 2, comboBarrage: 1, comboSurge: 2, executioner: 1, eliteHunter: 1, bossHunter: 1, weakScanner: 1 } },
     ].map(r => {
       const score = Object.keys(r.weights).reduce((sum, key) => sum + (source[key] || 0) * r.weights[key], 0);
       const stage = score >= 7 ? "成型" : score >= 3 ? "偏向" : "起步";
@@ -646,7 +676,7 @@ const game = {
     const hitsPerMin = (tele.hits || 0) / (time / 60), dmgPerMin = (tele.damageTaken || 0) / (time / 60);
     const picked = r.bonuses || {}, has = keys => keys.some(k => picked[k] > 0);
     let advice = "";
-    if ((hitsPerMin >= 4 || dmgPerMin >= 90) && !has(["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "lastStand", "emergencyBarrier"])) advice = "建议补生存";
+    if ((hitsPerMin >= 4 || dmgPerMin >= 90) && !has(["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "medicalReservoir", "lastStand", "emergencyBarrier"])) advice = "建议补生存";
     else if ((r.bossAffixes || []).length && !(tele.bossKills || 0) && !has(["bossHunter", "weakScanner", "executioner", "damage", "glassCannon", "vitalReactor"])) advice = "建议补Boss输出";
     else if (!ready.length && routes[0] && routes[0].score >= 5) advice = "建议续构" + routes[0].name;
     else if ((tele.drafts || 0) >= 3 && (tele.picks || 0) < tele.drafts) advice = "建议少跳过";
@@ -655,8 +685,10 @@ const game = {
     else if (time >= 60 && hitsPerMin <= 1.5) tags.push("走位稳定");
     if ((tele.bossKills || 0) >= 3) tags.push("Boss处理强");
     else if ((r.bossAffixes || []).length && !(tele.bossKills || 0)) tags.push("Boss压力高");
+    if ((tele.eliteKills || 0) >= 8) tags.push("精英猎手");
     const hpGain = Object.values(r.bonusHpGain || {}).reduce((sum, n) => sum + (n || 0), 0);
     if (hpGain >= 20) tags.push("血量构筑 +" + hpGain + "HP");
+    if (tele.eventFails) tags.push("目标失败 " + tele.eventFails);
     if (tele.cleanEvents) tags.push("完美空域 " + tele.cleanEvents);
     else if (tele.eventClears) tags.push("空域突破 " + tele.eventClears);
     if ((tele.jammed || 0) / time >= 0.18) tags.push("干扰压力高");
@@ -670,6 +702,10 @@ const game = {
   },
   routeReady(name) { return this.routeScore(name) >= 7; },
   routeBonus(name, amount) { return this.routeReady(name) ? amount : 0; },
+  homingVolleyBonus() { return this.routeReady("追踪") ? 1 : 0; },
+  homingCooldownMult() { return 1 - this.routeBonus("追踪", 0.10); },
+  laserDamageBonus() { return this.routeBonus("激光", 2); },
+  laserDurationMult() { return 1 + this.routeBonus("激光", 0.12); },
   missileVolleyBonus() { return this.routeReady("导弹") ? 1 : 0; },
   routePreviewInfo(card) {
     if (!card || card.type !== "bonus") return null;
@@ -707,17 +743,20 @@ const game = {
     if (key === "maxHp" && p) return "最大生命 " + p.maxHp + "→" + (p.maxHp + b.hp);
     if (key === "reinforcedHull" && p) { const gain = Math.max(1, Math.round(p.maxHp * b.hpPct)); return "最大生命 " + p.maxHp + "→" + (p.maxHp + gain); }
     if (key === "livingArmor") return "击杀成长 " + this.bonusHpGain(key) + "/" + (this.bonusStacks(key) * b.maxHp) + "HP→" + this.bonusHpGain(key) + "/" + ((this.bonusStacks(key) + 1) * b.maxHp) + "HP";
+    if (key === "medicalReservoir") return "满血治疗成长 " + this.bonusHpGain(key) + "/" + (this.bonusStacks(key) * b.maxHp) + "HP→" + this.bonusHpGain(key) + "/" + ((this.bonusStacks(key) + 1) * b.maxHp) + "HP";
     if (key === "repairLoop") return "周期修复 +" + pct(this.bonusValue(key, "healPct")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "healPct")));
     if (key === "repairPulse") return "治疗震击 " + this.bonusValue(key, "damage") + "→" + this.withDraftBonus(key, () => this.bonusValue(key, "damage"));
     if (key === "armorCaliber" && p) return "主炮加成 +" + this.armorCaliberDamage() + "→+" + this.withDraftBonus(key, () => this.armorCaliberDamage());
     if (key === "vitalReactor" && p) return "生命增伤 +" + pct(this.vitalReactorDamageMult()) + "→+" + pct(this.withDraftBonus(key, () => this.vitalReactorDamageMult()));
     if (key === "stableFire" && p) return "高血伤害 +" + pct(this.stableFireDamageMult()) + "→+" + pct(this.withDraftBonus(key, () => this.stableFireDamageMult()));
+    if (key === "perfectLine") return "无伤火控 +" + pct(this.perfectLineValue("damageMult")) + "/" + pct(this.perfectLineValue("cooldownMult")) + "→+" + pct(this.withDraftBonus(key, () => this.perfectLineValue("damageMult"))) + "/" + pct(this.withDraftBonus(key, () => this.perfectLineValue("cooldownMult")));
     if (["kineticAmmo", "heavyRounds"].includes(key)) return "主炮伤害 " + num(this.mainBulletDamage()) + "→" + num(this.withDraftBonus(key, () => this.mainBulletDamage()));
     if (key === "armorPiercer") return "高血主炮 +" + pct(this.bonusValue(key, "heavyDamageMult")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "heavyDamageMult")));
     if (key === "shieldAmplifier") return "有盾伤害 +" + pct(this.bonusValue(key, "damageMult")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "damageMult")));
     if (key === "shieldBreaker") return "破盾伤害 +" + pct(this.bonusValue(key, "shieldDamageMult")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "shieldDamageMult")));
     if (key === "signalFilter") return "干扰抗性 +" + pct(this.bonusValue(key, "jamResist")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "jamResist")));
     if (key === "weakScanner") return "弱点 +" + pct(this.bonusValue(key, "weakDamageMult")) + " / +" + num(this.bonusValue(key, "weakDuration")) + "s→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "weakDamageMult"))) + " / +" + num(this.withDraftBonus(key, () => this.bonusValue(key, "weakDuration"))) + "s";
+    if (key === "eliteHunter") return "精英伤害 +" + pct(this.bonusValue(key, "eliteDamageMult")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "eliteDamageMult")));
     if (["damage", "glassCannon", "bossHunter"].includes(key)) return "伤害倍率 " + pct(this.playerDamage(1, { isBoss: key === "bossHunter", hp: 1, maxHp: 1 })) + "→" + pct(this.withDraftBonus(key, () => this.playerDamage(1, { isBoss: key === "bossHunter", hp: 1, maxHp: 1 })));
     if (["fireRate", "overdrive"].includes(key)) return "武器冷却 " + pct(this.weaponCooldownMult()) + "→" + pct(this.withDraftBonus(key, () => this.weaponCooldownMult()));
     if (["armorPlating"].includes(key)) return "承伤 " + pct(this.damageTakenMult()) + "→" + pct(this.withDraftBonus(key, () => this.damageTakenMult()));
@@ -745,6 +784,9 @@ const game = {
   },
   draftBossText(card) {
     return this.isBossCounterCard(card) ? "Boss对策" : "";
+  },
+  draftEliteText(card) {
+    return this.isEliteCounterCard(card) ? "精英对策" : "";
   },
   draftShieldText(card) {
     return this.isShieldCounterCard(card) ? "破盾对策" : "";
@@ -789,6 +831,7 @@ const game = {
     if (eventBias && this.draftCardRoute(card) === eventBias) w *= 1.55;
     if (this.isSurvivalCounterCard(card)) w *= 1.7;
     if (this.isBossCounterCard(card)) w *= 1.45;
+    if (this.isEliteCounterCard(card)) w *= 1.65;
     if (this.isShieldCounterCard(card)) w *= 1.75;
     return w;
   },
@@ -804,10 +847,17 @@ const game = {
   },
   isHpDraftCard(id) {
     const card = typeof id === "string" ? this.cardInfo(id) : id, b = card && card.type === "bonus" ? CONFIG.bonuses[card.key] : null;
-    return !!(b && (b.hp || b.hpPct || b.heal || b.healPct));
+    return !!(b && (b.hp || b.hpPct || b.heal || b.healPct || card.key === "medicalReservoir"));
   },
   isBossCounterCard(card) {
     return !!(this.boss && !this.boss.dead && card && card.type === "bonus" && ["bossHunter", "weakScanner", "executioner", "damage", "glassCannon", "vitalReactor"].includes(card.key));
+  },
+  hasElitePressure() {
+    const e = this.activeEndlessEvent(), a = this.boss && !this.boss.dead ? this.boss.affix : null;
+    return !!((e && (e.eliteGoal || e.eliteChance >= 0.35)) || (a && a.elite) || this.enemies.some(x => !x.dead && x.elite));
+  },
+  isEliteCounterCard(card) {
+    return !!(this.hasElitePressure() && card && card.type === "bonus" && card.key === "eliteHunter");
   },
   hasShieldPressure() {
     const e = this.activeEndlessEvent(), a = this.boss && !this.boss.dead ? this.boss.affix : null;
@@ -838,6 +888,8 @@ const game = {
     const hasBonusRoute = route => this._chipChoices.some(id => id.startsWith("bonus:") && this.draftCardRoute(this.cardInfo(id)) === route);
     const bias = this.activeEventRouteBias(), biased = bias ? pool.filter(id => this.draftCardRoute(this.cardInfo(id)) === bias) : [];
     if (biased.length) takeWeighted(biased);
+    const elitePool = this.hasElitePressure() ? pool.filter(id => id === "bonus:eliteHunter") : [];
+    if (this._chipChoices.length < 3 && elitePool.length && !this._chipChoices.includes("bonus:eliteHunter")) takeWeighted(elitePool);
     const bonusPool = pool.filter(id => id.startsWith("bonus:"));
     if (!this._chipChoices.some(id => id.startsWith("bonus:")) && bonusPool.length) takeWeighted(bonusPool);
     const hpPool = pool.filter(id => this.isHpDraftCard(id));
@@ -1058,6 +1110,16 @@ const game = {
     p.maxHp += gain; p.hp = clamp(p.hp + gain, 0, p.maxHp);
     this._bonusHpGain.livingArmor = this.bonusHpGain("livingArmor") + gain;
     this.floats.push(new FloatText(p.x, p.y - 72, cfg.name + " +" + gain + "HP", cfg.color));
+    return gain;
+  },
+  triggerMedicalReservoir() {
+    const stacks = this.bonusStacks("medicalReservoir"), cfg = CONFIG.bonuses.medicalReservoir, p = this.player;
+    if (!stacks || !cfg || !p) return 0;
+    const gain = Math.min((cfg.hp || 0) * stacks, (cfg.maxHp || 0) * stacks - this.bonusHpGain("medicalReservoir"));
+    if (gain <= 0) return 0;
+    p.maxHp += gain; p.hp = clamp(p.hp + gain, 0, p.maxHp);
+    this._bonusHpGain.medicalReservoir = this.bonusHpGain("medicalReservoir") + gain;
+    this.floats.push(new FloatText(p.x, p.y - 76, cfg.name + " +" + gain + "HP", cfg.color));
     return gain;
   },
   tryEmergencyBarrier(p) {
@@ -1411,7 +1473,7 @@ const game = {
   },
 
   onEnemyKilled(e, allowDrop = true, byBomb = false) {
-    if (this._endlessStats) { this._endlessStats.kills++; if (e.isBoss) this._endlessStats.bossKills++; }
+    if (this._endlessStats) { this._endlessStats.kills++; if (e.elite) this._endlessStats.eliteKills = (this._endlessStats.eliteKills || 0) + 1; if (e.isBoss) this._endlessStats.bossKills++; }
     let gained;
     if (byBomb) { gained = Math.round(e.score * CONFIG.scoring.bombKillMult); }              // 炸弹/必杀清兵:不涨连击、分数打折
     else { this.combo++; this.comboTimer = CONFIG.combo.timeout * (this.player ? this.player.ship.comboTimeoutMult : 1); this.maxCombo = Math.max(this.maxCombo, this.combo); gained = Math.round(e.score * this.comboMult() * this.threatScoreMult()); this.addThreat(e.isBoss ? CONFIG.threat.bossKillGain : CONFIG.threat.killGain); }
@@ -1512,7 +1574,7 @@ const game = {
       }
       else { p.addWing(); this.floats.push(new FloatText(p.x, p.y - 34, "僚机 +1", "#dee2e6")); }
     } else {
-      if (p.hp >= p.maxHp) { p.grantShield(o.healShield, o.healShieldDur); this.floats.push(new FloatText(p.x, p.y - 34, "临时护盾 +" + o.healShield, "#74c0fc")); this.addThreat(o.threatGain); this.grantOverflowScore("#74c0fc"); this.triggerRepairPulse(p); }
+      if (p.hp >= p.maxHp) { this.triggerMedicalReservoir(); p.grantShield(o.healShield, o.healShieldDur); this.floats.push(new FloatText(p.x, p.y - 34, "临时护盾 +" + o.healShield, "#74c0fc")); this.addThreat(o.threatGain); this.grantOverflowScore("#74c0fc"); this.triggerRepairPulse(p); }
       else { const before = p.hp; p.heal(CONFIG.powerup.healAmount); this.floats.push(new FloatText(p.x, p.y - 34, "HP +" + CONFIG.powerup.healAmount, "#ff8787")); if (p.hp > before) this.triggerRepairPulse(p); }
     }
   },
@@ -1817,7 +1879,7 @@ const game = {
       this.drawChipCardIcon(ctx, card, r.x + 48, r.y + r.h / 2, 27);
       this.drawRarityBadge(ctx, r.x + r.w - 18, r.y + 28, card.rarity, rarityColor);
       ctx.textAlign = "left";
-      const tags = [this.draftSurvivalText(card), this.draftHpText(card), this.draftEventBiasText(card), this.draftFocusText(card), this.draftBossText(card), this.draftShieldText(card)].filter(Boolean).join(" · ");
+      const tags = [this.draftSurvivalText(card), this.draftHpText(card), this.draftEventBiasText(card), this.draftFocusText(card), this.draftBossText(card), this.draftEliteText(card), this.draftShieldText(card)].filter(Boolean).join(" · ");
       ctx.fillStyle = rarityColor; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.fillText((i + 1) + " · " + (card.type === "chip" ? "限时技能" : "永久 BONUS") + " · " + this.draftProgressText(card) + (tags ? " · " + tags : ""), r.x + 88, r.y + 25);
       ctx.fillStyle = "#fff"; ctx.font = "bold 23px 'Segoe UI', sans-serif"; ctx.fillText(card.name, r.x + 88, r.y + 51);
       ctx.fillStyle = "#ced4da"; ctx.font = "14px 'Segoe UI', sans-serif";
@@ -1899,8 +1961,8 @@ const game = {
       ctx.fillText("BONUS " + bonusText, cx, infoY); infoY += 22;
     }
     const tele = r.telemetry || {};
-    ctx.fillText(fitLine("战况 击杀 " + (tele.kills || 0) + " · Boss " + (tele.bossKills || 0) + " · 受击 " + (tele.hits || 0) + "(格挡 " + (tele.blocked || 0) + ") · 承伤 " + Math.round(tele.damageTaken || 0) + " · 空域 " + (tele.eventClears || 0) + "/" + (tele.cleanEvents || 0) + " · 干扰 " + Math.round(tele.jammed || 0) + "s · 炸弹 " + (tele.bombs || 0) + " · 选择 " + (tele.picks || 0) + "/" + (tele.drafts || 0), 356), cx, infoY); infoY += 18;
-    const timeline = (r.timeline || []).map(m => m.t + "s " + m.score + "分/" + m.kills + "杀/HP" + m.hp + "%" + (m.jam ? "/干扰" + m.jam + "s" : "")).join(" · ");
+    ctx.fillText(fitLine("战况 击杀 " + (tele.kills || 0) + " · 精英 " + (tele.eliteKills || 0) + " · Boss " + (tele.bossKills || 0) + " · 受击 " + (tele.hits || 0) + "(格挡 " + (tele.blocked || 0) + ") · 承伤 " + Math.round(tele.damageTaken || 0) + " · 空域 " + (tele.eventClears || 0) + "/" + (tele.cleanEvents || 0) + (tele.eventFails ? "/失败" + tele.eventFails : "") + " · 干扰 " + Math.round(tele.jammed || 0) + "s · 炸弹 " + (tele.bombs || 0) + " · 选择 " + (tele.picks || 0) + "/" + (tele.drafts || 0), 356), cx, infoY); infoY += 18;
+    const timeline = (r.timeline || []).map(m => m.t + "s " + m.score + "分/" + m.kills + "杀/" + (m.elite || 0) + "精英/HP" + m.hp + "%" + (m.jam ? "/干扰" + m.jam + "s" : "")).join(" · ");
     if (timeline && !compactResult) { ctx.fillText(fitLine("节点 " + timeline, 356), cx, infoY); infoY += 22; }
     const boardY = infoY > 418 ? infoY + 16 : 434;
     if (!compactResult) {
@@ -2618,7 +2680,7 @@ const game = {
       ctx.fillStyle = "#66d9e8"; ctx.fillText(text, 25, 151); ctx.restore();
     }
     const items = [
-      { type: "homing", need: s.homingPower, timer: p._homingTimer, interval: Math.max(0.24, (s.homingInterval - oc * 0.05) * this.chipValue("homingSwarm", "intervalMult", 1) * this.shipWeaponValue("homingIntervalMult", 1) * allCd * this.weaponCooldownMult()), color: "#74c0fc" },
+      { type: "homing", need: s.homingPower, timer: p._homingTimer, interval: Math.max(0.24, (s.homingInterval - oc * 0.05) * this.chipValue("homingSwarm", "intervalMult", 1) * this.shipWeaponValue("homingIntervalMult", 1) * allCd * this.weaponCooldownMult() * this.homingCooldownMult()), color: "#74c0fc" },
       { type: "laser", need: s.laserPower, timer: p._laserTimer, interval: Math.max(0.55, (s.laserInterval - oc * 0.06) * this.shipWeaponValue("laserIntervalMult", 1) * allCd * this.weaponCooldownMult()), color: "#cc5de8" },
       { type: "missile", need: s.missilePower, timer: p._missileTimer, interval: Math.max(0.45, (s.missileInterval - oc * 0.04) * this.chipValue("missileBarrage", "intervalMult", 1) * this.shipWeaponValue("missileIntervalMult", 1) * allCd * this.weaponCooldownMult() * Math.max(0.6, 1 - this.bonusValue("missileRack", "missileCooldownMult"))), color: "#ff922b" },
     ];
@@ -2699,11 +2761,14 @@ const game = {
     if (key === "repairLoop" && n > 0) return b.name + " " + Math.ceil(Math.max(0, (b.every || 14) - this._repairLoopT)) + "s";
     if (key === "leech" && n > 0) return b.name + " +" + this.bonusValue(key, "heal") + "/杀";
     if (key === "livingArmor" && n > 0) return b.name + " +" + this.bonusHpGain(key) + "/" + (b.maxHp * n) + "HP";
+    if (key === "medicalReservoir" && n > 0) return b.name + " +" + this.bonusHpGain(key) + "/" + (b.maxHp * n) + "HP";
     if (key === "armorCaliber" && n > 0) return b.name + " +" + this.armorCaliberDamage();
     if (key === "vitalReactor" && n > 0) return b.name + " +" + Math.round(this.vitalReactorDamageMult() * 100) + "%";
     if (key === "stableFire" && n > 0) return b.name + " +" + Math.round(this.bonusValue(key, "damageMult") * 100) + "%" + (this.stableFireDamageMult() > 0 ? " 激活" : " 待机");
+    if (key === "perfectLine" && n > 0) return b.name + " +" + Math.round(this.bonusValue(key, "damageMult") * 100) + "%/" + Math.round(this.bonusValue(key, "cooldownMult") * 100) + "%" + (this.perfectLineActive() ? " 激活" : " " + Math.ceil(Math.max(0, (b.delay || 8) - this._noHitT)) + "s");
     if (key === "shieldAmplifier" && n > 0) return b.name + " +" + Math.round(this.bonusValue(key, "damageMult") * 100) + "%" + (this.player && this.player.shieldHp > 0 ? " 激活" : "");
     if (key === "shieldBreaker" && n > 0) return b.name + " +" + Math.round(this.bonusValue(key, "shieldDamageMult") * 100) + "%";
+    if (key === "eliteHunter" && n > 0) return b.name + " +" + Math.round(this.bonusValue(key, "eliteDamageMult") * 100) + "%";
     if (key === "signalFilter" && n > 0) return b.name + " +" + Math.round(this.bonusValue(key, "jamResist") * 100) + "%";
     if (key === "weakScanner" && n > 0) return b.name + " +" + Math.round(this.bonusValue(key, "weakDamageMult") * 100) + "% +" + (Math.round(this.bonusValue(key, "weakDuration") * 10) / 10) + "s";
     return b.name + "×" + n;
@@ -2727,10 +2792,14 @@ const game = {
     if (!e) return "";
     const parts = [e.sub || ""].filter(Boolean);
     const pct = v => Math.round(v * 100) + "%";
+    if (e.noHitGoal) { const hits = Math.max(0, ((this._endlessStats || {}).hits || 0) - (this._endlessEventStartHits || 0)); parts.push("受击" + Math.min(hits, 1) + "/1"); }
+    if (e.killGoal) { const kills = Math.max(0, ((this._endlessStats || {}).kills || 0) - (this._endlessEventStartKills || 0)); parts.push("目标击杀" + Math.min(kills, e.killGoal) + "/" + e.killGoal); }
+    if (e.eliteGoal) { const kills = Math.max(0, ((this._endlessStats || {}).eliteKills || 0) - (this._endlessEventStartEliteKills || 0)); parts.push("王牌击破" + Math.min(kills, e.eliteGoal) + "/" + e.eliteGoal); }
     if (e.scoreBonus) parts.push("分+" + pct(e.scoreBonus));
     if (e.threatGainMult && e.threatGainMult > 1) parts.push("威胁+" + pct(e.threatGainMult - 1));
     if (e.enemyHpMult) parts.push("敌血+" + pct(e.enemyHpMult));
     if (e.powerupChanceAdd) parts.push("补给+" + pct(e.powerupChanceAdd));
+    if (e.bulletEvery) parts.push("侧弹" + (Math.round(e.bulletEvery * 10) / 10) + "s");
     return parts.join(" · ");
   },
   drawDraftCooldownHUD(ctx) {

@@ -68,8 +68,8 @@ class Player {
     if (this.power >= s.homingPower) {
       this._homingTimer -= dt;
       if (this._homingTimer <= 0) {
-        this._homingTimer = Math.max(0.24, (s.homingInterval - oc * 0.05) * game.chipValue("homingSwarm", "intervalMult", 1) * game.shipWeaponValue("homingIntervalMult", 1) * allCd * game.weaponCooldownMult() * (1 - game.routeBonus("追踪", 0.10)));
-        const count = 1 + (oc >= 3 ? 1 : 0) + game.chipValue("homingSwarm", "extraCount", 0) + game.bonusValue("swarmCore", "extraCount") + (game.routeReady("追踪") ? 1 : 0);
+        this._homingTimer = Math.max(0.24, (s.homingInterval - oc * 0.05) * game.chipValue("homingSwarm", "intervalMult", 1) * game.shipWeaponValue("homingIntervalMult", 1) * allCd * game.weaponCooldownMult() * game.homingCooldownMult());
+        const count = 1 + (oc >= 3 ? 1 : 0) + game.chipValue("homingSwarm", "extraCount", 0) + game.bonusValue("swarmCore", "extraCount") + game.homingVolleyBonus();
         for (let i = 0; i < count; i++) game.spawnHomingShot(this.x + (i - (count - 1) / 2) * 18, this.y - this.radius, oc);
         Sound.homing();
       }
@@ -324,7 +324,7 @@ class PlayerLaser {
   init(x, y, overcharge = 0, damageMult = 1, widthMult = 1) {
     const s = CONFIG.secondary;
     this.x = x; this.y = y; this.overcharge = overcharge; this.width = s.laserWidth + overcharge * 3;
-    this.damage = s.laserDamage + Math.floor(overcharge / 2) + game.shipWeaponValue("laserDamageBonus", 0) + game.bonusValue("laserLens", "laserDamage") + game.routeBonus("激光", 2); this.life = (s.laserDuration + overcharge * 0.01 + game.bonusValue("laserLens", "laserDuration")) * game.rangeMult() * (1 + game.routeBonus("激光", 0.12));
+    this.damage = s.laserDamage + Math.floor(overcharge / 2) + game.shipWeaponValue("laserDamageBonus", 0) + game.bonusValue("laserLens", "laserDamage") + game.laserDamageBonus(); this.life = (s.laserDuration + overcharge * 0.01 + game.bonusValue("laserLens", "laserDuration")) * game.rangeMult() * game.laserDurationMult();
     this.width *= Math.max(0.52, 1 - game.bonusValue("laserLens", "laserWidthShrink"));
     if (game.chipActive("laserFocus")) {
       const c = CONFIG.chips.laserFocus;
