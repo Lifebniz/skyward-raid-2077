@@ -129,7 +129,9 @@ const game = {
   togglePause() { if (this.state === "playing") this.pause(); else if (this.state === "paused") this.resume(); },
   // 暂停菜单按钮:0=继续 1=设置 2=返回首页
   pauseMenuRect(i) { const w = 240, h = 54, x = (CONFIG.WIDTH - w) / 2, y = 440 + i * 74; return { x, y, w, h }; },
-  pauseMenuHit(px, py) { for (let i = 0; i < 3; i++) { const r = this.pauseMenuRect(i); if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return i; } return -1; },
+  // GG:无尽挑战/无尽关卡暂停时多一个"直接结算"选项(第4个按钮),常规关卡没有这个概念,按钮数按 this.endless 动态算
+  pauseMenuCount() { return this.endless ? 4 : 3; },
+  pauseMenuHit(px, py) { for (let i = 0; i < this.pauseMenuCount(); i++) { const r = this.pauseMenuRect(i); if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return i; } return -1; },
   pauseButtonHit(x, y) { const b = this.pauseBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
   // 开始某一关(索引)
   startLevel(i) {
@@ -669,11 +671,11 @@ const game = {
     let hpGain = 0;
     if (key === "maxHp" && this.player) { hpGain += b.hp; this.player.maxHp += b.hp; this.player.hp = clamp(this.player.hp + b.hp, 0, this.player.maxHp); }
     // GG:复合装甲(reinforcedHull)按当前生命上限的百分比给,不封顶的话生命上限会滚雪球越滚越大;
-    //   b.maxHp 定义了这张卡自己的累计上限(所有次拾取加起来最多这么多),用剩余额度封顶单次收益
+    //   b.maxHpPerPick 封顶的是"这一次"拿到的量(不是累计总量),所以可以一直反复出现、反复拿
     if (b.hpPct && this.player) {
       const raw = Math.max(1, Math.round(this.player.maxHp * b.hpPct));
-      const gain = b.maxHp != null ? Math.max(0, Math.min(raw, b.maxHp - (this._bonusHpGain[key] || 0))) : raw;
-      if (gain > 0) { hpGain += gain; this.player.maxHp += gain; this.player.hp = clamp(this.player.hp + gain, 0, this.player.maxHp); }
+      const gain = b.maxHpPerPick != null ? Math.min(raw, b.maxHpPerPick) : raw;
+      hpGain += gain; this.player.maxHp += gain; this.player.hp = clamp(this.player.hp + gain, 0, this.player.maxHp);
     }
     if (hpGain > 0) this._bonusHpGain[key] = (this._bonusHpGain[key] || 0) + hpGain;
     if (this.player) this.floats.push(new FloatText(this.player.x, this.player.y - 50, "BONUS " + b.name, b.color));
@@ -785,7 +787,7 @@ const game = {
     const pct = v => Math.round(v * 100) + "%", num = v => Math.round(v * 10) / 10;
     if (!b) return "";
     if (key === "maxHp" && p) return "最大生命 " + p.maxHp + "→" + (p.maxHp + b.hp);
-    if (key === "reinforcedHull" && p) { const raw = Math.max(1, Math.round(p.maxHp * b.hpPct)), gain = Math.max(0, Math.min(raw, b.maxHp - this.bonusHpGain(key))); return "最大生命 " + p.maxHp + "→" + (p.maxHp + gain); }
+    if (key === "reinforcedHull" && p) { const raw = Math.max(1, Math.round(p.maxHp * b.hpPct)), gain = b.maxHpPerPick != null ? Math.min(raw, b.maxHpPerPick) : raw; return "最大生命 " + p.maxHp + "→" + (p.maxHp + gain); }
     if (key === "livingArmor") return "击杀成长 " + this.bonusHpGain(key) + "/" + (this.bonusStacks(key) * b.maxHp) + "HP→" + this.bonusHpGain(key) + "/" + ((this.bonusStacks(key) + 1) * b.maxHp) + "HP";
     if (key === "medicalReservoir") return "满血治疗成长 " + this.bonusHpGain(key) + "/" + (this.bonusStacks(key) * b.maxHp) + "HP→" + this.bonusHpGain(key) + "/" + ((this.bonusStacks(key) + 1) * b.maxHp) + "HP";
     if (key === "repairLoop") return "周期修复 +" + pct(this.bonusValue(key, "healPct")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "healPct")));
@@ -853,10 +855,7 @@ const game = {
   },
   canDraftCard(id) {
     const card = this.cardInfo(id);
-    if (!card || card.type !== "bonus") return !!card;
-    const b = CONFIG.bonuses[card.key];
-    if (b && b.hpPct && b.maxHp != null && this.bonusHpGain(card.key) >= b.maxHp) return false;   // GG:复合装甲攒满累计上限后不再出这张卡
-    return this.bonusStacks(card.key) < this.bonusDraftLimit(card.key);
+    return card && (card.type !== "bonus" || this.bonusStacks(card.key) < this.bonusDraftLimit(card.key));
   },
   draftProgressText(card) {
     if (!card) return "";
@@ -1413,10 +1412,13 @@ const game = {
     }
   },
   // 所有敌弹的唯一出口:统一按难度缩放伤害
-  // W:无尽模式敌弹伤害随存活时间线性爬升,300 秒时封顶 3 倍(非无尽恒为 1)
+  // W:经典无尽关卡(endlessLite,移植自老版本)敌弹伤害随存活时间线性爬升,300 秒时封顶 3 倍
+  // GG:无尽挑战(非 lite)改成指数增长,不封顶——每 5 分钟伤害翻一倍(0min×1/5min×2/10min×4/15min×8/20min×16…),
+  //   长线生存的核心压力来源从"打不完的怪"换成"迟早会被伤害曲线淘汰",逼玩家不能无限苟下去
   endlessBulletDmgMult() {
     if (!this.endless) return 1;
     const e = CONFIG.endless;
+    if (!this.endlessLite) return Math.pow(2, this._endlessT / (e.dmgDoubleInterval || 300));
     return 1 + Math.min(this._endlessT / e.dmgRampTime, 1) * (e.dmgRampMult - 1);
   },
   spawnEnemyBullet(x, y, vx, vy, baseDamage) { this.enemyBullets.push(pools.enemyBullet.get(x, y, vx, vy, baseDamage * this.activeDiff.dmgMult * this.endlessBulletDmgMult() * this.threatDamageMult())); },
@@ -1856,8 +1858,14 @@ const game = {
     if (sh > 0) ctx.restore();
   },
 
+  // GG:品质徽标宽度单独抽出来算,好让卡片顶部那行标签在排版时就知道要给徽标让出多少空间(见 drawChipSelect)
+  rarityBadgeWidth(ctx, text) {
+    const prevFont = ctx.font; ctx.font = "bold 13px 'Segoe UI', sans-serif";
+    const w = Math.max(52, ctx.measureText(text).width + 20);
+    ctx.font = prevFont; return w;
+  },
   drawRarityBadge(ctx, x, y, text, color) {
-    const w = Math.max(52, ctx.measureText(text).width + 20), h = 22;
+    const w = this.rarityBadgeWidth(ctx, text), h = 22;
     ctx.save();
     ctx.fillStyle = UI.rgba(color, .22); UI.roundRect(ctx, x - w, y - h + 2, w, h, 11); ctx.fill();
     ctx.strokeStyle = UI.rgba(color, .78); ctx.lineWidth = 1.2; UI.roundRect(ctx, x - w, y - h + 2, w, h, 11); ctx.stroke();
@@ -1877,6 +1885,25 @@ const game = {
     } else if (key.includes("chain")) {
       ctx.save(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x - r * .45, y - r * .2); ctx.lineTo(x - r * .05, y + r * .05); ctx.lineTo(x - r * .2, y + r * .5); ctx.lineTo(x + r * .48, y - r * .12); ctx.stroke(); ctx.restore();
     } else this.drawPowerIcon(ctx, x, y, r * .74);
+  },
+  // GG:横向跑马灯 —— 卡片顶部那行"序号·类型·进度·路线标签"文本经常太长,之前是直接不裁切地画出去,
+  //   长的会一路画到品质徽标底下把徽标盖住。装不下时不再硬挤/裁断,而是"停在开头→缓慢滚到末尾→停一下→
+  //   滚回开头"往复播放(ctx.clip 限定可见区域,再整体平移绘制),徽标永远留在裁剪区之外,不会被盖住;
+  //   装得下就直接照常画,没有额外开销。
+  drawMarqueeText(ctx, text, x, y, maxW, holdT = 1.1, speed = 46) {
+    const full = ctx.measureText(text).width;
+    if (full <= maxW) { ctx.fillText(text, x, y); return; }
+    const overflow = full - maxW, scrollDur = Math.max(0.4, overflow / speed), cycle = holdT * 2 + scrollDur * 2;
+    const t = this.titleT % cycle;
+    let offset;
+    if (t < holdT) offset = 0;
+    else if (t < holdT + scrollDur) offset = (t - holdT) / scrollDur * overflow;
+    else if (t < holdT * 2 + scrollDur) offset = overflow;
+    else offset = overflow - (t - holdT * 2 - scrollDur) / scrollDur * overflow;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y - 15, maxW, 20); ctx.clip();
+    ctx.fillText(text, x - offset, y);
+    ctx.restore();
   },
   drawChipActionButton(ctx, kind, label, color, disabled = false) {
     const r = this.chipActionRect(kind), alpha = disabled ? .32 : .88;
@@ -1933,10 +1960,14 @@ const game = {
       const rarityColor = { "普通": "#adb5bd", "稀有": "#cc5de8", "史诗": "#ffd43b" }[card.rarity] || "#adb5bd";
       UI.panel(ctx, r.x, r.y, r.w, r.h, 12, { accent: card.color, top: UI.rgba(card.color, .14), bottom: "rgba(255,255,255,.03)", lineWidth: card.rarity === "史诗" ? 2.4 : 1.5 });
       this.drawChipCardIcon(ctx, card, r.x + 48, r.y + r.h / 2, 27);
-      this.drawRarityBadge(ctx, r.x + r.w - 18, r.y + 28, card.rarity, rarityColor);
       ctx.textAlign = "left";
+      // GG:先给品质徽标预留出空间(badgeW+间距),标签行只在剩下的宽度里跑马灯,徽标最后单独画在最上层,
+      //   两者绝不会互相覆盖——即使算错一两像素,徽标也画在标签之后,天然盖在标签上面而不是反过来。
+      const badgeW = this.rarityBadgeWidth(ctx, card.rarity), tagMaxW = r.x + r.w - 18 - badgeW - 10 - (r.x + 88);
       const tags = [this.draftSurvivalText(card), this.draftHpText(card), this.draftEventBiasText(card), this.draftFocusText(card), this.draftBossText(card), this.draftEliteText(card), this.draftShieldText(card)].filter(Boolean).join(" · ");
-      ctx.fillStyle = rarityColor; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.fillText((i + 1) + " · " + (card.type === "chip" ? "限时技能" : "永久 BONUS") + " · " + this.draftProgressText(card) + (tags ? " · " + tags : ""), r.x + 88, r.y + 25);
+      ctx.fillStyle = rarityColor; ctx.font = "bold 13px 'Segoe UI', sans-serif";
+      this.drawMarqueeText(ctx, (i + 1) + " · " + (card.type === "chip" ? "限时技能" : "永久 BONUS") + " · " + this.draftProgressText(card) + (tags ? " · " + tags : ""), r.x + 88, r.y + 25, tagMaxW);
+      this.drawRarityBadge(ctx, r.x + r.w - 18, r.y + 28, card.rarity, rarityColor);
       ctx.fillStyle = "#fff"; ctx.font = "bold 23px 'Segoe UI', sans-serif"; ctx.fillText(card.name, r.x + 88, r.y + 51);
       ctx.fillStyle = "#ced4da"; ctx.font = "14px 'Segoe UI', sans-serif";
       UI.wrapText(ctx, card.desc, r.w - 118, 1).forEach((line, j) => ctx.fillText(line, r.x + 88, r.y + 73 + j * 17));
@@ -2058,6 +2089,7 @@ const game = {
     UI.button(ctx, this.pauseMenuRect(0), { label: "继续 RESUME", color: "#38d9a9", active: true, font: 21 });
     UI.button(ctx, this.pauseMenuRect(1), { label: "⚙ 设置 SETTINGS", color: "#4dabf7", font: 19 });
     UI.button(ctx, this.pauseMenuRect(2), { label: "返回首页 HOME", color: "#adb5bd", font: 21 });
+    if (this.endless) UI.button(ctx, this.pauseMenuRect(3), { label: "直接结算 SETTLE", color: "#ffd43b", font: 19 });
     ctx.textAlign = "left";
   },
 

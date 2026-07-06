@@ -102,7 +102,7 @@ const CONFIG = {
     fireRate: { name: "加速扳机", desc: "主炮/副武器射速 +10%", color: "#4dabf7", cooldownMult: 0.10 },
     range: { name: "远程弹道", desc: "锁定距离和激光持续 +20%", color: "#51cf66", rangeMult: 0.20 },
     maxHp: { name: "装甲扩容", desc: "最大生命 +12 并治疗", color: "#38d9a9", weight: 130, hp: 12 },
-    reinforcedHull: { name: "复合装甲", desc: "最大生命 +10% 并治疗,累计最多 +60", color: "#20c997", rarity: "稀有", weight: 58, hpPct: 0.10, maxHp: 60 },
+    reinforcedHull: { name: "复合装甲", desc: "最大生命 +10% 并治疗,单次最多 +40", color: "#20c997", rarity: "稀有", weight: 58, hpPct: 0.10, maxHpPerPick: 40 },
     armorPlating: { name: "钛合装甲", desc: "承受伤害 -8%", color: "#74c0fc", rarity: "稀有", weight: 50, damageReductionMult: 0.08 },
     fieldRepair: { name: "纳米修复", desc: "4秒未受击后每秒回复2%最大生命", color: "#69db7c", rarity: "稀有", weight: 42, healPct: 0.02, delay: 4, tick: 1 },
     repairLoop: { name: "维修循环", desc: "每14秒恢复6%最大生命,满血转临时护盾", color: "#38d9a9", rarity: "稀有", weight: 36, every: 14, healPct: 0.06, shield: 8, maxShield: 36, dur: 5 },
@@ -256,9 +256,10 @@ const CONFIG = {
   special: { bossDamage: 110, gainPerKill: 3, gainBossKill: 25, passiveGainPerSec: 1.7, invuln: 0.8, cooldown: 15,
     shieldHp: 60, shieldDur: 9, healOnShield: 0.3, stealthDur: 4.0, waveDamage: 45 },
   // F 无尽模式:玩家血量倍率更低、同屏敌人上限更小。T:难度统一固定,不跟随地图选择
-  // dmgRampTime/dmgRampMult:无尽模式敌弹伤害从 t=0 的 1 倍线性增长,到 dmgRampTime 秒时封顶为 dmgRampMult 倍
+  // dmgRampTime/dmgRampMult:经典无尽关卡(endlessLite)敌弹伤害从 t=0 的 1 倍线性增长,到 dmgRampTime 秒时封顶为 dmgRampMult 倍
+  // GG:dmgDoubleInterval 给无尽挑战(非 lite)用——伤害按 2^(t/此值) 指数增长,不封顶,每过这么多秒伤害翻一倍
   endless: {
-    hpMult: 0.7, maxEnemies: 14, diffKey: "normal", dmgRampTime: 300, dmgRampMult: 3, enemyHpRampTime: 300, enemyHpRampMult: 2.4,
+    hpMult: 0.7, maxEnemies: 14, diffKey: "normal", dmgRampTime: 300, dmgRampMult: 3, dmgDoubleInterval: 300, enemyHpRampTime: 300, enemyHpRampMult: 2.4,
     worldInterval: 40, powerupChance: 0.12,
     eventInterval: 28, eventDuration: 16, eventClearScore: 900, eventCleanShield: 24, eventCleanShieldDur: 5,
     spawn: { initialDelay: 1.0, intervalBase: 1.8, intervalDecay: 0.008, intervalMin: 0.8, countBase: 2, countStepSec: 15, countStepMax: 5 },
