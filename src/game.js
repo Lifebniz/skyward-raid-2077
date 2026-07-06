@@ -743,6 +743,9 @@ const game = {
   draftShieldText(card) {
     return this.isShieldCounterCard(card) ? "破盾对策" : "";
   },
+  draftSurvivalText(card) {
+    return this.isSurvivalCounterCard(card) ? "生存急需" : "";
+  },
   draftHpText(card) {
     return this.isHpDraftCard(card) ? "血量/回复" : "";
   },
@@ -778,6 +781,7 @@ const game = {
     else if (info && top.score >= 3 && info.top.name === top.name) w *= 1.35;
     const eventBias = this.activeEventRouteBias();
     if (eventBias && this.draftCardRoute(card) === eventBias) w *= 1.55;
+    if (this.isSurvivalCounterCard(card)) w *= 1.7;
     if (this.isBossCounterCard(card)) w *= 1.45;
     if (this.isShieldCounterCard(card)) w *= 1.75;
     return w;
@@ -805,6 +809,13 @@ const game = {
   },
   isShieldCounterCard(card) {
     return !!(this.hasShieldPressure() && card && card.type === "bonus" && card.key === "shieldBreaker");
+  },
+  hasSurvivalPressure() {
+    const p = this.player, s = this._endlessStats || {}, minutes = Math.max((this._endlessT || 0) / 60, 0.5);
+    return !!((p && p.maxHp && p.hp / p.maxHp <= 0.45) || (s.hits || 0) / minutes >= 4 || (s.damageTaken || 0) / minutes >= 90);
+  },
+  isSurvivalCounterCard(card) {
+    return !!(this.hasSurvivalPressure() && card && this.draftCardRoute(card) === "生存");
   },
   drawChipChoices(exclude = []) {
     const skip = new Set(exclude);
@@ -1798,7 +1809,7 @@ const game = {
       this.drawChipCardIcon(ctx, card, r.x + 48, r.y + r.h / 2, 27);
       this.drawRarityBadge(ctx, r.x + r.w - 18, r.y + 28, card.rarity, rarityColor);
       ctx.textAlign = "left";
-      const tags = [this.draftHpText(card), this.draftEventBiasText(card), this.draftFocusText(card), this.draftBossText(card), this.draftShieldText(card)].filter(Boolean).join(" · ");
+      const tags = [this.draftSurvivalText(card), this.draftHpText(card), this.draftEventBiasText(card), this.draftFocusText(card), this.draftBossText(card), this.draftShieldText(card)].filter(Boolean).join(" · ");
       ctx.fillStyle = rarityColor; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.fillText((i + 1) + " · " + (card.type === "chip" ? "限时技能" : "永久 BONUS") + " · " + this.draftProgressText(card) + (tags ? " · " + tags : ""), r.x + 88, r.y + 25);
       ctx.fillStyle = "#fff"; ctx.font = "bold 23px 'Segoe UI', sans-serif"; ctx.fillText(card.name, r.x + 88, r.y + 51);
       ctx.fillStyle = "#ced4da"; ctx.font = "14px 'Segoe UI', sans-serif";

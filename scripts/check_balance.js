@@ -148,6 +148,16 @@ assert(game._chipChoices.some(id => id.startsWith("bonus:")), "endless draft sho
 assert(hasSurvivalDraft(), "endless draft should include one survival/HP option");
 assert(hasHpDraft(), "endless draft should include one HP/sustain option");
 assert(game.draftHpText(game.cardInfo("bonus:maxHp")).includes("血量"), "HP draft cards should show readable HP tag");
+game.player = { power: CONFIG.powerup.chipMinPower, hp: 100, maxHp: 100 }; game._endlessT = 60; game._endlessStats = { hits: 0, damageTaken: 0 }; game.bonuses = {}; game.chips = {}; game._endlessEvent = null; game._endlessEventTimer = 0;
+const armorPlatingBaseWeight = game.draftCardWeight("bonus:armorPlating");
+game.player.hp = 35;
+assert(game.hasSurvivalPressure(), "low HP should count as survival pressure");
+assert(game.draftCardWeight("bonus:armorPlating") > armorPlatingBaseWeight, "survival pressure should weight survival cards higher");
+assert(game.draftSurvivalText(game.cardInfo("bonus:armorPlating")).includes("生存"), "survival pressure cards should show reason text");
+game.player.hp = 100; game._endlessStats = { hits: 5, damageTaken: 120 }; game._chipChoices = []; game._rng = () => 0.999;
+assert(game.hasSurvivalPressure(), "high incoming damage should count as survival pressure");
+game.drawChipChoices();
+assert(game._chipChoices.some(id => game.draftSurvivalText(game.cardInfo(id)).includes("生存")), "survival pressure draft should include a survival recommendation");
 game.bonuses = { missileRack: 1 }; game._chipChoices = []; game._rng = () => 0.999;
 game.drawChipChoices();
 assert(hasDraftRoute("导弹"), "draft should include an option for the current focused route");
