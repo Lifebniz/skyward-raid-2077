@@ -940,14 +940,29 @@ class Boss {
   }
   damage(d) {
     if (this.def.guardDR && game.bossEscortCount() > 0 && this._weakTimer <= 0) d *= 1 - this.def.guardDR;
-    this.hp -= d; this._flash = 0.05; if (this.hp <= 0) { this.dead = true; return true; } return false;
+    this.hp -= d; this._flash = 0.09; if (this.hp <= 0) { this.dead = true; return true; } return false;
   }
   draw(ctx) {
     const flash = this._flash > 0, color = flash ? "#fff" : this.def.colors[this.phaseIndex], r = this.radius, x = this.x, y = this.y;
     // Y:狂暴态外圈红色脉动光晕
     if (this._enraged) { const gr = r + 14 + Math.sin(this._t * 6) * 4; ctx.fillStyle = "rgba(255,40,40,.22)"; ctx.beginPath(); ctx.arc(x, y, gr, 0, Math.PI * 2); ctx.fill(); }
     if (this.affix && !flash) { ctx.strokeStyle = UI.rgba(this.affix.color, .72); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, r + 20 + Math.sin(this._t * 5) * 3, 0, Math.PI * 2); ctx.stroke(); }
-    if (!flash && ImageAssets.draw(ctx, ImageAssets.boss(this.defIndex), x, y, r * 2.45)) return;
+    const bossImage = ImageAssets.boss(this.defIndex);
+    if (ImageAssets.draw(ctx, bossImage, x, y, r * 2.45)) {
+      if (flash) {
+        const hit = clamp(this._flash / 0.09, 0, 1);
+        ctx.save();
+        ctx.strokeStyle = UI.rgba("#ffd43b", 0.25 + hit * 0.55);
+        ctx.lineWidth = 2 + hit * 3;
+        ctx.shadowColor = "#ffd43b";
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(x, y, r * (1.2 + (1 - hit) * 0.16), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      return;
+    }
     // 侧翼炮塔
     ctx.fillStyle = "#2b3038"; ctx.fillRect(x - r - 7, y - 8, 12, 26); ctx.fillRect(x + r - 5, y - 8, 12, 26);
     ctx.fillStyle = "#495057"; ctx.fillRect(x - r - 3, y + 16, 4, 8); ctx.fillRect(x + r - 1, y + 16, 4, 8);
