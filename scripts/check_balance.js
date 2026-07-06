@@ -285,7 +285,7 @@ assert.strictEqual(game._endlessRecentBossAffixes[0], phantomEscort.key, "applie
 
 const bonusKeys = new Set(Object.keys(CONFIG.bonuses));
 for (const key of CONFIG.bonusOrder) assert(bonusKeys.has(key), `bonusOrder references missing bonus ${key}`);
-for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "painConverter", "armorCaliber", "vitalReactor", "shieldAmplifier", "shieldBreaker", "signalFilter"]) {
+for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "painConverter", "armorCaliber", "vitalReactor", "stableFire", "shieldAmplifier", "shieldBreaker", "signalFilter"]) {
   assert(bonusKeys.has(key), `missing survival/build bonus ${key}`);
 }
 assert(CONFIG.bonuses.armorCaliber.hpPerDamage > 0, "armorCaliber hpPerDamage must be positive");
@@ -293,6 +293,8 @@ between(CONFIG.bonuses.armorCaliber.maxDamage, 2, 8, "armorCaliber maxDamage");
 assert(CONFIG.bonuses.vitalReactor.hpPerDamageMult > 0, "vitalReactor hpPerDamageMult must be positive");
 between(CONFIG.bonuses.vitalReactor.damageMult, 0.02, 0.08, "vitalReactor damageMult");
 between(CONFIG.bonuses.vitalReactor.maxDamageMult, 0.1, 0.4, "vitalReactor maxDamageMult");
+between(CONFIG.bonuses.stableFire.hpThreshold, 0.55, 0.85, "stableFire hpThreshold");
+between(CONFIG.bonuses.stableFire.damageMult, 0.08, 0.3, "stableFire damageMult");
 between(CONFIG.bonuses.shieldAmplifier.damageMult, 0.08, 0.3, "shieldAmplifier damageMult");
 between(CONFIG.bonuses.shieldBreaker.shieldDamageMult, 0.25, 1.0, "shieldBreaker shieldDamageMult");
 between(CONFIG.bonuses.shieldBreaker.breakDamage, 3, 14, "shieldBreaker breakDamage");
@@ -342,6 +344,13 @@ game.bonuses = { shieldAmplifier: 1 }; game.chips = {}; game.player = { hp: 100,
 assert.strictEqual(game.playerDamage(100), 100, "shieldAmplifier should not add damage without shield");
 game.player.shieldHp = 10;
 assert(game.playerDamage(100) > 100, "shieldAmplifier should add damage while shielded");
+game.bonuses = { stableFire: 1 }; game.chips = {}; game.player = { hp: 100, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
+assert(game.playerDamage(100) > 100, "stableFire should add damage while HP is high");
+assert(game.draftStatPreviewText(game.cardInfo("bonus:stableFire")).includes("%"), "stableFire draft preview should show damage");
+assert(game.bonusHUDText("stableFire").includes("激活"), "stableFire HUD should show active state");
+game.player.hp = 40;
+assert.strictEqual(game.stableFireDamageMult(), 0, "stableFire should turn off at low HP");
+assert(game.bonusHUDText("stableFire").includes("待机"), "stableFire HUD should show inactive state");
 game.endless = false; game.currentLevel = 1; game._rng = () => 0.999; game.bonuses = { shieldBreaker: 1 }; game.chips = {}; game.floats = []; game.shockwaves = [];
 const shielded = new Enemy("shieldCarrier", 100, 0, "straight"); shielded.y = 100;
 const splashTarget = { dead: false, x: 130, y: 100, radius: 12, hp: 30, maxHp: 30, damage(d) { this.hp -= d; if (this.hp <= 0) { this.dead = true; return true; } return false; } };

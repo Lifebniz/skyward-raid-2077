@@ -96,7 +96,7 @@ const CONFIG = {
     sideGuns: { name: "侧翼炮组", desc: "主炮附加斜向火力", color: "#ffd43b", duration: 10, angle: 22 },
     volatileCore: { name: "危险过载", desc: "分数更高,承伤也更高", color: "#ff6b6b", duration: 9, scoreBonus: 0.35, threatGainMult: 1.35, damageTakenMult: 1.18 },
   },
-  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "painConverter", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "shieldAmplifier", "shieldBreaker", "kineticAmmo", "heavyRounds", "armorPiercer", "armorCaliber", "vitalReactor", "sideCannons", "laserLens", "laserSplitter", "swarmCore", "homingShards", "signalFilter", "explosivePayload", "clusterWarheads", "missileInterceptor", "magnetCore", "comboBattery", "comboBarrage", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "weakScanner", "adrenaline", "emergencyBarrier", "overdrive"],
+  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "painConverter", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "shieldAmplifier", "shieldBreaker", "kineticAmmo", "heavyRounds", "armorPiercer", "armorCaliber", "vitalReactor", "stableFire", "sideCannons", "laserLens", "laserSplitter", "swarmCore", "homingShards", "signalFilter", "explosivePayload", "clusterWarheads", "missileInterceptor", "magnetCore", "comboBattery", "comboBarrage", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "weakScanner", "adrenaline", "emergencyBarrier", "overdrive"],
   bonuses: {
     damage: { name: "火力校准", desc: "全武器伤害 +15%", color: "#ff6b6b", damageMult: 0.15 },
     fireRate: { name: "加速扳机", desc: "主炮/副武器射速 +10%", color: "#4dabf7", cooldownMult: 0.10 },
@@ -122,6 +122,7 @@ const CONFIG = {
     armorPiercer: { name: "破甲弹芯", desc: "主炮对高生命敌机伤害 +35%", color: "#ff922b", rarity: "稀有", weight: 34, minHp: 12, heavyDamageMult: 0.35 },
     armorCaliber: { name: "装甲口径", desc: "每15额外最大生命,主炮伤害 +1,每层最多 +4", color: "#38d9a9", rarity: "稀有", weight: 32, hpPerDamage: 15, maxDamage: 4 },
     vitalReactor: { name: "生命炉心", desc: "每20额外最大生命,全武器伤害 +4%,每层最多 +20%", color: "#20c997", rarity: "稀有", weight: 30, hpPerDamageMult: 20, damageMult: 0.04, maxDamageMult: 0.20 },
+    stableFire: { name: "稳态火控", desc: "生命高于70%时全武器伤害 +18%", color: "#38d9a9", rarity: "稀有", weight: 32, hpThreshold: 0.70, damageMult: 0.18 },
     sideCannons: { name: "侧翼炮塔", desc: "主炮附加斜向侧翼火力,最多2对", color: "#ffd43b", rarity: "稀有", weight: 30, angle: 18, offset: 20, maxPairs: 2 },
     laserLens: { name: "棱镜透镜", desc: "激光更痛、更窄、更久", color: "#cc5de8", rarity: "稀有", weight: 42, laserDamage: 2, laserWidthShrink: 0.08, laserDuration: 0.04 },
     laserSplitter: { name: "分束棱镜", desc: "每层增加1对低伤害激光副束,最多3对", color: "#be4bdb", rarity: "稀有", weight: 30, offset: 34, maxPairs: 3, damageMult: 0.45, widthMult: 0.62 },
@@ -300,7 +301,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 65, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 66, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
