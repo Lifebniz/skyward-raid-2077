@@ -849,6 +849,10 @@ const game = {
     const card = typeof id === "string" ? this.cardInfo(id) : id, b = card && card.type === "bonus" ? CONFIG.bonuses[card.key] : null;
     return !!(b && (b.hp || b.hpPct || b.heal || b.healPct || card.key === "medicalReservoir"));
   },
+  isMaxHpDraftCard(id) {
+    const card = typeof id === "string" ? this.cardInfo(id) : id, b = card && card.type === "bonus" ? CONFIG.bonuses[card.key] : null;
+    return !!(b && (b.hp || b.hpPct || card.key === "livingArmor" || card.key === "medicalReservoir"));
+  },
   isBossCounterCard(card) {
     return !!(this.boss && !this.boss.dead && card && card.type === "bonus" && ["bossHunter", "weakScanner", "executioner", "damage", "glassCannon", "vitalReactor"].includes(card.key));
   },
@@ -892,6 +896,8 @@ const game = {
     if (this._chipChoices.length < 3 && elitePool.length && !this._chipChoices.includes("bonus:eliteHunter")) takeWeighted(elitePool);
     const bonusPool = pool.filter(id => id.startsWith("bonus:"));
     if (!this._chipChoices.some(id => id.startsWith("bonus:")) && bonusPool.length) takeWeighted(bonusPool);
+    const maxHpPool = pool.filter(id => this.isMaxHpDraftCard(id));
+    if (!this._chipChoices.some(id => this.isHpDraftCard(id)) && maxHpPool.length) takeWeighted(maxHpPool);
     const hpPool = pool.filter(id => this.isHpDraftCard(id));
     if (!this._chipChoices.some(id => this.isHpDraftCard(id)) && hpPool.length) takeWeighted(hpPool);
     const shieldPool = this.hasShieldPressure() ? pool.filter(id => id === "bonus:shieldBreaker") : [];

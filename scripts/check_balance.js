@@ -213,6 +213,7 @@ assert(game.endlessReviewTags({ telemetry: {}, time: 60, bonuses: { missileRack:
 const draftIds = CONFIG.chipOrder.map(k => "chip:" + k).concat(CONFIG.bonusOrder.map(k => "bonus:" + k));
 const hasSurvivalDraft = () => game._chipChoices.some(id => id.startsWith("bonus:") && game.draftCardRoute(game.cardInfo(id)) === "生存");
 const hasHpDraft = () => game._chipChoices.some(id => game.isHpDraftCard(id));
+const hasMaxHpDraft = () => game._chipChoices.some(id => game.isMaxHpDraftCard(id));
 const hasDraftRoute = route => game._chipChoices.some(id => game.draftCardRoute(game.cardInfo(id)) === route);
 game.endless = true; game.player = { power: CONFIG.powerup.chipMinPower }; game._endlessEvent = null; game._endlessEventTimer = 0; game.bonuses = {}; game.chips = {}; game._chipChoices = []; game._rng = () => 0.999;
 assert.strictEqual(game.canDrop("chip"), false, "endless should use timed drafts instead of chip drops");
@@ -220,6 +221,7 @@ game.drawChipChoices();
 assert(game._chipChoices.some(id => id.startsWith("bonus:")), "endless draft should include one permanent bonus option");
 assert(hasSurvivalDraft(), "endless draft should include one survival/HP option");
 assert(hasHpDraft(), "endless draft should include one HP/sustain option");
+assert(hasMaxHpDraft(), "endless draft should include one max HP growth option");
 assert(game.draftHpText(game.cardInfo("bonus:maxHp")).includes("血量"), "HP draft cards should show readable HP tag");
 game.player = { power: CONFIG.powerup.chipMinPower, hp: 100, maxHp: 100 }; game._endlessT = 60; game._endlessStats = { hits: 0, damageTaken: 0 }; game.bonuses = {}; game.chips = {}; game._endlessEvent = null; game._endlessEventTimer = 0;
 const armorPlatingBaseWeight = game.draftCardWeight("bonus:armorPlating");
@@ -266,11 +268,12 @@ assert.strictEqual(game._endlessStats.drafts, 1, "timed draft should be counted 
 assert.strictEqual(game._nextChipDraftAt, CONFIG.powerup.chipMinEndlessTime + CONFIG.powerup.chipDraftInterval, "next draft should be one fixed interval later");
 game.state = "playing"; game._endlessT = 90; game._lastChipDraftAt = 80; game._nextChipDraftAt = 120; game._pendingBossDraft = false; game._chipDraftReason = ""; game._endlessStats = { drafts: 0 };
 assert.strictEqual(game.scheduleBossDraftReward({ x: 100, y: 100, radius: 40 }), true, "boss reward should pull the next draft earlier");
-assert.strictEqual(game._nextChipDraftAt, 95, "boss reward should respect the minimum draft gap");
+const bossRewardAt = 80 + CONFIG.powerup.chipMinDraftGap;
+assert.strictEqual(game._nextChipDraftAt, bossRewardAt, "boss reward should respect the minimum draft gap");
 assert.strictEqual(game._pendingBossDraft, true, "boss reward should mark the next draft reason");
-game._endlessT = 94.99;
+game._endlessT = bossRewardAt - 0.01;
 assert.strictEqual(game.updateChipDraftTimer(), false, "boss reward draft should still wait for its scheduled time");
-game._endlessT = 95;
+game._endlessT = bossRewardAt;
 assert.strictEqual(game.updateChipDraftTimer(), true, "boss reward draft should open at its scheduled time");
 assert.strictEqual(game.state, "chipselect", "boss reward should open the selection UI");
 assert(game._chipDraftReason.includes("Boss"), "boss reward draft should show a boss reward reason");
@@ -292,6 +295,7 @@ for (const e of CONFIG.endless.events.filter(e => e.routeBias)) {
   assert(game._chipChoices.some(id => id.startsWith("bonus:")), `event ${e.key} draft should include one permanent bonus option`);
   assert(hasSurvivalDraft(), `event ${e.key} draft should include one survival/HP option`);
   assert(hasHpDraft(), `event ${e.key} draft should include one HP/sustain option`);
+  assert(hasMaxHpDraft(), `event ${e.key} draft should include one max HP growth option`);
 }
 
 const affixes = CONFIG.endless.boss.affixes;
