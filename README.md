@@ -34,13 +34,10 @@ https://ac-spider.github.io/skyward-raid-2077/
 - `src/levels.js`: 关卡波次和导演器
 - `src/game.js`: 游戏状态、碰撞、HUD、界面绘制
 - `src/main.js`: 初始化和主循环
-- `ASSET_PROMPTS.md`: 背景、战机、敌机、Boss 等美术素材生成提示词
-- `AUDIO_SOURCES.md`: 音频素材来源和授权记录
-- `ROADMAP.md`: 长期目标、阶段计划、多人模式设计
 
 ## 当前方向
 
-长期目标见 `ROADMAP.md`: 先补强单机后期构筑与溢出补给，再做本地合作 PVE，最后做挑战码/影子目标这类轻量间接 PVP。项目继续保持无构建、直接运行、Canvas 优先。
+项目继续保持无构建、直接运行、Canvas 优先。后续优先补强单机后期构筑与溢出补给，再逐步扩展本地合作 PVE 和挑战码/影子目标这类轻量间接 PVP。
 
 - 画面:持续增强 Canvas 绘制质感，不引入重型渲染框架。
 - 音乐:主菜单和对局轮播 `assets/audio/above-the-sprawl.mp3` 与 `assets/audio/skyward-raid-bgm-02.m4a`，播放时自动淡入淡出。
@@ -60,5 +57,3 @@ https://ac-spider.github.io/skyward-raid-2077/
 3. 房主粘贴应答，点“接受应答”。
 
 连接成功后，双方在对局中会看到对方的队友机影。这个版本先同步玩家位置；完整合作闯关、敌人/子弹同步、房间码自动配对可以后续继续加。
-
-公开发布前请确认 `assets/audio/` 下 BGM 的授权允许公开分发。

@@ -1,5 +1,13 @@
 ﻿# local previews
 .vite/
 node_modules/
+output/
 .DS_Store
 Thumbs.db
+
+# local/internal project notes
+AGENTS.md
+ASSET_PROMPTS.md
+AUDIO_SOURCES.md
+ROADMAP.md
+assets/images/README.md

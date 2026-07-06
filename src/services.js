@@ -222,8 +222,9 @@ const Challenge = {
     const parts = [
       "route-v1", seed || "", rulesVersion || this.rulesVersion(), e.diffKey || "", e.maxEnemies || 0,
       e.worldInterval || 40, e.powerupChance || 0,
+      [e.startingDrafts, e.enemyHpBaseMult, e.enemyHpRampTime, e.enemyHpRampMult, e.dmgRampTime, e.dmgRampMult].join(","),
       [spawn.initialDelay, spawn.intervalBase, spawn.intervalDecay, spawn.intervalMin, spawn.countBase, spawn.countStepSec, spawn.countStepMax].join(","),
-      [boss.firstDelay, boss.interval, boss.hpStep, boss.hpStepMax].join(","),
+      [boss.firstDelay, boss.interval, boss.baseHpMult, boss.hpStep, boss.hpStepMax].join(","),
       splits.join(","),
     ];
     const r = this.rng(parts.join("|")), probes = [];

@@ -348,8 +348,8 @@ class PlayerLaser {
 class Enemy {
   constructor(type, x, yOffset = 0, move = "straight", elite = null) { this.init(type, x, yOffset, move, elite); }
   init(type, x, yOffset = 0, move = "straight", elite = null) {
-    const t = CONFIG.enemy[type];
-    this.type = type; this.isBoss = false; this.x = x; this.y = -t.radius - yOffset;
+    const t = CONFIG.enemy[type], chosenMove = t.move && (!move || move === "straight") ? t.move : (move || "straight");
+    this.type = type; this.isBoss = false; this.x = x; this.y = t.fromBottom ? CONFIG.HEIGHT + t.radius + yOffset : -t.radius - yOffset;
     this.baseX = x; this.baseY = this.y; this.radius = t.radius; this.hp = t.hp; this.speed = t.speed; this.score = t.score; this.color = t.color; this.cfg = t;
     this._fireTimer = 0.6 + game.rng() * 0.6; this.dead = false;
     this.elite = elite || this.rollElite(); this.eliteCfg = this.elite ? CONFIG.elite[this.elite] : null;
@@ -362,7 +362,7 @@ class Enemy {
     this.eliteShield = this.eliteShieldMax;
     this.maxHp = this.hp;
     // 运动状态
-    this.move = move; this.mp = CONFIG.moves[move] || {}; this._mt = 0;
+    this.move = chosenMove; this.mp = CONFIG.moves[chosenMove] || {}; this._mt = 0; this._entered = false;
     this.phase = "in"; this._ht = 0; this._aimed = false; this.vx = 0; this.vy = 0; this._flash = 0;
     this._carrierSpawn = 0;   // W2:carrier 裂解出的僚机短暂带一圈紫色识别环,归零后就是普通敌机(池复用要清零,不然会带着上一轮的状态)
     this._sniperWarn = 0; this._sniperAim = 0;
@@ -392,6 +392,14 @@ class Enemy {
     } else if (this.move === "dive") {
       if (!this._aimed) { this.y += this.speed * dt; if (this.y > CONFIG.HEIGHT * m.triggerY && game.player) { const a = Math.atan2(game.player.y - this.y, game.player.x - this.x), sp = this.speed * m.speedMul; this.vx = Math.cos(a) * sp; this.vy = Math.sin(a) * sp; this._aimed = true; } }
       else { this.x += this.vx * dt; this.y += this.vy * dt; }
+    } else if (this.move === "rearChase") {
+      const p = game.player || { x: this.x, y: -this.radius }, phaseMul = this._mt < (m.warn || 2) ? 0.7 : (this._mt < (m.warn || 2) + (m.boost || 2) ? (m.boostMul || 1.8) : (m.speedMul || 1));
+      const sp = this.speed * phaseMul, a = Math.atan2(p.y - this.y, p.x - this.x), turn = clamp((m.turn || 4) * dt, 0, 1);
+      if (!this.vx && !this.vy) { this.vx = 0; this.vy = -sp; }
+      this.vx += (Math.cos(a) * sp - this.vx) * turn;
+      this.vy += (Math.sin(a) * sp - this.vy) * turn;
+      this.x = clamp(this.x + this.vx * dt, -this.radius, W + this.radius);
+      this.y += this.vy * dt;
     } else if (this.move === "orbit") {   // Z:绕基准点公转 + 缓慢下降
       this.baseY += this.speed * 0.5 * dt;
       this.x = clamp(this.baseX + Math.cos(this._mt * m.speed) * m.radius, this.radius, W - this.radius);
@@ -408,7 +416,8 @@ class Enemy {
     this.applyMove(dt);
     this.updateElite(dt);
     this.updateSupport(dt);
-    if (this.y > CONFIG.HEIGHT + this.radius || this.x < -70 || this.x > CONFIG.WIDTH + 70) this.dead = true;
+    if (this.y >= -this.radius && this.y <= CONFIG.HEIGHT + this.radius) this._entered = true;
+    if (this._entered && (this.y > CONFIG.HEIGHT + this.radius || this.y < -this.radius - 80 || this.x < -70 || this.x > CONFIG.WIDTH + 70)) this.dead = true;
     if (this.cfg.fireInterval > 0 && this.y > 0 && this.y < CONFIG.HEIGHT * 0.7 && game.player) {
       this._fireTimer -= dt;
       if (this.type === "sniper" && this._sniperWarn > 0) {
@@ -536,6 +545,10 @@ class Enemy {
       ctx.beginPath(); ctx.arc(x, y, r * 0.78, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "#e6fcf5"; ctx.fillRect(x - 4, y - r * 0.45, 8, r * 0.9); ctx.fillRect(x - r * 0.45, y - 4, r * 0.9, 8);
       ctx.strokeStyle = UI.shade(this.color, -0.35); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r * 0.95, 0, Math.PI * 2); ctx.stroke();
+    } else if (t === "kamikaze") {
+      ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x - r * 0.72, y + r * 0.62); ctx.lineTo(x, y + r * 0.25); ctx.lineTo(x + r * 0.72, y + r * 0.62); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#fff5f5"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x - r * 0.35, y); ctx.lineTo(x + r * 0.35, y); ctx.moveTo(x, y - r * 0.45); ctx.lineTo(x, y + r * 0.45); ctx.stroke();
     } else {                                    // 小型:轻型截击机
       ctx.beginPath(); ctx.moveTo(x, y + r); ctx.lineTo(x - r, y - r * 0.8); ctx.lineTo(x, y - r * 0.35); ctx.lineTo(x + r, y - r * 0.8); ctx.closePath(); ctx.fill();
     }
@@ -566,6 +579,13 @@ class Enemy {
       ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = this.color; ctx.lineWidth = this._supportPulse > 0 ? 3 : 1.5;
       ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 0.85; ctx.fillStyle = this.color; ctx.font = "bold 10px 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.fillText("修复", x, y - r - 10);
+      ctx.restore();
+    } else if (this.type === "kamikaze") {
+      ctx.save();
+      ctx.globalAlpha = 0.28 + Math.sin(this._mt * 14) * 0.12; ctx.strokeStyle = this.color; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(x, y, r + 7, 0, Math.PI * 2); ctx.stroke();
+      if (game.player) { ctx.globalAlpha = 0.18; ctx.setLineDash([6, 6]); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(game.player.x, game.player.y); ctx.stroke(); }
+      ctx.globalAlpha = 0.9; ctx.setLineDash([]); ctx.fillStyle = this.color; ctx.font = "bold 10px 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.fillText(this._mt < (this.mp.warn || 2) ? "警告" : "自爆", x, y - r - 10);
       ctx.restore();
     } else if (this.type === "sniper" && this._sniperWarn > 0) {
       ctx.save();

@@ -14,7 +14,7 @@ const { game } = sandbox;
 sandbox.FloatText = class FloatText { constructor(x, y, text, color) { this.x = x; this.y = y; this.text = text; this.color = color; } };
 sandbox.Shockwave = class Shockwave { constructor(x, y, maxR, color) { this.x = x; this.y = y; this.maxR = maxR; this.color = color; } };
 sandbox.pools = {
-  enemy: { get(type, x, y, move, elite) { return { type, x, y, move, elite, dead: false, isBoss: false, radius: CONFIG.enemy[type].radius }; } },
+  enemy: { get(type, x, y, move, elite) { const cfg = CONFIG.enemy[type], r = cfg.radius; return { type, x, y: cfg.fromBottom ? CONFIG.HEIGHT + r + y : y, move: cfg.move || move, elite, dead: false, isBoss: false, radius: r, cfg }; } },
   enemyBullet: { get(x, y, vx, vy, damage) { return { x, y, vx, vy, damage, dead: false }; } },
   homingShot: { get(x, y, overcharge) { return { x, y, overcharge }; } },
 };
@@ -32,10 +32,14 @@ between(CONFIG.powerup.chipDraftInterval, 15, 30, "endless draft interval");
 between(CONFIG.powerup.chipBossDraftDelay, 15, 30, "boss draft delay");
 between(CONFIG.powerup.chipMinDraftGap, 15, 30, "minimum endless draft gap");
 between(CONFIG.endless.maxEnemies, 8, 20, "endless max enemies");
+between(CONFIG.endless.startingDrafts, 1, 3, "endless starting drafts");
+between(CONFIG.endless.enemyHpBaseMult, 1.1, 2.0, "endless enemy base HP");
 between(CONFIG.endless.enemyHpRampMult, 1.5, 3.2, "endless enemy HP ramp");
 between(CONFIG.endless.dmgRampMult, 1.5, 3.5, "endless damage ramp");
 between(CONFIG.endless.boss.firstDelay, 20, 45, "first boss delay");
 between(CONFIG.endless.boss.interval, 25, 55, "boss interval");
+between(CONFIG.endless.boss.baseHpMult, 1, 1.8, "boss base HP mult");
+between(CONFIG.endless.boss.hpStep, 0.04, 0.16, "boss HP step");
 between(CONFIG.bossPhase.weakDuration, 1.5, 4, "boss phase weak duration");
 between(CONFIG.bossPhase.weakDamageMult, 0.1, 0.45, "boss phase weak damage");
 between(CONFIG.endless.eventClearScore, 300, 1800, "event clear score");
@@ -48,6 +52,15 @@ assert(shieldCarrier, "enemy variety should include shield carrier");
 between(shieldCarrier.hp, 10, 30, "shieldCarrier hp");
 between(shieldCarrier.shield, 8, 40, "shieldCarrier shield");
 between(shieldCarrier.fireInterval, 1.2, 2.8, "shieldCarrier fireInterval");
+const kamikaze = CONFIG.enemy.kamikaze;
+assert(kamikaze, "enemy variety should include kamikaze");
+assert.strictEqual(kamikaze.move, "rearChase", "kamikaze should use rear chase movement");
+assert.strictEqual(kamikaze.fromBottom, true, "kamikaze should enter from behind the player");
+assert(kamikaze.crashDamage > CONFIG.crashDamage, "kamikaze should hit harder than normal collisions");
+assert(CONFIG.moves.rearChase, "rear chase movement should exist");
+assert.strictEqual(CONFIG.moves.rearChase.warn, 2, "rear chase should warn for 2 seconds");
+assert.strictEqual(CONFIG.moves.rearChase.boost, 2, "rear chase should boost for 2 seconds");
+assert(CONFIG.moves.rearChase.boostMul > CONFIG.moves.rearChase.speedMul, "rear chase boost should be faster than normal chase");
 const eliteTypes = CONFIG.elite.types || [];
 unique(eliteTypes, "elite types");
 assert(eliteTypes.length >= 5, "elite type variety should include at least 5 types");
@@ -70,6 +83,11 @@ const jammedWithoutFilter = game.jamFactor(100, 100);
 game.bonuses = { signalFilter: 1 };
 assert(game.jamFactor(100, 100) < jammedWithoutFilter, "signalFilter should reduce jammer slow");
 game.bonuses = {};
+game.endless = true; game._endlessT = 0; game._endlessEvent = null; game._endlessEventTimer = 0;
+assert(game.endlessEnemyHpMult() >= CONFIG.endless.enemyHpBaseMult, "endless enemies should start with the base HP multiplier");
+game._endlessT = CONFIG.endless.enemyHpRampTime;
+assert(game.endlessEnemyHpMult() >= CONFIG.endless.enemyHpBaseMult * CONFIG.endless.enemyHpRampMult, "endless enemies should reach the configured HP ramp");
+game.endless = false;
 for (const [i, pool] of CONFIG.endless.pools.entries()) {
   assert(pool.enemies && pool.enemies.length, `endless pool ${i} is empty`);
   for (const type of pool.enemies) assert(enemyKeys.has(type), `pool ${i} references missing enemy ${type}`);
@@ -85,6 +103,10 @@ assert(eventKeys.includes("annihilationOrder"), "endless events should include a
 assert(eventKeys.includes("aceHunt"), "endless events should include an elite hunt objective");
 assert(eventKeys.includes("noHitRun"), "endless events should include a no-hit objective");
 assert(eventKeys.includes("crossfire"), "endless events should include a side bullet hazard");
+assert(eventKeys.includes("shieldedAmbush"), "endless events should include shielded ambush pressure");
+assert(eventKeys.includes("sniperCrossfire"), "endless events should include mixed sniper/crossfire pressure");
+assert(eventKeys.includes("blackoutRaid"), "endless events should include jammer elite pressure");
+assert(eventKeys.includes("rearAssault"), "endless events should include rear kamikaze pressure");
 const routeNames = new Set(["主炮", "激光", "追踪", "导弹", "生存", "风险"]);
 const drops = new Set(["power", "heal", "bomb", "wing", "chip"]);
 for (const e of CONFIG.endless.events) {
@@ -142,6 +164,22 @@ assert.strictEqual(noHitRun.noHitGoal, true, "no-hit run should require no hits"
 const crossfire = CONFIG.endless.events.find(e => e.key === "crossfire");
 assert(crossfire.minTime >= 90, "crossfire should be a mid endless hazard");
 assert.strictEqual(crossfire.routeBias, "生存", "crossfire should bias survival drafts");
+const rearAssault = CONFIG.endless.events.find(e => e.key === "rearAssault");
+assert.strictEqual(rearAssault.enemyType, "kamikaze", "rear assault should force kamikaze enemies");
+assert(rearAssault.minTime >= 90, "rear assault should be a mid endless event");
+assert.strictEqual(rearAssault.routeBias, "生存", "rear assault should bias survival drafts");
+game.endless = true; game._endlessT = rearAssault.minTime; game.threat = 0; game.currentLevel = 0; game._rng = () => 0.999; game.player = { x: CONFIG.WIDTH / 2, y: CONFIG.HEIGHT - 100 };
+const rearChaser = new Enemy("kamikaze", CONFIG.WIDTH / 2, 0);
+assert.strictEqual(rearChaser.move, "rearChase", "kamikaze instances should default to rear chase");
+assert(rearChaser.y > CONFIG.HEIGHT, "kamikaze should spawn below the playfield");
+const rearStartY = rearChaser.y;
+rearChaser.update(0.5);
+assert(!rearChaser.dead, "kamikaze should not be culled before entering from behind");
+assert(rearChaser.y < rearStartY, "kamikaze should move toward the player from behind");
+const rearSpeedAt = mt => { rearChaser.x = CONFIG.WIDTH / 2; rearChaser.y = CONFIG.HEIGHT + rearChaser.radius; rearChaser.vx = 0; rearChaser.vy = 0; rearChaser._mt = mt; rearChaser.applyMove(0.1); return Math.hypot(rearChaser.vx, rearChaser.vy); };
+const rearWarnSpeed = rearSpeedAt(1), rearBoostSpeed = rearSpeedAt(2.2), rearNormalSpeed = rearSpeedAt(4.2);
+assert(rearBoostSpeed > rearWarnSpeed * 1.5, "kamikaze should accelerate after its 2 second warning");
+assert(rearNormalSpeed < rearBoostSpeed, "kamikaze should return to normal speed after its boost");
 game.enemyBullets = []; game.floats = []; game.endless = true; game._endlessT = crossfire.minTime; game.threat = 0; game._endlessHazardT = 0; game._rng = () => 0.25;
 assert.strictEqual(game.updateEndlessBulletEvent(0, crossfire), crossfire.bulletRows, "crossfire should spawn one side bullet row set");
 assert.strictEqual(game.enemyBullets.length, crossfire.bulletRows, "crossfire should create enemy bullets");
@@ -306,6 +344,11 @@ assert(affixes.some(a => a.key === "shieldEscort"), "boss affixes should include
 assert(affixes.some(a => a.key === "phantomEscort"), "boss affixes should include phantom escort pressure");
 assert(affixes.some(a => a.key === "swarmEscort"), "boss affixes should include swarm add pressure");
 assert(affixes.some(a => a.key === "aceEscort"), "boss affixes should include elite ace pressure");
+assert(affixes.some(a => a.key === "ironclad"), "boss affixes should include extra armor pressure");
+assert(affixes.some(a => a.key === "sniperEscort"), "boss affixes should include sniper escort pressure");
+assert(affixes.some(a => a.key === "prismArmor"), "boss affixes should include laser plus armor pressure");
+assert(affixes.some(a => a.key === "crossBarrage"), "boss affixes should include dense barrage pressure");
+assert(affixes.some(a => a.key === "rearGuard"), "boss affixes should include rear kamikaze pressure");
 const shieldEscort = affixes.find(a => a.key === "shieldEscort");
 game._endlessEvent = null; game._endlessEventTimer = 0; game.boss = { dead: false, affix: shieldEscort }; game.bonuses = {}; game.chips = {}; game._chipChoices = []; game._rng = () => 0.999;
 assert(game.hasShieldPressure(), "shield escort boss should count as shield pressure");
@@ -315,6 +358,8 @@ game.boss = null;
 const aceEscort = affixes.find(a => a.key === "aceEscort");
 assert.strictEqual(aceEscort.enemy, "gunner", "ace escort should spawn durable gunners");
 assert(aceEscort.elite, "ace escort should spawn elite adds");
+const rearGuard = affixes.find(a => a.key === "rearGuard");
+assert.strictEqual(rearGuard.enemy, "kamikaze", "rear guard should spawn kamikaze adds");
 game._endlessEvent = null; game._endlessEventTimer = 0; game.enemies = []; game.boss = { dead: false, affix: aceEscort }; game.bonuses = {}; game.chips = {}; game._chipChoices = []; game._rng = () => 0.999;
 assert(game.hasElitePressure(), "ace escort boss should count as elite pressure");
 game.drawChipChoices();
@@ -326,6 +371,8 @@ assert(!recentAffixKeys.includes(pickedAffix.key), "boss affix picker should avo
 for (const a of affixes) {
   assert(a.name && a.desc, `boss affix ${a.key} needs readable text`);
   if (a.scoreMult) between(a.scoreMult, 1, 1.35, `boss affix ${a.key} scoreMult`);
+  if (a.hpMult) between(a.hpMult, 0.05, 0.45, `boss affix ${a.key} hpMult`);
+  if (a.fireMult) between(a.fireMult, 0.65, 1, `boss affix ${a.key} fireMult`);
   if (a.attack) {
     assert(["laser", "ring", "escort", "repair", "weak"].includes(a.attack), `boss affix ${a.key} has unknown attack ${a.attack}`);
     between(a.every || 0, 3, 12, `boss affix ${a.key} interval`);
@@ -368,6 +415,11 @@ assert.strictEqual(game.enemies.filter(e => e.type === "small").length, swarmEsc
 game.enemies = []; game.floats = []; game.boss = { x: 220, y: 120, radius: 50 };
 game.spawnBossEscort(game.boss, aceEscort);
 assert(game.enemies.some(e => e.type === "gunner" && e.elite === aceEscort.elite), "aceEscort should spawn elite gunner adds");
+game.endless = true; game._rng = () => 0.999; game.player = { x: CONFIG.WIDTH / 2, y: CONFIG.HEIGHT - 100 };
+game.enemies = []; game.floats = []; game.boss = { x: 220, y: 120, radius: 50 };
+assert.strictEqual(game.spawnBossEscort(game.boss, rearGuard), rearGuard.adds, "rearGuard should spawn kamikaze adds");
+assert(game.enemies.every(e => e.type === "kamikaze" && e.move === "rearChase"), "rearGuard adds should use rear chase movement");
+assert(game.enemies.every(e => e.y > CONFIG.HEIGHT), "rearGuard adds should start behind the player");
 game.floats = []; game._endlessBossAffixesSeen = []; game._endlessRecentBossAffixes = [];
 game.applyEndlessBossAffix({ x: 100, radius: 40, hp: 100, maxHp: 100, score: 100, _fireScale: 1, def: { name: "Test", enterY: 120 } }, phantomEscort);
 assert.strictEqual(game._endlessRecentBossAffixes[0], phantomEscort.key, "applied boss affix should be remembered");
