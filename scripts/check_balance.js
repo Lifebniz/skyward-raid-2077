@@ -354,7 +354,7 @@ assert.strictEqual(game._endlessRecentBossAffixes[0], phantomEscort.key, "applie
 
 const bonusKeys = new Set(Object.keys(CONFIG.bonuses));
 for (const key of CONFIG.bonusOrder) assert(bonusKeys.has(key), `bonusOrder references missing bonus ${key}`);
-for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "painConverter", "armorCaliber", "vitalReactor", "stableFire", "perfectLine", "shieldAmplifier", "shieldBreaker", "signalFilter"]) {
+for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "medicalReservoir", "painConverter", "armorCaliber", "vitalReactor", "stableFire", "perfectLine", "shieldAmplifier", "shieldBreaker", "signalFilter"]) {
   assert(bonusKeys.has(key), `missing survival/build bonus ${key}`);
 }
 assert(bonusKeys.has("eliteHunter"), "missing elite counter build bonus");
@@ -385,6 +385,8 @@ between(CONFIG.bonuses.weakScanner.weakDuration, 0.2, 1.2, "weakScanner weakDura
 between(CONFIG.bonuses.livingArmor.every, 8, 18, "livingArmor kill interval");
 between(CONFIG.bonuses.livingArmor.hp, 1, 6, "livingArmor hp gain");
 between(CONFIG.bonuses.livingArmor.maxHp, 18, 60, "livingArmor max HP per stack");
+between(CONFIG.bonuses.medicalReservoir.hp, 1, 5, "medicalReservoir hp gain");
+between(CONFIG.bonuses.medicalReservoir.maxHp, 12, 50, "medicalReservoir max HP per stack");
 game.bonuses = {}; game._bonusStats = {}; game._bonusHpGain = {}; game.floats = []; game.player = { x: 100, y: 100, hp: 80, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
 game.activateBonus("maxHp");
 game.activateBonus("reinforcedHull");
@@ -400,6 +402,17 @@ assert(game.player.maxHp > 100 && game._bonusHpGain.livingArmor > 0, "livingArmo
 game._bonusHpGain.livingArmor = CONFIG.bonuses.livingArmor.maxHp;
 game._bonusKillN += CONFIG.bonuses.livingArmor.every;
 assert.strictEqual(game.triggerLivingArmorGrowth(), 0, "livingArmor should respect max HP cap");
+game.score = 0; game.threat = 0; game._maxThreatLevel = 0; game.bonuses = { medicalReservoir: 1 }; game._bonusHpGain = {}; game.floats = []; game.enemies = []; game.chips = {};
+game.player = { x: 100, y: 100, hp: 100, maxHp: 100, baseMaxHp: 100, shieldHp: 0, grantShield(n, dur) { this.shieldHp = n; this.shieldTimer = dur; } };
+game.collectPowerup("heal");
+assert.strictEqual(game.player.maxHp, 100 + CONFIG.bonuses.medicalReservoir.hp, "medicalReservoir should grow max HP from full HP heals");
+assert.strictEqual(game._bonusHpGain.medicalReservoir, CONFIG.bonuses.medicalReservoir.hp, "medicalReservoir should record gained HP");
+assert(game.player.shieldHp > 0, "medicalReservoir should keep the normal full HP shield reward");
+assert(game.bonusHUDText("medicalReservoir").includes("HP"), "medicalReservoir HUD should show gained HP");
+assert(game.draftStatPreviewText(game.cardInfo("bonus:medicalReservoir")).includes("HP"), "medicalReservoir draft preview should show HP cap");
+game._bonusHpGain.medicalReservoir = CONFIG.bonuses.medicalReservoir.maxHp; const cappedHp = game.player.maxHp;
+game.collectPowerup("heal");
+assert.strictEqual(game.player.maxHp, cappedHp, "medicalReservoir should respect max HP cap");
 const repairLoop = CONFIG.bonuses.repairLoop;
 game.bonuses = { repairLoop: 1 }; game.chips = {}; game.combo = 0; game.threat = 0; game._maxThreatLevel = 0; game._noHitT = 0; game._fieldRepairT = 0; game._repairLoopT = repairLoop.every - 0.01; game.floats = [];
 game.player = { x: 100, y: 100, hp: 70, maxHp: 100, power: 1, overcharge: 0, shieldHp: 0, heal(n) { this.hp = Math.min(this.maxHp, this.hp + n); }, grantShield(n, dur) { this.shieldHp = n; this.shieldTimer = dur; } };

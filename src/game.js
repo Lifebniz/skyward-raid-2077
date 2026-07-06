@@ -629,7 +629,7 @@ const game = {
       { name: "激光", color: "#cc5de8", weights: { damage: 1, range: 1, laserLens: 3, laserSplitter: 3, chargeAmp: 1, bossHunter: 1, weakScanner: 2, glassCannon: 1 } },
       { name: "追踪", color: "#4dabf7", weights: { range: 1, fireRate: 1, swarmCore: 3, homingShards: 3, signalFilter: 2, magnetCore: 1, comboBattery: 1, comboBarrage: 3, comboSurge: 1 } },
       { name: "导弹", color: "#ff922b", weights: { missileRack: 3, explosivePayload: 3, clusterWarheads: 3, missileInterceptor: 2, fireRate: 1, range: 1, bossHunter: 1, weakScanner: 2 } },
-      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, armorPlating: 3, fieldRepair: 3, repairLoop: 3, repairPulse: 2, leech: 2, livingArmor: 3, painConverter: 1, salvage: 2, shieldAmplifier: 3, shieldBreaker: 1, armorCaliber: 2, vitalReactor: 3, stableFire: 3, perfectLine: 3, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1, signalFilter: 1 } },
+      { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, armorPlating: 3, fieldRepair: 3, repairLoop: 3, repairPulse: 2, leech: 2, livingArmor: 3, medicalReservoir: 3, painConverter: 1, salvage: 2, shieldAmplifier: 3, shieldBreaker: 1, armorCaliber: 2, vitalReactor: 3, stableFire: 3, perfectLine: 3, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1, signalFilter: 1 } },
       { name: "风险", color: "#ff6b6b", weights: { glassCannon: 3, overdrive: 3, adrenaline: 3, painConverter: 2, comboBarrage: 1, comboSurge: 2, executioner: 1, eliteHunter: 1, bossHunter: 1, weakScanner: 1 } },
     ].map(r => {
       const score = Object.keys(r.weights).reduce((sum, key) => sum + (source[key] || 0) * r.weights[key], 0);
@@ -661,7 +661,7 @@ const game = {
     const hitsPerMin = (tele.hits || 0) / (time / 60), dmgPerMin = (tele.damageTaken || 0) / (time / 60);
     const picked = r.bonuses || {}, has = keys => keys.some(k => picked[k] > 0);
     let advice = "";
-    if ((hitsPerMin >= 4 || dmgPerMin >= 90) && !has(["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "lastStand", "emergencyBarrier"])) advice = "建议补生存";
+    if ((hitsPerMin >= 4 || dmgPerMin >= 90) && !has(["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "medicalReservoir", "lastStand", "emergencyBarrier"])) advice = "建议补生存";
     else if ((r.bossAffixes || []).length && !(tele.bossKills || 0) && !has(["bossHunter", "weakScanner", "executioner", "damage", "glassCannon", "vitalReactor"])) advice = "建议补Boss输出";
     else if (!ready.length && routes[0] && routes[0].score >= 5) advice = "建议续构" + routes[0].name;
     else if ((tele.drafts || 0) >= 3 && (tele.picks || 0) < tele.drafts) advice = "建议少跳过";
@@ -728,6 +728,7 @@ const game = {
     if (key === "maxHp" && p) return "最大生命 " + p.maxHp + "→" + (p.maxHp + b.hp);
     if (key === "reinforcedHull" && p) { const gain = Math.max(1, Math.round(p.maxHp * b.hpPct)); return "最大生命 " + p.maxHp + "→" + (p.maxHp + gain); }
     if (key === "livingArmor") return "击杀成长 " + this.bonusHpGain(key) + "/" + (this.bonusStacks(key) * b.maxHp) + "HP→" + this.bonusHpGain(key) + "/" + ((this.bonusStacks(key) + 1) * b.maxHp) + "HP";
+    if (key === "medicalReservoir") return "满血治疗成长 " + this.bonusHpGain(key) + "/" + (this.bonusStacks(key) * b.maxHp) + "HP→" + this.bonusHpGain(key) + "/" + ((this.bonusStacks(key) + 1) * b.maxHp) + "HP";
     if (key === "repairLoop") return "周期修复 +" + pct(this.bonusValue(key, "healPct")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "healPct")));
     if (key === "repairPulse") return "治疗震击 " + this.bonusValue(key, "damage") + "→" + this.withDraftBonus(key, () => this.bonusValue(key, "damage"));
     if (key === "armorCaliber" && p) return "主炮加成 +" + this.armorCaliberDamage() + "→+" + this.withDraftBonus(key, () => this.armorCaliberDamage());
@@ -831,7 +832,7 @@ const game = {
   },
   isHpDraftCard(id) {
     const card = typeof id === "string" ? this.cardInfo(id) : id, b = card && card.type === "bonus" ? CONFIG.bonuses[card.key] : null;
-    return !!(b && (b.hp || b.hpPct || b.heal || b.healPct));
+    return !!(b && (b.hp || b.hpPct || b.heal || b.healPct || card.key === "medicalReservoir"));
   },
   isBossCounterCard(card) {
     return !!(this.boss && !this.boss.dead && card && card.type === "bonus" && ["bossHunter", "weakScanner", "executioner", "damage", "glassCannon", "vitalReactor"].includes(card.key));
@@ -1094,6 +1095,16 @@ const game = {
     p.maxHp += gain; p.hp = clamp(p.hp + gain, 0, p.maxHp);
     this._bonusHpGain.livingArmor = this.bonusHpGain("livingArmor") + gain;
     this.floats.push(new FloatText(p.x, p.y - 72, cfg.name + " +" + gain + "HP", cfg.color));
+    return gain;
+  },
+  triggerMedicalReservoir() {
+    const stacks = this.bonusStacks("medicalReservoir"), cfg = CONFIG.bonuses.medicalReservoir, p = this.player;
+    if (!stacks || !cfg || !p) return 0;
+    const gain = Math.min((cfg.hp || 0) * stacks, (cfg.maxHp || 0) * stacks - this.bonusHpGain("medicalReservoir"));
+    if (gain <= 0) return 0;
+    p.maxHp += gain; p.hp = clamp(p.hp + gain, 0, p.maxHp);
+    this._bonusHpGain.medicalReservoir = this.bonusHpGain("medicalReservoir") + gain;
+    this.floats.push(new FloatText(p.x, p.y - 76, cfg.name + " +" + gain + "HP", cfg.color));
     return gain;
   },
   tryEmergencyBarrier(p) {
@@ -1548,7 +1559,7 @@ const game = {
       }
       else { p.addWing(); this.floats.push(new FloatText(p.x, p.y - 34, "僚机 +1", "#dee2e6")); }
     } else {
-      if (p.hp >= p.maxHp) { p.grantShield(o.healShield, o.healShieldDur); this.floats.push(new FloatText(p.x, p.y - 34, "临时护盾 +" + o.healShield, "#74c0fc")); this.addThreat(o.threatGain); this.grantOverflowScore("#74c0fc"); this.triggerRepairPulse(p); }
+      if (p.hp >= p.maxHp) { this.triggerMedicalReservoir(); p.grantShield(o.healShield, o.healShieldDur); this.floats.push(new FloatText(p.x, p.y - 34, "临时护盾 +" + o.healShield, "#74c0fc")); this.addThreat(o.threatGain); this.grantOverflowScore("#74c0fc"); this.triggerRepairPulse(p); }
       else { const before = p.hp; p.heal(CONFIG.powerup.healAmount); this.floats.push(new FloatText(p.x, p.y - 34, "HP +" + CONFIG.powerup.healAmount, "#ff8787")); if (p.hp > before) this.triggerRepairPulse(p); }
     }
   },
@@ -2729,6 +2740,7 @@ const game = {
     if (key === "repairLoop" && n > 0) return b.name + " " + Math.ceil(Math.max(0, (b.every || 14) - this._repairLoopT)) + "s";
     if (key === "leech" && n > 0) return b.name + " +" + this.bonusValue(key, "heal") + "/杀";
     if (key === "livingArmor" && n > 0) return b.name + " +" + this.bonusHpGain(key) + "/" + (b.maxHp * n) + "HP";
+    if (key === "medicalReservoir" && n > 0) return b.name + " +" + this.bonusHpGain(key) + "/" + (b.maxHp * n) + "HP";
     if (key === "armorCaliber" && n > 0) return b.name + " +" + this.armorCaliberDamage();
     if (key === "vitalReactor" && n > 0) return b.name + " +" + Math.round(this.vitalReactorDamageMult() * 100) + "%";
     if (key === "stableFire" && n > 0) return b.name + " +" + Math.round(this.bonusValue(key, "damageMult") * 100) + "%" + (this.stableFireDamageMult() > 0 ? " 激活" : " 待机");
