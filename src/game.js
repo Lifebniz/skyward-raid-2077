@@ -670,6 +670,10 @@ const game = {
   },
   routeReady(name) { return this.routeScore(name) >= 7; },
   routeBonus(name, amount) { return this.routeReady(name) ? amount : 0; },
+  homingVolleyBonus() { return this.routeReady("追踪") ? 1 : 0; },
+  homingCooldownMult() { return 1 - this.routeBonus("追踪", 0.10); },
+  laserDamageBonus() { return this.routeBonus("激光", 2); },
+  laserDurationMult() { return 1 + this.routeBonus("激光", 0.12); },
   missileVolleyBonus() { return this.routeReady("导弹") ? 1 : 0; },
   routePreviewInfo(card) {
     if (!card || card.type !== "bonus") return null;
@@ -2612,7 +2616,7 @@ const game = {
       ctx.fillStyle = "#66d9e8"; ctx.fillText(text, 25, 151); ctx.restore();
     }
     const items = [
-      { type: "homing", need: s.homingPower, timer: p._homingTimer, interval: Math.max(0.24, (s.homingInterval - oc * 0.05) * this.chipValue("homingSwarm", "intervalMult", 1) * this.shipWeaponValue("homingIntervalMult", 1) * allCd * this.weaponCooldownMult()), color: "#74c0fc" },
+      { type: "homing", need: s.homingPower, timer: p._homingTimer, interval: Math.max(0.24, (s.homingInterval - oc * 0.05) * this.chipValue("homingSwarm", "intervalMult", 1) * this.shipWeaponValue("homingIntervalMult", 1) * allCd * this.weaponCooldownMult() * this.homingCooldownMult()), color: "#74c0fc" },
       { type: "laser", need: s.laserPower, timer: p._laserTimer, interval: Math.max(0.55, (s.laserInterval - oc * 0.06) * this.shipWeaponValue("laserIntervalMult", 1) * allCd * this.weaponCooldownMult()), color: "#cc5de8" },
       { type: "missile", need: s.missilePower, timer: p._missileTimer, interval: Math.max(0.45, (s.missileInterval - oc * 0.04) * this.chipValue("missileBarrage", "intervalMult", 1) * this.shipWeaponValue("missileIntervalMult", 1) * allCd * this.weaponCooldownMult() * Math.max(0.6, 1 - this.bonusValue("missileRack", "missileCooldownMult"))), color: "#ff922b" },
     ];

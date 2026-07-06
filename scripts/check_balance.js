@@ -18,8 +18,8 @@ sandbox.pools = {
   homingShot: { get(x, y, overcharge) { return { x, y, overcharge }; } },
 };
 sandbox.Sound = { powerup() {}, tone() {} };
-vm.runInContext(fs.readFileSync("src/entities.js", "utf8") + "\nglobalThis.Enemy = Enemy;", sandbox);
-const { Enemy } = sandbox;
+vm.runInContext(fs.readFileSync("src/entities.js", "utf8") + "\nglobalThis.Enemy = Enemy; globalThis.Missile = Missile; globalThis.PlayerLaser = PlayerLaser;", sandbox);
+const { Enemy, Missile, PlayerLaser } = sandbox;
 
 const between = (value, min, max, label) => assert(value >= min && value <= max, `${label} ${value} outside ${min}-${max}`);
 const unique = (items, label) => assert.strictEqual(new Set(items).size, items.length, `${label} has duplicate keys`);
@@ -375,6 +375,15 @@ assert(game.draftStatPreviewText(game.cardInfo("bonus:comboBarrage")).includes("
 game.bonuses = {}; assert.strictEqual(game.missileVolleyBonus(), 0, "missile route should not add volley before ready");
 game.bonuses = { missileRack: 3 }; assert.strictEqual(game.missileVolleyBonus(), 1, "missile route should add one missile when ready");
 assert(game.routeEffectText().includes("导弹+1"), "missile route resonance text should show the extra missile");
+game.bonuses = {}; const baseMissile = new Missile(100, 100, 0);
+game.bonuses = { missileRack: 3 }; const routeMissile = new Missile(100, 100, 0);
+assert(routeMissile.damage > baseMissile.damage && routeMissile.splash > baseMissile.splash, "missile route should increase missile damage and splash");
+game.bonuses = {}; const baseLaser = new PlayerLaser(100, 100, 0);
+game.bonuses = { laserLens: 3 }; const routeLaser = new PlayerLaser(100, 100, 0);
+assert(routeLaser.damage > baseLaser.damage && routeLaser.life > baseLaser.life, "laser route should increase laser damage and duration");
+game.bonuses = {}; assert.strictEqual(game.homingVolleyBonus(), 0, "homing route should not add shots before ready");
+game.bonuses = { swarmCore: 3 }; assert.strictEqual(game.homingVolleyBonus(), 1, "homing route should add one homing shot when ready");
+assert(game.homingCooldownMult() < 1 && game.routeEffectText().includes("追踪+1"), "homing route should speed up and show resonance text");
 game.bonuses = { missileRack: 2 };
 assert(game.routeProgressText().includes("/7"), "route progress should show resonance threshold");
 assert(game.routePreviewText(game.cardInfo("bonus:missileRack")).includes("解锁共鸣"), "draft route preview should show resonance unlock");
