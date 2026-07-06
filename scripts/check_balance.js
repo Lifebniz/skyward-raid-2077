@@ -15,6 +15,7 @@ sandbox.FloatText = class FloatText { constructor(x, y, text, color) { this.x = 
 sandbox.Shockwave = class Shockwave { constructor(x, y, maxR, color) { this.x = x; this.y = y; this.maxR = maxR; this.color = color; } };
 sandbox.pools = {
   enemy: { get(type, x, y, move, elite) { return { type, x, y, move, elite, dead: false, isBoss: false, radius: CONFIG.enemy[type].radius }; } },
+  enemyBullet: { get(x, y, vx, vy, damage) { return { x, y, vx, vy, damage, dead: false }; } },
   homingShot: { get(x, y, overcharge) { return { x, y, overcharge }; } },
 };
 sandbox.Sound = { powerup() {}, tone() {} };
@@ -83,6 +84,7 @@ assert(eventKeys.includes("carrierRaid"), "endless events should include carrier
 assert(eventKeys.includes("annihilationOrder"), "endless events should include a kill-goal objective");
 assert(eventKeys.includes("aceHunt"), "endless events should include an elite hunt objective");
 assert(eventKeys.includes("noHitRun"), "endless events should include a no-hit objective");
+assert(eventKeys.includes("crossfire"), "endless events should include a side bullet hazard");
 const routeNames = new Set(["主炮", "激光", "追踪", "导弹", "生存", "风险"]);
 const drops = new Set(["power", "heal", "bomb", "wing", "chip"]);
 for (const e of CONFIG.endless.events) {
@@ -105,6 +107,12 @@ for (const e of CONFIG.endless.events) {
     between(e.laserEvery, 3, 7, `event ${e.key} laserEvery`);
     between(e.warn || 0, 0.4, 1.2, `event ${e.key} laser warn`);
     between(e.width || 0, 20, 70, `event ${e.key} laser width`);
+  }
+  if (e.bulletEvery) {
+    between(e.bulletEvery, 2.5, 6, `event ${e.key} bulletEvery`);
+    between(e.bulletRows || 0, 3, 8, `event ${e.key} bulletRows`);
+    between(e.bulletSpeed || 0, 160, 360, `event ${e.key} bulletSpeed`);
+    between(e.bulletDamage || 0, 3, 12, `event ${e.key} bulletDamage`);
   }
 }
 const repairConvoy = CONFIG.endless.events.find(e => e.key === "repairConvoy");
@@ -131,6 +139,14 @@ const noHitRun = CONFIG.endless.events.find(e => e.key === "noHitRun");
 assert(noHitRun.minTime >= 60, "no-hit run should not appear immediately");
 assert.strictEqual(noHitRun.routeBias, "生存", "no-hit run should bias survival drafts");
 assert.strictEqual(noHitRun.noHitGoal, true, "no-hit run should require no hits");
+const crossfire = CONFIG.endless.events.find(e => e.key === "crossfire");
+assert(crossfire.minTime >= 90, "crossfire should be a mid endless hazard");
+assert.strictEqual(crossfire.routeBias, "生存", "crossfire should bias survival drafts");
+game.enemyBullets = []; game.floats = []; game.endless = true; game._endlessT = crossfire.minTime; game.threat = 0; game._endlessHazardT = 0; game._rng = () => 0.25;
+assert.strictEqual(game.updateEndlessBulletEvent(0, crossfire), crossfire.bulletRows, "crossfire should spawn one side bullet row set");
+assert.strictEqual(game.enemyBullets.length, crossfire.bulletRows, "crossfire should create enemy bullets");
+assert(game.enemyBullets.every(b => b.vx > 0), "crossfire side bullets should move horizontally from the side");
+assert(game.endlessEventHUDDetail(crossfire).includes("侧弹"), "crossfire HUD should show bullet cadence");
 const recentEventKeys = CONFIG.endless.events.slice(0, 2).map(e => e.key);
 game.endless = true; game._endlessT = 999; game._endlessEvent = null; game._endlessRecentEvents = recentEventKeys.slice(); game._endlessEventsSeen = []; game._endlessStats = { events: 0, hits: 0 }; game._rng = () => 0;
 game.triggerEndlessEvent();

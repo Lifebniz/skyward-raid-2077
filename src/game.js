@@ -204,7 +204,8 @@ const game = {
     const pool = base.filter(e => e.key !== currentKey);
     const fresh = pool.filter(e => !recent.includes(e.key));
     const e = this.pick(fresh.length ? fresh : (pool.length ? pool : base));
-    this._endlessEvent = e; this._endlessEventTimer = CONFIG.endless.eventDuration; this._endlessEventT = CONFIG.endless.eventInterval; this._endlessHazardT = e.laserEvery ? (e.laserDelay || 1) : 0; this._endlessEventStartHits = this._endlessStats ? this._endlessStats.hits : 0; this._endlessEventStartKills = this._endlessStats ? (this._endlessStats.kills || 0) : 0; this._endlessEventStartEliteKills = this._endlessStats ? (this._endlessStats.eliteKills || 0) : 0;
+    const hazardDelay = e.laserEvery ? (e.laserDelay || 1) : e.bulletEvery ? (e.bulletDelay || 1) : 0;
+    this._endlessEvent = e; this._endlessEventTimer = CONFIG.endless.eventDuration; this._endlessEventT = CONFIG.endless.eventInterval; this._endlessHazardT = hazardDelay; this._endlessEventStartHits = this._endlessStats ? this._endlessStats.hits : 0; this._endlessEventStartKills = this._endlessStats ? (this._endlessStats.kills || 0) : 0; this._endlessEventStartEliteKills = this._endlessStats ? (this._endlessStats.eliteKills || 0) : 0;
     this._endlessEventsSeen.push(e.name || e.key);
     this._endlessRecentEvents = [e.key].concat(recent.filter(k => k !== e.key)).slice(0, 2);
     if (this._endlessStats) this._endlessStats.events++;
@@ -215,6 +216,7 @@ const game = {
     if (this._endlessEventTimer > 0) {
       this._endlessEventTimer -= dt;
       if (this._endlessEvent && this._endlessEvent.laserEvery) this.updateEndlessLaserEvent(dt, this._endlessEvent);
+      if (this._endlessEvent && this._endlessEvent.bulletEvery) this.updateEndlessBulletEvent(dt, this._endlessEvent);
       if (this._endlessEventTimer <= 0) { this.finishEndlessEvent(this._endlessEvent); this._endlessEvent = null; this._endlessHazardT = 0; }
     }
     this._endlessEventT -= dt;
@@ -248,6 +250,19 @@ const game = {
     const dmg = (e.damage || 7) * this.activeDiff.dmgMult * this.endlessBulletDmgMult() * this.threatDamageMult();
     this.spawnBossLaser(x, e.warn || 0.7, e.dur || 0.5, e.width || 34, dmg);
     this.floats.push(new FloatText(x, 110, e.name, e.color || "#cc5de8"));
+  },
+  updateEndlessBulletEvent(dt, e) {
+    this._endlessHazardT -= dt;
+    if (this._endlessHazardT > 0) return 0;
+    this._endlessHazardT += e.bulletEvery || 4;
+    const rows = e.bulletRows || 4, speed = e.bulletSpeed || 240, fromLeft = this.rng() < 0.5;
+    const x = fromLeft ? -18 : CONFIG.WIDTH + 18, vx = (fromLeft ? 1 : -1) * speed;
+    for (let i = 0; i < rows; i++) {
+      const y = 180 + i * ((CONFIG.HEIGHT - 360) / Math.max(1, rows - 1)) + (this.rng() - 0.5) * 36;
+      this.spawnEnemyBullet(x, clamp(y, 120, CONFIG.HEIGHT - 120), vx, (this.rng() - 0.5) * 55, e.bulletDamage || 6);
+    }
+    this.floats.push(new FloatText(CONFIG.WIDTH / 2, 124, e.name, e.color || "#ff922b"));
+    return rows;
   },
   updateRivalInterference() {
     if (!this.rivalInterference || typeof RivalInterference === "undefined") return;
@@ -2778,6 +2793,7 @@ const game = {
     if (e.threatGainMult && e.threatGainMult > 1) parts.push("威胁+" + pct(e.threatGainMult - 1));
     if (e.enemyHpMult) parts.push("敌血+" + pct(e.enemyHpMult));
     if (e.powerupChanceAdd) parts.push("补给+" + pct(e.powerupChanceAdd));
+    if (e.bulletEvery) parts.push("侧弹" + (Math.round(e.bulletEvery * 10) / 10) + "s");
     return parts.join(" · ");
   },
   drawDraftCooldownHUD(ctx) {
