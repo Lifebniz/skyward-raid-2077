@@ -275,6 +275,7 @@ const CONFIG = {
       { key: "ambush", name: "伏击航道", color: "#74c0fc", sub: "敌群加密,补给偏防御", routeBias: "生存", spawnBonus: 2, powerupChanceAdd: 0.08, forceDrop: "heal" },
       { key: "armoredAirspace", name: "重甲空域", color: "#74c0fc", sub: "敌机生命提升,补给偏防御", routeBias: "生存", enemyHpMult: 0.35, powerupChanceAdd: 0.06, forceDrop: "heal" },
       { key: "annihilationOrder", name: "歼灭令", color: "#ffd43b", sub: "限时击杀目标,完成才结算", routeBias: "主炮", minTime: 80, enemyType: "medium", enemyChance: 0.48, spawnBonus: 2, scoreBonus: 0.10, killGoal: 16 },
+      { key: "aceHunt", name: "猎杀王牌", color: "#ff6b6b", sub: "精英敌增多,击破王牌目标", routeBias: "主炮", minTime: 100, enemyType: "gunner", enemyChance: 0.55, eliteChance: 0.72, spawnBonus: 1, scoreBonus: 0.14, eliteGoal: 4 },
       { key: "repairConvoy", name: "维修航队", color: "#51cf66", sub: "支援机增多,敌群更耐打", routeBias: "导弹", minTime: 110, enemyType: "support", enemyChance: 0.4, spawnBonus: 1, enemyHpMult: 0.18, scoreBonus: 0.12 },
       { key: "ionStorm", name: "离子风暴", color: "#cc5de8", sub: "周期镭射航道", routeBias: "激光", laserEvery: 4.2, laserDelay: 1.2, warn: 0.72, dur: 0.5, width: 34, damage: 7, jitter: 190 },
       { key: "jammerCloud", name: "扰频云层", color: "#15aabf", sub: "干扰机增多", routeBias: "追踪", spawnBonus: 1, jammerChance: 0.42 },
@@ -302,7 +303,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 68, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 69, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

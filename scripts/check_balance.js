@@ -81,6 +81,7 @@ assert(eventKeys.includes("shieldWall"), "endless events should include shield c
 assert(eventKeys.includes("phantomWing"), "endless events should include phantom pressure");
 assert(eventKeys.includes("carrierRaid"), "endless events should include carrier split pressure");
 assert(eventKeys.includes("annihilationOrder"), "endless events should include a kill-goal objective");
+assert(eventKeys.includes("aceHunt"), "endless events should include an elite hunt objective");
 const routeNames = new Set(["主炮", "激光", "追踪", "导弹", "生存", "风险"]);
 const drops = new Set(["power", "heal", "bomb", "wing", "chip"]);
 for (const e of CONFIG.endless.events) {
@@ -89,8 +90,10 @@ for (const e of CONFIG.endless.events) {
   if (e.minTime != null) between(e.minTime, 0, 300, `event ${e.key} minTime`);
   if (e.enemyType) assert(enemyKeys.has(e.enemyType), `event ${e.key} references missing enemy ${e.enemyType}`);
   if (e.enemyChance != null) between(e.enemyChance, 0, 0.75, `event ${e.key} enemyChance`);
+  if (e.eliteChance != null) between(e.eliteChance, 0, 0.9, `event ${e.key} eliteChance`);
   if (e.spawnBonus != null) between(e.spawnBonus, 0, 3, `event ${e.key} spawnBonus`);
   if (e.killGoal != null) between(e.killGoal, 6, 30, `event ${e.key} killGoal`);
+  if (e.eliteGoal != null) between(e.eliteGoal, 2, 10, `event ${e.key} eliteGoal`);
   if (e.scoreBonus != null) between(e.scoreBonus, 0, 0.35, `event ${e.key} scoreBonus`);
   if (e.threatGainMult != null) between(e.threatGainMult, 1, 1.5, `event ${e.key} threatGainMult`);
   if (e.forceDrop) assert(drops.has(e.forceDrop), `event ${e.key} has invalid forceDrop ${e.forceDrop}`);
@@ -117,6 +120,11 @@ const shieldWall = CONFIG.endless.events.find(e => e.key === "shieldWall");
 assert.strictEqual(shieldWall.enemyType, "shieldCarrier", "shield wall should force shield carriers");
 assert(shieldWall.minTime >= 120, "shield wall should be a mid/late endless event");
 assert(CONFIG.endless.pools.slice(3).some(pool => pool.enemies.includes("shieldCarrier")), "late endless pools should include shield carriers");
+const aceHunt = CONFIG.endless.events.find(e => e.key === "aceHunt");
+assert.strictEqual(aceHunt.enemyType, "gunner", "ace hunt should force durable gunner elites");
+assert(aceHunt.minTime >= 90, "ace hunt should be a mid endless event");
+assert(aceHunt.eliteChance >= 0.6, "ace hunt should reliably spawn elites");
+assert(aceHunt.eliteGoal >= 3, "ace hunt should require multiple elite kills");
 const recentEventKeys = CONFIG.endless.events.slice(0, 2).map(e => e.key);
 game.endless = true; game._endlessT = 999; game._endlessEvent = null; game._endlessRecentEvents = recentEventKeys.slice(); game._endlessEventsSeen = []; game._endlessStats = { events: 0, hits: 0 }; game._rng = () => 0;
 game.triggerEndlessEvent();
@@ -145,6 +153,17 @@ game.score = 0; game.floats = []; game._endlessStats = { hits: 0, kills: killGoa
 assert(game.finishEndlessEvent(killGoalEvent) > 0, "kill-goal event should clear after enough kills");
 assert.strictEqual(game._endlessStats.eventClears, 1, "cleared kill-goal event should count as cleared");
 assert(game.endlessEventHUDDetail(killGoalEvent).includes(killGoalEvent.killGoal + "/" + killGoalEvent.killGoal), "kill-goal event HUD should show objective");
+game.score = 0; game.floats = []; game._endlessStats = { hits: 0, eliteKills: 1, eventClears: 0, eventScore: 0 }; game._endlessEventStartHits = 0; game._endlessEventStartEliteKills = 0;
+assert.strictEqual(game.finishEndlessEvent(aceHunt), 0, "elite-goal event should fail without enough elite kills");
+assert.strictEqual(game._endlessStats.eventClears, 0, "failed elite-goal event should not count as cleared");
+assert.strictEqual(game._endlessStats.eventFails, 1, "failed elite-goal event should be tracked");
+assert(game.floats.some(f => f.text.includes("王牌未击破")), "failed elite-goal event should show feedback");
+game._endlessStats.eliteKills = 3; game._endlessEventStartEliteKills = 1;
+assert(game.endlessEventHUDDetail(aceHunt).includes("2/" + aceHunt.eliteGoal), "elite-goal event HUD should show live progress");
+game.score = 0; game.floats = []; game._endlessStats = { hits: 0, eliteKills: aceHunt.eliteGoal, eventClears: 0, eventScore: 0 }; game._endlessEventStartHits = 0; game._endlessEventStartEliteKills = 0;
+assert(game.finishEndlessEvent(aceHunt) > 0, "elite-goal event should clear after enough elite kills");
+assert.strictEqual(game._endlessStats.eventClears, 1, "cleared elite-goal event should count as cleared");
+assert(game.endlessReviewTags({ telemetry: { eliteKills: 8 }, time: 90, bonuses: {} }).some(t => t.includes("精英猎手")), "elite kill review should tag elite hunters");
 game.score = 0; game.floats = []; game._bonusRerolls = 0; game._endlessStats = { hits: 1 }; game._endlessEventStartHits = 1;
 const eventCleanGain = game.finishEndlessEvent(CONFIG.endless.events[0]);
 assert(eventCleanGain > eventHitGain, "clean event clear should grant bonus score");

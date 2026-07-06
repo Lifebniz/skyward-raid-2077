@@ -24,7 +24,7 @@ const game = {
   _mapScrollY: 0, _mapDragStartX: 0, _mapDragStartY: 0, _mapDragStartScrollY: 0, _mapDragging: false, _mapDragMoved: false,
   _mapHighlightId: null, _mapHighlightT: 0,   // MM:从图鉴跳转过来时高亮提示的关卡
   _levelTransX: 0, _levelTransY: 0, _levelTransT: 0,   // NN:进入关卡的聚焦扩散过渡(从点击处展开)
-  autoNext: true, endless: false, challengeSeed: "", challengeMode: false, challengeDaily: false, challengeTarget: null, challengeSplits: [], rivalInterference: null, _rng: null, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0, _endlessEventT: 0, _endlessEventTimer: 0, _endlessEvent: null, _endlessHazardT: 0, _endlessEventStartHits: 0, _endlessEventsSeen: [], _endlessRecentEvents: [], _endlessStats: null, _endlessTimeline: [], _endlessMarkIdx: 0,
+  autoNext: true, endless: false, challengeSeed: "", challengeMode: false, challengeDaily: false, challengeTarget: null, challengeSplits: [], rivalInterference: null, _rng: null, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0, _endlessEventT: 0, _endlessEventTimer: 0, _endlessEvent: null, _endlessHazardT: 0, _endlessEventStartHits: 0, _endlessEventStartKills: 0, _endlessEventStartEliteKills: 0, _endlessEventsSeen: [], _endlessRecentEvents: [], _endlessStats: null, _endlessTimeline: [], _endlessMarkIdx: 0,
   _endlessBossAffixesSeen: [], _endlessRecentBossAffixes: [],
   _shake: 0, _shakeT: 0, _hitStopT: 0,   // N:打击感
   // 触控按钮放大,便于拇指操作
@@ -130,7 +130,7 @@ const game = {
   pauseButtonHit(x, y) { const b = this.pauseBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
   // 开始某一关(索引)
   startLevel(i) {
-    this.currentLevel = i; this.world = LEVELS[i].world; this.endless = false; this.challengeSeed = ""; this.challengeMode = false; this.challengeDaily = false; this.challengeTarget = null; this.challengeSplits = []; this.rivalInterference = null; this._rng = null; this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = 0; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessStats = null; this._endlessTimeline = []; this._endlessMarkIdx = 0;
+    this.currentLevel = i; this.world = LEVELS[i].world; this.endless = false; this.challengeSeed = ""; this.challengeMode = false; this.challengeDaily = false; this.challengeTarget = null; this.challengeSplits = []; this.rivalInterference = null; this._rng = null; this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = 0; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventStartKills = 0; this._endlessEventStartEliteKills = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessStats = null; this._endlessTimeline = []; this._endlessMarkIdx = 0;
     this.state = "playing";
     this.player = new Player(); this.boss = null;
     this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.floats = []; this.lasers = []; this.shockwaves = []; this.specialWaves = [];
@@ -166,7 +166,7 @@ const game = {
     this.resetDepthSystems();
     this.flashTimer = 0; this.warningTimer = 0; this._hpTrailRatio = 1;
     this._endlessT = 0; this._endlessSpawnT = CONFIG.endless.spawn.initialDelay; this._endlessBossT = CONFIG.endless.boss.firstDelay; this._endlessBossN = 0;
-    this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = CONFIG.endless.eventInterval * 0.65; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessBossAffixesSeen = []; this._endlessRecentBossAffixes = [];
+    this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = CONFIG.endless.eventInterval * 0.65; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventStartKills = 0; this._endlessEventStartEliteKills = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessBossAffixesSeen = []; this._endlessRecentBossAffixes = [];
     this.resetEndlessTelemetry();
     director.begin(null);
     input.targetX = CONFIG.player.startX; input.targetY = CONFIG.player.startY;
@@ -204,7 +204,7 @@ const game = {
     const pool = base.filter(e => e.key !== currentKey);
     const fresh = pool.filter(e => !recent.includes(e.key));
     const e = this.pick(fresh.length ? fresh : (pool.length ? pool : base));
-    this._endlessEvent = e; this._endlessEventTimer = CONFIG.endless.eventDuration; this._endlessEventT = CONFIG.endless.eventInterval; this._endlessHazardT = e.laserEvery ? (e.laserDelay || 1) : 0; this._endlessEventStartHits = this._endlessStats ? this._endlessStats.hits : 0; this._endlessEventStartKills = this._endlessStats ? (this._endlessStats.kills || 0) : 0;
+    this._endlessEvent = e; this._endlessEventTimer = CONFIG.endless.eventDuration; this._endlessEventT = CONFIG.endless.eventInterval; this._endlessHazardT = e.laserEvery ? (e.laserDelay || 1) : 0; this._endlessEventStartHits = this._endlessStats ? this._endlessStats.hits : 0; this._endlessEventStartKills = this._endlessStats ? (this._endlessStats.kills || 0) : 0; this._endlessEventStartEliteKills = this._endlessStats ? (this._endlessStats.eliteKills || 0) : 0;
     this._endlessEventsSeen.push(e.name || e.key);
     this._endlessRecentEvents = [e.key].concat(recent.filter(k => k !== e.key)).slice(0, 2);
     if (this._endlessStats) this._endlessStats.events++;
@@ -223,7 +223,9 @@ const game = {
   finishEndlessEvent(e) {
     if (!e || !this.player) return 0;
     const kills = this._endlessStats ? (this._endlessStats.kills || 0) - (this._endlessEventStartKills || 0) : 0;
+    const eliteKills = this._endlessStats ? (this._endlessStats.eliteKills || 0) - (this._endlessEventStartEliteKills || 0) : 0;
     if (e.killGoal && kills < e.killGoal) { if (this._endlessStats) this._endlessStats.eventFails = (this._endlessStats.eventFails || 0) + 1; this.floats.push(new FloatText(this.player.x, this.player.y - 78, "目标未达成 " + kills + "/" + e.killGoal, e.color || "#adb5bd")); return 0; }
+    if (e.eliteGoal && eliteKills < e.eliteGoal) { if (this._endlessStats) this._endlessStats.eventFails = (this._endlessStats.eventFails || 0) + 1; this.floats.push(new FloatText(this.player.x, this.player.y - 78, "王牌未击破 " + eliteKills + "/" + e.eliteGoal, e.color || "#adb5bd")); return 0; }
     const cfg = CONFIG.endless, clean = this._endlessStats && this._endlessStats.hits === this._endlessEventStartHits;
     const gain = Math.round((cfg.eventClearScore || 0) * (clean ? 1.5 : 1) * this.threatScoreMult());
     if (this._endlessStats) { this._endlessStats.eventClears = (this._endlessStats.eventClears || 0) + 1; this._endlessStats.eventScore = (this._endlessStats.eventScore || 0) + gain; if (clean) this._endlessStats.cleanEvents = (this._endlessStats.cleanEvents || 0) + 1; }
@@ -316,13 +318,13 @@ const game = {
   startDailyChallenge() { this.startEndless({ seed: Challenge.dailySeed(), challenge: true, daily: true }); },
   challengeSplitMarks() { return CONFIG.challenge.splits; },
   resetEndlessTelemetry() {
-    this._endlessStats = { kills: 0, bossKills: 0, hits: 0, blocked: 0, damageTaken: 0, bombs: 0, drafts: 0, picks: 0, skips: 0, rerolls: 0, events: 0, eventClears: 0, cleanEvents: 0, eventFails: 0, eventScore: 0, jammed: 0 };
+    this._endlessStats = { kills: 0, eliteKills: 0, bossKills: 0, hits: 0, blocked: 0, damageTaken: 0, bombs: 0, drafts: 0, picks: 0, skips: 0, rerolls: 0, events: 0, eventClears: 0, cleanEvents: 0, eventFails: 0, eventScore: 0, jammed: 0 };
     this._endlessTimeline = []; this._endlessMarkIdx = 0;
   },
   endlessTelemetryMarks() { return [60, 120, 180, 300]; },
   endlessTelemetrySnapshot(t) {
     const s = this._endlessStats, p = this.player, hp = p && p.maxHp ? Math.round(p.hp / p.maxHp * 100) : 0;
-    return { t, score: Math.round(this.score * this.activeDiff.scoreMult), kills: s.kills, boss: s.bossKills, hits: s.hits, dmg: Math.round(s.damageTaken), drafts: s.drafts || 0, picks: s.picks || 0, skips: s.skips || 0, rerolls: s.rerolls || 0, jam: Math.round(s.jammed || 0), threat: this.threatLevel(), hp };
+    return { t, score: Math.round(this.score * this.activeDiff.scoreMult), kills: s.kills, elite: s.eliteKills || 0, boss: s.bossKills, hits: s.hits, dmg: Math.round(s.damageTaken), drafts: s.drafts || 0, picks: s.picks || 0, skips: s.skips || 0, rerolls: s.rerolls || 0, jam: Math.round(s.jammed || 0), threat: this.threatLevel(), hp };
   },
   recordEndlessTelemetry() {
     if (!this.endless || !this._endlessStats) return;
@@ -657,6 +659,7 @@ const game = {
     else if (time >= 60 && hitsPerMin <= 1.5) tags.push("走位稳定");
     if ((tele.bossKills || 0) >= 3) tags.push("Boss处理强");
     else if ((r.bossAffixes || []).length && !(tele.bossKills || 0)) tags.push("Boss压力高");
+    if ((tele.eliteKills || 0) >= 8) tags.push("精英猎手");
     const hpGain = Object.values(r.bonusHpGain || {}).reduce((sum, n) => sum + (n || 0), 0);
     if (hpGain >= 20) tags.push("血量构筑 +" + hpGain + "HP");
     if (tele.eventFails) tags.push("目标失败 " + tele.eventFails);
@@ -1418,7 +1421,7 @@ const game = {
   },
 
   onEnemyKilled(e, allowDrop = true, byBomb = false) {
-    if (this._endlessStats) { this._endlessStats.kills++; if (e.isBoss) this._endlessStats.bossKills++; }
+    if (this._endlessStats) { this._endlessStats.kills++; if (e.elite) this._endlessStats.eliteKills = (this._endlessStats.eliteKills || 0) + 1; if (e.isBoss) this._endlessStats.bossKills++; }
     let gained;
     if (byBomb) { gained = Math.round(e.score * CONFIG.scoring.bombKillMult); }              // 炸弹/必杀清兵:不涨连击、分数打折
     else { this.combo++; this.comboTimer = CONFIG.combo.timeout * (this.player ? this.player.ship.comboTimeoutMult : 1); this.maxCombo = Math.max(this.maxCombo, this.combo); gained = Math.round(e.score * this.comboMult() * this.threatScoreMult()); this.addThreat(e.isBoss ? CONFIG.threat.bossKillGain : CONFIG.threat.killGain); }
@@ -1906,8 +1909,8 @@ const game = {
       ctx.fillText("BONUS " + bonusText, cx, infoY); infoY += 22;
     }
     const tele = r.telemetry || {};
-    ctx.fillText(fitLine("战况 击杀 " + (tele.kills || 0) + " · Boss " + (tele.bossKills || 0) + " · 受击 " + (tele.hits || 0) + "(格挡 " + (tele.blocked || 0) + ") · 承伤 " + Math.round(tele.damageTaken || 0) + " · 空域 " + (tele.eventClears || 0) + "/" + (tele.cleanEvents || 0) + (tele.eventFails ? "/失败" + tele.eventFails : "") + " · 干扰 " + Math.round(tele.jammed || 0) + "s · 炸弹 " + (tele.bombs || 0) + " · 选择 " + (tele.picks || 0) + "/" + (tele.drafts || 0), 356), cx, infoY); infoY += 18;
-    const timeline = (r.timeline || []).map(m => m.t + "s " + m.score + "分/" + m.kills + "杀/HP" + m.hp + "%" + (m.jam ? "/干扰" + m.jam + "s" : "")).join(" · ");
+    ctx.fillText(fitLine("战况 击杀 " + (tele.kills || 0) + " · 精英 " + (tele.eliteKills || 0) + " · Boss " + (tele.bossKills || 0) + " · 受击 " + (tele.hits || 0) + "(格挡 " + (tele.blocked || 0) + ") · 承伤 " + Math.round(tele.damageTaken || 0) + " · 空域 " + (tele.eventClears || 0) + "/" + (tele.cleanEvents || 0) + (tele.eventFails ? "/失败" + tele.eventFails : "") + " · 干扰 " + Math.round(tele.jammed || 0) + "s · 炸弹 " + (tele.bombs || 0) + " · 选择 " + (tele.picks || 0) + "/" + (tele.drafts || 0), 356), cx, infoY); infoY += 18;
+    const timeline = (r.timeline || []).map(m => m.t + "s " + m.score + "分/" + m.kills + "杀/" + (m.elite || 0) + "精英/HP" + m.hp + "%" + (m.jam ? "/干扰" + m.jam + "s" : "")).join(" · ");
     if (timeline && !compactResult) { ctx.fillText(fitLine("节点 " + timeline, 356), cx, infoY); infoY += 22; }
     const boardY = infoY > 418 ? infoY + 16 : 434;
     if (!compactResult) {
@@ -2729,6 +2732,7 @@ const game = {
     const parts = [e.sub || ""].filter(Boolean);
     const pct = v => Math.round(v * 100) + "%";
     if (e.killGoal) { const kills = Math.max(0, ((this._endlessStats || {}).kills || 0) - (this._endlessEventStartKills || 0)); parts.push("目标击杀" + Math.min(kills, e.killGoal) + "/" + e.killGoal); }
+    if (e.eliteGoal) { const kills = Math.max(0, ((this._endlessStats || {}).eliteKills || 0) - (this._endlessEventStartEliteKills || 0)); parts.push("王牌击破" + Math.min(kills, e.eliteGoal) + "/" + e.eliteGoal); }
     if (e.scoreBonus) parts.push("分+" + pct(e.scoreBonus));
     if (e.threatGainMult && e.threatGainMult > 1) parts.push("威胁+" + pct(e.threatGainMult - 1));
     if (e.enemyHpMult) parts.push("敌血+" + pct(e.enemyHpMult));
