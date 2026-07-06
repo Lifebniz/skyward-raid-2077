@@ -826,8 +826,8 @@ const game = {
     return !!(this.boss && !this.boss.dead && card && card.type === "bonus" && ["bossHunter", "weakScanner", "executioner", "damage", "glassCannon", "vitalReactor"].includes(card.key));
   },
   hasElitePressure() {
-    const e = this.activeEndlessEvent();
-    return !!((e && (e.eliteGoal || e.eliteChance >= 0.35)) || this.enemies.some(x => !x.dead && x.elite));
+    const e = this.activeEndlessEvent(), a = this.boss && !this.boss.dead ? this.boss.affix : null;
+    return !!((e && (e.eliteGoal || e.eliteChance >= 0.35)) || (a && a.elite) || this.enemies.some(x => !x.dead && x.elite));
   },
   isEliteCounterCard(card) {
     return !!(this.hasElitePressure() && card && card.type === "bonus" && card.key === "eliteHunter");

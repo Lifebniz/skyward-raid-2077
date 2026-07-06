@@ -294,6 +294,7 @@ const CONFIG = {
         { key: "prism", name: "棱镜", desc: "周期瞄准镭射", color: "#cc5de8", attack: "laser", every: 5.5, warn: 0.55, dur: 0.65, width: 42, damageMult: 0.85, scoreMult: 1.16 },
         { key: "barrage", name: "弹幕", desc: "周期环形弹幕", color: "#ff922b", attack: "ring", every: 6.2, count: 14, speed: 230, damageMult: 0.78, scoreMult: 1.16 },
         { key: "escort", name: "护卫", desc: "周期投放精英僚机", color: "#51cf66", attack: "escort", every: 7.5, enemy: "gunner", elite: "charger", maxAdds: 4, scoreMult: 1.14 },
+        { key: "aceEscort", name: "王牌", desc: "周期投放狂暴精英重炮机", color: "#ff6b6b", attack: "escort", every: 8.0, enemy: "gunner", elite: "berserker", maxAdds: 3, scoreMult: 1.18 },
         { key: "ewar", name: "电子战", desc: "周期投放扰频精英机", color: "#15aabf", attack: "escort", every: 8.2, enemy: "jammer", elite: "jammer", maxAdds: 3, scoreMult: 1.18 },
         { key: "shieldEscort", name: "盾卫", desc: "周期投放护盾运输机", color: "#74c0fc", attack: "escort", every: 8.8, enemy: "shieldCarrier", maxAdds: 3, scoreMult: 1.17 },
         { key: "phantomEscort", name: "幻影", desc: "周期投放高速幻影僚机", color: "#22d3ee", attack: "escort", every: 7.0, enemy: "phantom", maxAdds: 4, scoreMult: 1.16 },
@@ -304,7 +305,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 70, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 71, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
