@@ -722,6 +722,10 @@ const game = {
     if (!bias || !card) return "";
     return this.draftCardRoute(card) === bias ? "空域推荐" : "";
   },
+  draftFocusText(card) {
+    const top = this.buildRouteSummary().top;
+    return top.score >= 3 && this.draftCardRoute(card) === top.name ? "路线续构" : "";
+  },
   draftCardRoute(card) {
     return !card ? "" : card.type === "chip" ? this.chipRouteName(card.key) : ((this.routePreviewInfo(card) || {}).top || {}).name || "";
   },
@@ -1683,8 +1687,8 @@ const game = {
       this.drawChipCardIcon(ctx, card, r.x + 48, r.y + r.h / 2, 27);
       this.drawRarityBadge(ctx, r.x + r.w - 18, r.y + 28, card.rarity, rarityColor);
       ctx.textAlign = "left";
-      const biasText = this.draftEventBiasText(card);
-      ctx.fillStyle = rarityColor; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.fillText((i + 1) + " · " + (card.type === "chip" ? "限时技能" : "永久 BONUS") + " · " + this.draftProgressText(card) + (biasText ? " · " + biasText : ""), r.x + 88, r.y + 25);
+      const tags = [this.draftEventBiasText(card), this.draftFocusText(card)].filter(Boolean).join(" · ");
+      ctx.fillStyle = rarityColor; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.fillText((i + 1) + " · " + (card.type === "chip" ? "限时技能" : "永久 BONUS") + " · " + this.draftProgressText(card) + (tags ? " · " + tags : ""), r.x + 88, r.y + 25);
       ctx.fillStyle = "#fff"; ctx.font = "bold 23px 'Segoe UI', sans-serif"; ctx.fillText(card.name, r.x + 88, r.y + 51);
       ctx.fillStyle = "#ced4da"; ctx.font = "14px 'Segoe UI', sans-serif";
       UI.wrapText(ctx, card.desc, r.w - 118, 1).forEach((line, j) => ctx.fillText(line, r.x + 88, r.y + 73 + j * 17));

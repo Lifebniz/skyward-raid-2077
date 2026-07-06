@@ -122,6 +122,7 @@ assert(hasSurvivalDraft(), "endless draft should include one survival/HP option"
 game.bonuses = { missileRack: 1 }; game._chipChoices = []; game._rng = () => 0.999;
 game.drawChipChoices();
 assert(hasDraftRoute("导弹"), "draft should include an option for the current focused route");
+assert(game.draftFocusText(game.cardInfo("bonus:explosivePayload")).includes("路线续构"), "focused route cards should show draft reason text");
 game.state = "playing"; game._endlessT = CONFIG.powerup.chipMinEndlessTime - 0.01; game._nextChipDraftAt = 0; game._endlessStats = { drafts: 0 };
 assert.strictEqual(game.updateChipDraftTimer(), false, "draft timer should wait until the fixed delay");
 game._endlessT = CONFIG.powerup.chipMinEndlessTime;
