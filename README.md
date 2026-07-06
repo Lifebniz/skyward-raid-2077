@@ -4,6 +4,62 @@
 
 [在线试玩](https://ac-spider.github.io/skyward-raid-2077/) · [本地运行](#本地运行) · [开发说明](#开发说明)
 
+## 战机与 Boss 预览
+
+### 可选战机
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="assets/images/ships/player-balanced.png" width="118" alt="平衡型战机"><br>
+      <strong>平衡型</strong><br>
+      <sub>全面均衡 · 新手推荐</sub>
+    </td>
+    <td align="center">
+      <img src="assets/images/ships/player-attacker.png" width="118" alt="攻击型战机"><br>
+      <strong>攻击型</strong><br>
+      <sub>高爆发 · 连击压制</sub>
+    </td>
+    <td align="center">
+      <img src="assets/images/ships/player-defender.png" width="118" alt="防御型战机"><br>
+      <strong>防御型</strong><br>
+      <sub>高血量 · 护盾抗压</sub>
+    </td>
+    <td align="center">
+      <img src="assets/images/ships/player-scout.png" width="118" alt="侦查型战机"><br>
+      <strong>侦查型</strong><br>
+      <sub>高机动 · 隐身穿梭</sub>
+    </td>
+  </tr>
+</table>
+
+### Boss 来袭
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="assets/images/bosses/boss-08-prism-judge.png" width="150" alt="棱镜审判者 Boss"><br>
+      <strong>棱镜审判者</strong><br>
+      <sub>光束 · 折射 · 安全航道切换</sub>
+    </td>
+    <td align="center">
+      <img src="assets/images/bosses/boss-09-iron-carrier.png" width="150" alt="铁幕空母 Boss"><br>
+      <strong>铁幕空母</strong><br>
+      <sub>护卫编队 · 甲板弱点</sub>
+    </td>
+    <td align="center">
+      <img src="assets/images/bosses/boss-10-tide-core.png" width="150" alt="引潮核心 Boss"><br>
+      <strong>引潮核心</strong><br>
+      <sub>牵引潮汐 · 区域压迫</sub>
+    </td>
+    <td align="center">
+      <img src="assets/images/bosses/boss-11-unstable-prototype.png" width="150" alt="失控原型机 Boss"><br>
+      <strong>失控原型机</strong><br>
+      <sub>随机拼装 · 无尽威胁</sub>
+    </td>
+  </tr>
+</table>
+
 ## 亮点
 
 - **即开即玩**: 原生 HTML5 Canvas + JavaScript，无构建链，无安装步骤，`index.html` 和 `空中突袭.html` 都可作为入口。
