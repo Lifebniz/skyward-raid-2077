@@ -119,6 +119,9 @@ assert(eventCleanGain > eventHitGain, "clean event clear should grant bonus scor
 assert(game.player.shieldHp >= CONFIG.endless.eventCleanShield, "clean event clear should grant shield");
 assert.strictEqual(game._endlessStats.cleanEvents, 1, "clean event clear should be tracked");
 assert(game.endlessReviewTags({ telemetry: game._endlessStats, time: 60, bonuses: {} }).some(t => t.includes("完美空域")), "clean event clears should appear in review tags");
+assert(game.endlessReviewTags({ telemetry: { hits: 6, damageTaken: 120 }, time: 60, bonuses: {} }).some(t => t.includes("建议补生存")), "high damage review should suggest survival");
+assert(game.endlessReviewTags({ telemetry: { bossKills: 0 }, time: 60, bonuses: {}, bossAffixes: ["蜂群·近卫舰"] }).some(t => t.includes("Boss输出")), "boss pressure review should suggest boss damage");
+assert(game.endlessReviewTags({ telemetry: {}, time: 60, bonuses: { missileRack: 2 } }).some(t => t.includes("建议续构")), "near-ready route review should suggest route continuation");
 
 const draftIds = CONFIG.chipOrder.map(k => "chip:" + k).concat(CONFIG.bonusOrder.map(k => "bonus:" + k));
 const hasSurvivalDraft = () => game._chipChoices.some(id => id.startsWith("bonus:") && game.draftCardRoute(game.cardInfo(id)) === "生存");

@@ -638,6 +638,13 @@ const game = {
     if (ready.length) tags.push("构筑成型 " + ready.join("/"));
     else tags.push(routes[0] && routes[0].score >= 3 ? "路线偏向 " + routes[0].name : "构筑未成型");
     const hitsPerMin = (tele.hits || 0) / (time / 60), dmgPerMin = (tele.damageTaken || 0) / (time / 60);
+    const picked = r.bonuses || {}, has = keys => keys.some(k => picked[k] > 0);
+    let advice = "";
+    if ((hitsPerMin >= 4 || dmgPerMin >= 90) && !has(["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "lastStand", "emergencyBarrier"])) advice = "建议补生存";
+    else if ((r.bossAffixes || []).length && !(tele.bossKills || 0) && !has(["bossHunter", "weakScanner", "executioner", "damage", "glassCannon", "vitalReactor"])) advice = "建议补Boss输出";
+    else if (!ready.length && routes[0] && routes[0].score >= 5) advice = "建议续构" + routes[0].name;
+    else if ((tele.drafts || 0) >= 3 && (tele.picks || 0) < tele.drafts) advice = "建议少跳过";
+    if (advice) tags.push(advice);
     if (hitsPerMin >= 4 || dmgPerMin >= 90) tags.push("承伤偏高");
     else if (time >= 60 && hitsPerMin <= 1.5) tags.push("走位稳定");
     if ((tele.bossKills || 0) >= 3) tags.push("Boss处理强");
