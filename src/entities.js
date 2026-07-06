@@ -353,10 +353,13 @@ class Enemy {
     this.baseX = x; this.baseY = this.y; this.radius = t.radius; this.hp = t.hp; this.speed = t.speed; this.score = t.score; this.color = t.color; this.cfg = t;
     this._fireTimer = 0.6 + game.rng() * 0.6; this.dead = false;
     this.elite = elite || this.rollElite(); this.eliteCfg = this.elite ? CONFIG.elite[this.elite] : null;
-    this.eliteShield = this.eliteCfg && this.eliteCfg.shield ? this.eliteCfg.shield : 0; this._eliteCd = 1.2 + game.rng(); this._eliteWarn = 0;
-    if (game.endless) this.hp = Math.max(1, Math.round(this.hp * game.endlessEnemyHpMult()));
+    const hpMult = game.endless ? game.endlessEnemyHpMult() : 1;
+    this.eliteShieldMax = 0; this.eliteShield = 0; this._eliteCd = 1.2 + game.rng(); this._eliteWarn = 0;
+    if (game.endless) this.hp = Math.max(1, Math.round(this.hp * hpMult));
     if (this.eliteCfg) { this.hp = Math.round(this.hp * (this.eliteCfg.hpMult || 1)); this.score = Math.round(this.score * (this.eliteCfg.scoreMult || 1)); }
     if (this.eliteCfg && this.eliteCfg.speedMult) this.speed *= this.eliteCfg.speedMult;
+    this.eliteShieldMax = Math.round((t.shield || 0) * hpMult) + (this.eliteCfg && this.eliteCfg.shield ? this.eliteCfg.shield : 0);
+    this.eliteShield = this.eliteShieldMax;
     this.maxHp = this.hp;
     // 运动状态
     this.move = move; this.mp = CONFIG.moves[move] || {}; this._mt = 0;
@@ -517,6 +520,11 @@ class Enemy {
       ctx.fillStyle = "#2b1a4a"; ctx.beginPath(); ctx.arc(x - r * 0.55, y + r * 0.15, r * 0.18, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.arc(x + r * 0.55, y + r * 0.15, r * 0.18, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "#e5dbff"; ctx.beginPath(); ctx.arc(x, y - r * 0.15, r * 0.24, 0, Math.PI * 2); ctx.fill();
+    } else if (t === "shieldCarrier") {
+      ctx.beginPath(); ctx.moveTo(x - r * 0.85, y - r * 0.25); ctx.lineTo(x - r * 0.35, y - r * 0.75); ctx.lineTo(x + r * 0.35, y - r * 0.75); ctx.lineTo(x + r * 0.85, y - r * 0.25); ctx.lineTo(x + r * 0.55, y + r * 0.65); ctx.lineTo(x - r * 0.55, y + r * 0.65); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#d0ebff"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x - r * 0.55, y - r * 0.05); ctx.lineTo(x + r * 0.55, y - r * 0.05); ctx.moveTo(x, y - r * 0.52); ctx.lineTo(x, y + r * 0.45); ctx.stroke();
+      ctx.fillStyle = "#e7f5ff"; ctx.beginPath(); ctx.arc(x, y + r * 0.05, r * 0.25, 0, Math.PI * 2); ctx.fill();
     } else if (t === "jammer") {
       ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x - r * 0.85, y); ctx.lineTo(x, y + r); ctx.lineTo(x + r * 0.85, y); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#99e9f2"; ctx.lineWidth = 2;
@@ -538,7 +546,14 @@ class Enemy {
   drawRoleAura(ctx) {
     if (this.y <= 0) return;
     const x = this.x, y = this.y, r = this.radius;
-    if (this.type === "jammer") {
+    if (this.type === "shieldCarrier" && this.eliteShield > 0 && !this.eliteCfg) {
+      const rr = r + 8 + Math.sin(this._mt * 8) * 2;
+      ctx.save(); ctx.globalAlpha = 0.35; ctx.strokeStyle = this.color; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.9; ctx.fillStyle = this.color; ctx.font = "bold 10px 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.fillText("护盾", x, y - r - 10);
+      UI.bar(ctx, x - r, y + r + 7, r * 2, 4, clamp(this.eliteShield / Math.max(1, this.eliteShieldMax || this.cfg.shield), 0, 1), this.color, this.color, {});
+      ctx.restore();
+    } else if (this.type === "jammer") {
       const rr = Math.min(this.cfg.jamRadius || 0, 130), a = 0.18 + Math.abs(Math.sin(this._mt * 6)) * 0.12;
       ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = this.color; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke();
@@ -576,7 +591,7 @@ class Enemy {
     ctx.fillStyle = c; ctx.font = "bold 10px 'Segoe UI', sans-serif"; ctx.textAlign = "center";
     ctx.fillText(this.eliteCfg.name, x, y - r - 10);
     if (this.eliteShield > 0) {
-      UI.bar(ctx, x - r, y + r + 7, r * 2, 4, clamp(this.eliteShield / this.eliteCfg.shield, 0, 1), c, c, {});
+      UI.bar(ctx, x - r, y + r + 7, r * 2, 4, clamp(this.eliteShield / Math.max(1, this.eliteShieldMax || this.eliteCfg.shield), 0, 1), c, c, {});
     }
     if (this._eliteWarn > 0 && game.player) {
       ctx.globalAlpha = 0.35 + 0.35 * Math.sin(this._mt * 26) ** 2;

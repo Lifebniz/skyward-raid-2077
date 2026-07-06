@@ -48,6 +48,7 @@ const CONFIG = {
     //   carrier 母舰机(自身不开火,死亡时裂出 spawnCount 只 spawns 类型的僚机,onEnemyKilled 里处理,同 splitter 套路但更硬更重)
     phantom:  { hp: 9,  speed: 150, radius: 20, score: 600, color: "#22d3ee", fireInterval: 1.0, bulletSpeed: 340, damage: 11, shots: 2 },
     carrier:  { hp: 22, speed: 65,  radius: 32, score: 900, color: "#9775fa", fireInterval: 0,   bulletSpeed: 0,   damage: 0, spawns: "medium", spawnCount: 2 },
+    shieldCarrier: { hp: 18, speed: 70, radius: 31, score: 850, color: "#74c0fc", fireInterval: 1.9, bulletSpeed: 260, damage: 8, shots: 3, shield: 18 },
     jammer:   { hp: 12, speed: 72,  radius: 25, score: 650, color: "#15aabf", fireInterval: 2.2, bulletSpeed: 260, damage: 7, shots: 2, jamRadius: 320, weaponSlow: 1.35 },
     support:  { hp: 12, speed: 62,  radius: 25, score: 700, color: "#51cf66", fireInterval: 0,   bulletSpeed: 0,   damage: 0, repairInterval: 2.4, repairRadius: 150, repairAmount: 4 },
   },
@@ -260,9 +261,9 @@ const CONFIG = {
       { until: 20, enemies: ["small", "small", "medium"] },
       { until: 50, enemies: ["small", "medium", "medium", "large", "gunner"] },
       { until: 100, enemies: ["small", "medium", "large", "gunner", "splitter"] },
-      { until: 160, enemies: ["small", "medium", "large", "gunner", "splitter", "sniper", "detonator", "jammer"] },
-      { until: 250, enemies: ["small", "medium", "large", "gunner", "splitter", "sniper", "detonator", "jammer", "support", "phantom", "phantom", "carrier"] },
-      { enemies: ["small", "medium", "large", "gunner", "splitter", "sniper", "detonator", "jammer", "support", "phantom", "phantom", "carrier", "carrier", "carrier"] },
+      { until: 160, enemies: ["small", "medium", "large", "gunner", "splitter", "sniper", "detonator", "jammer", "shieldCarrier"] },
+      { until: 250, enemies: ["small", "medium", "large", "gunner", "splitter", "sniper", "detonator", "jammer", "support", "shieldCarrier", "phantom", "phantom", "carrier"] },
+      { enemies: ["small", "medium", "large", "gunner", "splitter", "sniper", "detonator", "jammer", "support", "shieldCarrier", "shieldCarrier", "phantom", "phantom", "carrier", "carrier", "carrier"] },
     ],
     events: [
       { key: "supplyStorm", name: "补给风暴", color: "#38d9a9", sub: "掉落率上升", routeBias: "生存", powerupChanceAdd: 0.22 },
@@ -275,6 +276,7 @@ const CONFIG = {
       { key: "jammerCloud", name: "扰频云层", color: "#15aabf", sub: "干扰机增多", routeBias: "追踪", spawnBonus: 1, jammerChance: 0.42 },
       { key: "sniperLockdown", name: "狙击封锁", color: "#e64980", sub: "狙击机增多,分数提升", routeBias: "主炮", minTime: 90, enemyType: "sniper", enemyChance: 0.46, spawnBonus: 1, powerupChanceAdd: 0.04, scoreBonus: 0.12 },
       { key: "minefield", name: "爆雷空域", color: "#fab005", sub: "爆雷机增多,分数和威胁提升", routeBias: "导弹", minTime: 130, enemyType: "detonator", enemyChance: 0.44, spawnBonus: 1, scoreBonus: 0.16, threatGainMult: 1.18 },
+      { key: "shieldWall", name: "护盾纵队", color: "#74c0fc", sub: "护盾运输机增多,敌群更耐打", routeBias: "主炮", minTime: 140, enemyType: "shieldCarrier", enemyChance: 0.42, spawnBonus: 1, enemyHpMult: 0.12, scoreBonus: 0.14 },
       { key: "phantomWing", name: "幻影编队", color: "#22d3ee", sub: "高速幻影机增多", routeBias: "追踪", minTime: 150, enemyType: "phantom", enemyChance: 0.5, spawnBonus: 1, powerupChanceAdd: 0.03, scoreBonus: 0.14 },
       { key: "carrierRaid", name: "母舰压境", color: "#9775fa", sub: "母舰机增多,击毁后分裂僚机", routeBias: "主炮", minTime: 170, enemyType: "carrier", enemyChance: 0.34, spawnBonus: 1, enemyHpMult: 0.12, scoreBonus: 0.16 },
     ],
@@ -287,6 +289,7 @@ const CONFIG = {
         { key: "barrage", name: "弹幕", desc: "周期环形弹幕", color: "#ff922b", attack: "ring", every: 6.2, count: 14, speed: 230, damageMult: 0.78, scoreMult: 1.16 },
         { key: "escort", name: "护卫", desc: "周期投放精英僚机", color: "#51cf66", attack: "escort", every: 7.5, enemy: "gunner", elite: "charger", maxAdds: 4, scoreMult: 1.14 },
         { key: "ewar", name: "电子战", desc: "周期投放扰频精英机", color: "#15aabf", attack: "escort", every: 8.2, enemy: "jammer", elite: "jammer", maxAdds: 3, scoreMult: 1.18 },
+        { key: "shieldEscort", name: "盾卫", desc: "周期投放护盾运输机", color: "#74c0fc", attack: "escort", every: 8.8, enemy: "shieldCarrier", maxAdds: 3, scoreMult: 1.17 },
         { key: "phantomEscort", name: "幻影", desc: "周期投放高速幻影僚机", color: "#22d3ee", attack: "escort", every: 7.0, enemy: "phantom", maxAdds: 4, scoreMult: 1.16 },
         { key: "swarmEscort", name: "蜂群", desc: "周期投放多架小型机", color: "#fab005", attack: "escort", every: 5.8, enemy: "small", adds: 3, maxAdds: 6, scoreMult: 1.15 },
         { key: "exposedCore", name: "露核", desc: "周期暴露弱点", color: "#ffd43b", attack: "weak", every: 7.2, dur: 2.6, weakDamageMult: 0.35, scoreMult: 1.12 },
@@ -295,7 +298,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 57, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 58, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
