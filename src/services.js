@@ -308,6 +308,15 @@ const EndlessBoard = {
   clearAll() { try { localStorage.removeItem(this.key); } catch (e) {} this._mem = []; },
 };
 
+// GG:无尽关卡(经典模式,移植自老版本)独立排行榜 —— 和无尽挑战(强化/事件版)分开计分,避免构筑加成让分数不可比
+const EndlessBoardLite = {
+  key: "kzts_endless_lite", max: 5, _mem: [],
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return this._mem; } },
+  saveList(list) { try { localStorage.setItem(this.key, JSON.stringify(list)); } catch (e) { this._mem = list; } },
+  submit(score) { const l = this.load(); l.push({ score, date: new Date().toISOString().slice(0, 10) }); l.sort((a, b) => b.score - a.score); const top = l.slice(0, this.max); this.saveList(top); return top; },
+  clearAll() { try { localStorage.removeItem(this.key); } catch (e) {} this._mem = []; },
+};
+
 // OO:成就系统 —— 定义 + 持久化。check* 系列在对应结算/事件点调用,内部自己判断解锁条件、去重、弹提示。
 const ACHIEVEMENTS = [
   { id: "first_clear",  icon: "🏅", name: "初露锋芒", desc: "通关任意一关" },
@@ -343,7 +352,8 @@ const Achievements = {
     if (hpRatio >= 0.999) this.unlock("no_hit");
     if (bombsUsed === 0) this.unlock("no_bomb");
     if (maxCombo >= 30) this.unlock("combo_30");
-    if (Object.values(Progress.data).filter(p => p.cleared).length >= LEVELS.length) this.unlock("all_clear");
+    // GG:无尽关卡(endless:true)不是"关卡",不计入通关总数,否则全通成就永远解不出来
+    if (Object.values(Progress.data).filter(p => p.cleared).length >= LEVELS.filter(l => !l.endless).length) this.unlock("all_clear");
   },
   checkEndlessEnd({ time, maxCombo }) {
     if (time >= 300) this.unlock("endless_5min");
@@ -354,7 +364,7 @@ const Achievements = {
 // PP:存档导入导出 —— 单文件双击运行没有后端也没有文件下载习惯,用 window.prompt 展示/读取 JSON 文本最省事,
 // 复制粘贴即可备份/换设备,零依赖不用引入任何下载/剪贴板 API。
 const SaveData = {
-  keys: ["kzts_settings", "kzts_progress", "kzts_scores", "kzts_endless", "kzts_challenges", "kzts_achievements"],
+  keys: ["kzts_settings", "kzts_progress", "kzts_scores", "kzts_endless", "kzts_endless_lite", "kzts_challenges", "kzts_achievements"],
   exportAll() {
     const out = { _game: "skywardRaid2077", _v: 1 };
     for (const k of this.keys) { const v = localStorage.getItem(k); if (v != null) out[k] = v; }

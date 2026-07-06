@@ -11,59 +11,86 @@ html, body {
     position: absolute; left: 0; right: 0; bottom: 8px;
     text-align: center; color: #4a90d9; font-size: 12px; opacity: .6; pointer-events: none;
   }
-  /* 联机浮窗:收起时只在右边缘露出一个半圆小把手,不挡画面;点一下才展开成完整面板
-     宽度铺满 #stage 并用 flex 靠右对齐,这样面板的百分比宽度是相对画布算的,不是视口 */
+  /* GG:联机浮窗重做 —— 呼应游戏内 UI.panel/UI.button/UI.roundButton 那套"玻璃质感+渐变+发光描边"的视觉语言,
+     不再是一块普通的浅蓝方框。收起时只在右边缘露出一个会呼吸发光的圆形信标(仿 roundButton 的玻璃圆钮),
+     点一下才展开成完整面板;宽度铺满 #stage 并用 flex 靠右对齐,面板的百分比宽度相对画布算,不是视口 */
   .mp-widget {
     position: absolute; left: 0; right: 0; top: 8%; z-index: 5;
     display: flex; justify-content: flex-end; pointer-events: none;
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
   }
   .mp-widget .mp-panel, .mp-widget .mp-peek { pointer-events: auto; }
   .mp-widget:not(.collapsed) .mp-peek { display: none; }
   .mp-widget.collapsed .mp-panel { display: none; }
+  @keyframes mp-peek-breathe {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,.22) inset, 0 4px 16px rgba(0,0,0,.45), 0 0 10px rgba(77,171,247,.55); }
+    50%      { box-shadow: 0 0 0 1px rgba(255,255,255,.22) inset, 0 4px 20px rgba(0,0,0,.45), 0 0 20px rgba(77,171,247,.85); }
+  }
   .mp-peek {
-    width: 26px; height: 52px;
-    border-radius: 100% 0 0 100% / 50% 0 0 50%;
-    background: rgba(77, 171, 247, .32);
-    border: 1px solid rgba(142, 197, 255, .45); border-right: none;
-    box-shadow: -4px 0 14px rgba(0, 0, 0, .35);
+    position: relative;
+    width: 46px; height: 46px; margin-right: -14px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 32%, rgba(116,192,252,.95), rgba(77,171,247,.45) 60%, rgba(20,40,60,.55) 100%);
+    border: 1.5px solid rgba(255,255,255,.5);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; user-select: none; touch-action: none;
+    animation: mp-peek-breathe 2.6s ease-in-out infinite;
+    transition: margin-right .18s ease;
   }
-  .mp-peek-icon { font-size: 15px; margin-right: 3px; }
+  .mp-peek:hover, .mp-peek:active { margin-right: 0; }
+  .mp-peek.mp-on { background: radial-gradient(circle at 35% 32%, #79e6c8, rgba(56,217,169,.55) 60%, rgba(20,50,45,.6) 100%); }
+  .mp-peek.mp-busy { background: radial-gradient(circle at 35% 32%, #ffe38a, rgba(255,212,59,.55) 60%, rgba(60,50,15,.6) 100%); }
+  .mp-peek-icon { font-size: 17px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
   .mp-peek-dot {
-    position: absolute; top: 6px; left: 3px;
-    width: 7px; height: 7px; border-radius: 50%;
-    background: #868e96; box-shadow: 0 0 4px rgba(0, 0, 0, .5);
+    position: absolute; top: 2px; right: 3px;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #868e96; border: 1.5px solid rgba(10,14,20,.9); box-shadow: 0 0 5px rgba(0,0,0,.6);
   }
-  .mp-peek-dot.on { background: #38d9a9; }
-  .mp-peek-dot.busy { background: #ffd43b; }
+  .mp-peek-dot.on { background: #38d9a9; box-shadow: 0 0 6px #38d9a9; }
+  .mp-peek-dot.busy { background: #ffd43b; box-shadow: 0 0 6px #ffd43b; }
   .mp-panel {
     margin-right: 10px;
     width: min(300px, calc(100% - 20px));
-    color: #dbeafe; background: rgba(5, 12, 24, .88);
-    border: 1px solid rgba(77, 171, 247, .35); border-radius: 8px;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, .35);
+    color: #dbeafe;
+    background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.015) 35%, rgba(5,10,18,.92));
+    background-color: rgba(6,10,18,.92);
+    border: 1.5px solid rgba(77,171,247,.45); border-radius: 14px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.04) inset;
     font: 13px/1.35 "Segoe UI", "Microsoft YaHei", sans-serif;
     user-select: text; touch-action: auto;
+    overflow: hidden;
   }
   .mp-head {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 8px; padding: 8px 9px; user-select: none;
+    gap: 8px; padding: 10px 11px; user-select: none;
+    background: rgba(77,171,247,.08); border-bottom: 1px solid rgba(255,255,255,.08);
   }
-  .mp-title { font-weight: 700; color: #fff; }
+  .mp-title { font-weight: 700; color: #fff; letter-spacing: .5px; }
   .mp-status { color: #8ec5ff; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mp-status.mp-on { color: #38d9a9; }
+  .mp-status.mp-busy { color: #ffd43b; }
   .mp-toggle, .mp-panel button {
-    border: 1px solid rgba(142, 197, 255, .35); border-radius: 6px;
-    background: rgba(77, 171, 247, .16); color: #eef7ff;
-    padding: 6px 8px; cursor: pointer; font: inherit;
+    border: 1px solid rgba(142,197,255,.4); border-radius: 8px;
+    background: linear-gradient(180deg, rgba(77,171,247,.32), rgba(77,171,247,.12));
+    color: #eef7ff; font: inherit; font-weight: 700;
+    padding: 7px 8px; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,.3), 0 0 0 1px rgba(255,255,255,.05) inset;
+    transition: filter .12s ease, transform .12s ease;
   }
-  .mp-toggle { min-width: 52px; }
-  .mp-body { padding: 0 9px 9px; }
-  .mp-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 7px; }
+  .mp-toggle:hover, .mp-panel button:hover { filter: brightness(1.18); }
+  .mp-toggle:active, .mp-panel button:active { transform: scale(.96); }
+  .mp-toggle { min-width: 52px; background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.03)); }
+  .mp-body { padding: 9px 11px 11px; }
+  .mp-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 8px; }
+  .mp-actions button[data-mp-host], .mp-actions button[data-mp-join], .mp-actions button[data-mp-accept] {
+    background: linear-gradient(180deg, rgba(56,217,169,.4), rgba(56,217,169,.14)); border-color: rgba(56,217,169,.5);
+  }
+  .mp-actions button[data-mp-close] { background: linear-gradient(180deg, rgba(255,107,107,.4), rgba(255,107,107,.14)); border-color: rgba(255,107,107,.5); }
   .mp-panel textarea {
     box-sizing: border-box; width: 100%; height: 88px; resize: vertical;
-    border-radius: 6px; border: 1px solid rgba(142, 197, 255, .25);
-    background: rgba(255, 255, 255, .08); color: #fff; padding: 7px;
+    border-radius: 8px; border: 1px solid rgba(142,197,255,.3);
+    background: rgba(0,0,0,.32); color: #fff; padding: 8px;
     font: 12px/1.35 Consolas, "Microsoft YaHei", monospace;
   }
-  .mp-hint { margin-top: 6px; color: #9fb8d5; font-size: 12px; }
+  .mp-panel textarea:focus { outline: none; border-color: rgba(77,171,247,.8); box-shadow: 0 0 0 2px rgba(77,171,247,.25); }
+  .mp-hint { margin-top: 7px; color: #9fb8d5; font-size: 12px; line-height: 1.5; }

@@ -109,6 +109,9 @@ const LEVELS = [
     { spawnMix: [ { type: "phantom", count: 20 }, { type: "carrier", count: 5 } ], formation: "line", gap: 0.14, move: "zigzag", preBoss: true }, { powerup: "bomb" }, { powerup: "heal" }, { wait: 1.0 },
     { boss: 4 }, { powerup: "heal" }, { wait: 0.8 }, { boss: 5 }, { powerup: "heal" }, { wait: 0.8 }, { boss: 6 }, { clear: true },
   ] },
+  // GG:从老版本(空中突袭v3.6)移植回来的经典无尽关卡 —— 没有强化抽卡/事件/挑战码那一整套,单纯生存刷分。
+  //   放在地图末尾,endless:true 标记让 isUnlocked/mapNodePos/drawMap 全部走独立分支,不占用世界/小关编号,也不参与"通关解锁下一关"链条。
+  { id: "∞", world: 6, sub: 2, endless: true, script: [] },
 ];
 
 // Z:反查某个 BOSS 索引出现在哪些关卡(供首页图鉴展示)
