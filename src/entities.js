@@ -459,8 +459,10 @@ class Enemy {
   }
   damage(d) {
     if (this.eliteShield > 0) {
-      const used = Math.min(this.eliteShield, d);
-      this.eliteShield -= used; d -= used; this._flash = 0.06;
+      const mult = 1 + game.bonusValue("shieldBreaker", "shieldDamageMult");
+      const used = Math.min(this.eliteShield, d * mult);
+      this.eliteShield -= used; d -= used / mult; this._flash = 0.06;
+      if (this.eliteShield <= 0) game.triggerShieldBreak(this);
       if (this.eliteShield > 0) return false;
     }
     this.hp -= d; this._flash = 0.06; if (this.hp <= 0) { this.dead = true; return true; } return false;

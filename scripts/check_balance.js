@@ -18,6 +18,8 @@ sandbox.pools = {
   homingShot: { get(x, y, overcharge) { return { x, y, overcharge }; } },
 };
 sandbox.Sound = { powerup() {}, tone() {} };
+vm.runInContext(fs.readFileSync("src/entities.js", "utf8") + "\nglobalThis.Enemy = Enemy;", sandbox);
+const { Enemy } = sandbox;
 
 const between = (value, min, max, label) => assert(value >= min && value <= max, `${label} ${value} outside ${min}-${max}`);
 const unique = (items, label) => assert.strictEqual(new Set(items).size, items.length, `${label} has duplicate keys`);
@@ -223,7 +225,7 @@ assert.strictEqual(game._endlessRecentBossAffixes[0], phantomEscort.key, "applie
 
 const bonusKeys = new Set(Object.keys(CONFIG.bonuses));
 for (const key of CONFIG.bonusOrder) assert(bonusKeys.has(key), `bonusOrder references missing bonus ${key}`);
-for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "painConverter", "armorCaliber", "vitalReactor", "shieldAmplifier", "signalFilter"]) {
+for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "painConverter", "armorCaliber", "vitalReactor", "shieldAmplifier", "shieldBreaker", "signalFilter"]) {
   assert(bonusKeys.has(key), `missing survival/build bonus ${key}`);
 }
 assert(CONFIG.bonuses.armorCaliber.hpPerDamage > 0, "armorCaliber hpPerDamage must be positive");
@@ -232,6 +234,9 @@ assert(CONFIG.bonuses.vitalReactor.hpPerDamageMult > 0, "vitalReactor hpPerDamag
 between(CONFIG.bonuses.vitalReactor.damageMult, 0.02, 0.08, "vitalReactor damageMult");
 between(CONFIG.bonuses.vitalReactor.maxDamageMult, 0.1, 0.4, "vitalReactor maxDamageMult");
 between(CONFIG.bonuses.shieldAmplifier.damageMult, 0.08, 0.3, "shieldAmplifier damageMult");
+between(CONFIG.bonuses.shieldBreaker.shieldDamageMult, 0.25, 1.0, "shieldBreaker shieldDamageMult");
+between(CONFIG.bonuses.shieldBreaker.breakDamage, 3, 14, "shieldBreaker breakDamage");
+between(CONFIG.bonuses.shieldBreaker.range, 100, 220, "shieldBreaker range");
 between(CONFIG.bonuses.signalFilter.jamResist, 0.08, 0.3, "signalFilter jamResist");
 between(CONFIG.bonuses.repairLoop.every, 8, 22, "repairLoop interval");
 between(CONFIG.bonuses.repairLoop.healPct, 0.03, 0.12, "repairLoop healPct");
@@ -277,6 +282,16 @@ game.bonuses = { shieldAmplifier: 1 }; game.chips = {}; game.player = { hp: 100,
 assert.strictEqual(game.playerDamage(100), 100, "shieldAmplifier should not add damage without shield");
 game.player.shieldHp = 10;
 assert(game.playerDamage(100) > 100, "shieldAmplifier should add damage while shielded");
+game.endless = false; game.currentLevel = 1; game._rng = () => 0.999; game.bonuses = { shieldBreaker: 1 }; game.chips = {}; game.floats = []; game.shockwaves = [];
+const shielded = new Enemy("shieldCarrier", 100, 0, "straight"); shielded.y = 100;
+const splashTarget = { dead: false, x: 130, y: 100, radius: 12, hp: 30, maxHp: 30, damage(d) { this.hp -= d; if (this.hp <= 0) { this.dead = true; return true; } return false; } };
+game.enemies = [shielded, splashTarget];
+shielded.damage(CONFIG.enemy.shieldCarrier.shield / (1 + CONFIG.bonuses.shieldBreaker.shieldDamageMult));
+assert(shielded.eliteShield <= 0, "shieldBreaker should break shields faster");
+assert(game.shockwaves.length && game.floats.some(f => f.text.includes("破盾")), "shieldBreaker should show break feedback");
+assert(splashTarget.hp < 30, "shieldBreaker should shock nearby enemies on break");
+assert(game.draftStatPreviewText(game.cardInfo("bonus:shieldBreaker")).includes("%"), "shieldBreaker draft preview should show shield damage");
+assert(game.bonusHUDText("shieldBreaker").includes("%"), "shieldBreaker HUD should show shield damage");
 between(CONFIG.bonuses.painConverter.energyPerHp, 0.5, 2, "painConverter energyPerHp");
 between(CONFIG.bonuses.painConverter.maxEnergy, 15, 60, "painConverter maxEnergy");
 between(CONFIG.bonuses.comboBarrage.count, 1, 4, "comboBarrage count");
