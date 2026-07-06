@@ -1145,12 +1145,16 @@ const game = {
     const activeAdds = this.enemies.filter(e => !e.dead && !e.isBoss).length;
     if (activeAdds >= (a.maxAdds || 4) || this.enemies.length >= CONFIG.endless.maxEnemies) return false;
     const type = a.enemy || "gunner", r = CONFIG.enemy[type].radius || 24;
-    const x = clamp(b.x + (this.rng() < 0.5 ? -1 : 1) * (b.radius + r + 22), r + 16, CONFIG.WIDTH - r - 16);
-    const e = pools.enemy.get(type, x, 0, "swoop", a.elite || null);
-    e.y = Math.max(-r, b.y + b.radius * 0.25);
-    this.enemies.push(e);
-    this.floats.push(new FloatText(e.x, e.y - e.radius, a.name + "僚机", a.color));
-    return true;
+    let made = 0, count = Math.min(a.adds || 1, (a.maxAdds || 4) - activeAdds, CONFIG.endless.maxEnemies - this.enemies.length);
+    for (let i = 0; i < count; i++) {
+      const side = i % 2 ? 1 : -1, lane = Math.ceil((i + 1) / 2);
+      const x = clamp(b.x + side * (b.radius + r + 18 + lane * 18), r + 16, CONFIG.WIDTH - r - 16);
+      const e = pools.enemy.get(type, x, 0, "swoop", a.elite || null);
+      e.y = Math.max(-r, b.y + b.radius * 0.25 - made * 14);
+      this.enemies.push(e); made++;
+      this.floats.push(new FloatText(e.x, e.y - e.radius, a.name + "僚机", a.color));
+    }
+    return made;
   },
   // Y:BOSS 狂暴触发提示(HP<=20% 时一次性)
   onBossEnrage(b) { this.showDialogue(this.bossDisplayName(b), "狂暴!攻击频率大幅提升!", 3.0); this.addShake(6, 0.28); Sound.hit(); Haptics.bomb(); },
