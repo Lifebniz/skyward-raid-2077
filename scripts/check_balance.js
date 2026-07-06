@@ -354,7 +354,7 @@ assert.strictEqual(game._endlessRecentBossAffixes[0], phantomEscort.key, "applie
 
 const bonusKeys = new Set(Object.keys(CONFIG.bonuses));
 for (const key of CONFIG.bonusOrder) assert(bonusKeys.has(key), `bonusOrder references missing bonus ${key}`);
-for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "painConverter", "armorCaliber", "vitalReactor", "stableFire", "shieldAmplifier", "shieldBreaker", "signalFilter"]) {
+for (const key of ["maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "repairLoop", "repairPulse", "leech", "livingArmor", "painConverter", "armorCaliber", "vitalReactor", "stableFire", "perfectLine", "shieldAmplifier", "shieldBreaker", "signalFilter"]) {
   assert(bonusKeys.has(key), `missing survival/build bonus ${key}`);
 }
 assert(bonusKeys.has("eliteHunter"), "missing elite counter build bonus");
@@ -365,6 +365,9 @@ between(CONFIG.bonuses.vitalReactor.damageMult, 0.02, 0.08, "vitalReactor damage
 between(CONFIG.bonuses.vitalReactor.maxDamageMult, 0.1, 0.4, "vitalReactor maxDamageMult");
 between(CONFIG.bonuses.stableFire.hpThreshold, 0.55, 0.85, "stableFire hpThreshold");
 between(CONFIG.bonuses.stableFire.damageMult, 0.08, 0.3, "stableFire damageMult");
+between(CONFIG.bonuses.perfectLine.delay, 5, 12, "perfectLine delay");
+between(CONFIG.bonuses.perfectLine.damageMult, 0.08, 0.25, "perfectLine damageMult");
+between(CONFIG.bonuses.perfectLine.cooldownMult, 0.04, 0.16, "perfectLine cooldownMult");
 between(CONFIG.bonuses.shieldAmplifier.damageMult, 0.08, 0.3, "shieldAmplifier damageMult");
 between(CONFIG.bonuses.shieldBreaker.shieldDamageMult, 0.25, 1.0, "shieldBreaker shieldDamageMult");
 between(CONFIG.bonuses.shieldBreaker.breakDamage, 3, 14, "shieldBreaker breakDamage");
@@ -427,6 +430,15 @@ assert(game.bonusHUDText("stableFire").includes("激活"), "stableFire HUD shoul
 game.player.hp = 40;
 assert.strictEqual(game.stableFireDamageMult(), 0, "stableFire should turn off at low HP");
 assert(game.bonusHUDText("stableFire").includes("待机"), "stableFire HUD should show inactive state");
+game.bonuses = { perfectLine: 1 }; game.chips = {}; game.enemies = []; game.boss = null; game._noHitT = CONFIG.bonuses.perfectLine.delay - 0.01; game.player = { x: 100, y: 100, hp: 100, maxHp: 100, baseMaxHp: 100, shieldHp: 0 };
+assert.strictEqual(game.playerDamage(100), 100, "perfectLine should wait for no-hit delay");
+assert.strictEqual(game.perfectLineValue("cooldownMult"), 0, "perfectLine cooldown should wait for no-hit delay");
+assert(game.bonusHUDText("perfectLine").includes("s"), "perfectLine HUD should show pending timer");
+game._noHitT = CONFIG.bonuses.perfectLine.delay;
+assert(game.playerDamage(100) > 100, "perfectLine should add damage after no-hit delay");
+assert(game.weaponCooldownMult() < 1, "perfectLine should speed weapons after no-hit delay");
+assert(game.draftStatPreviewText(game.cardInfo("bonus:perfectLine")).includes("%"), "perfectLine draft preview should show gains");
+assert(game.bonusHUDText("perfectLine").includes("%"), "perfectLine HUD should show active state");
 game.endless = false; game.currentLevel = 1; game._rng = () => 0.999; game.bonuses = { shieldBreaker: 1 }; game.chips = {}; game.floats = []; game.shockwaves = [];
 const shielded = new Enemy("shieldCarrier", 100, 0, "straight"); shielded.y = 100;
 const splashTarget = { dead: false, x: 130, y: 100, radius: 12, hp: 30, maxHp: 30, damage(d) { this.hp -= d; if (this.hp <= 0) { this.dead = true; return true; } return false; } };
