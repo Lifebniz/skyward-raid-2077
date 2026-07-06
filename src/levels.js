@@ -109,6 +109,51 @@ const LEVELS = [
     { spawnMix: [ { type: "phantom", count: 20 }, { type: "carrier", count: 5 } ], formation: "line", gap: 0.14, move: "zigzag", preBoss: true }, { powerup: "bomb" }, { powerup: "heal" }, { wait: 1.0 },
     { boss: 4 }, { powerup: "heal" }, { wait: 0.8 }, { boss: 5 }, { powerup: "heal" }, { wait: 0.8 }, { boss: 6 }, { clear: true },
   ] },
+  { id: "6-1", world: 6, sub: 1, script: [
+    { wait: 0.6 }, { spawn: "beacon", count: 4, formation: "line", gap: 0.35, move: "sine" }, { spawn: "medium", count: 5, formation: "arc", gap: 0.18, move: "zigzag" }, { powerup: "power" }, { wait: 0.6 },
+    { spawnMix: [ { type: "mirrorDrone", count: 4 }, { type: "gunner", count: 4 } ], formation: "vee", gap: 0.2, move: "sine" }, { wait: 0.55 },
+    { spawn: "phaseWing", count: 5, formation: "line", gap: 0.28, move: "straight" }, { spawn: "beacon", count: 3, formation: "arc", gap: 0.34, move: "orbit" }, { powerup: "bomb" }, { wait: 0.9 }, { clear: true },
+  ] },
+  { id: "6-2", world: 6, sub: 2, script: [
+    { wait: 0.6 }, { spawn: "mineLayer", count: 3, formation: "line", gap: 0.5, move: "sine" }, { spawn: "phaseWing", count: 4, formation: "arc", gap: 0.28, move: "straight" }, { powerup: "power" }, { wait: 0.55 },
+    { spawnMix: [ { type: "beacon", count: 4 }, { type: "sniper", count: 4 }, { type: "mirrorDrone", count: 3 } ], formation: "line", gap: 0.18, move: "zigzag" }, { powerup: "heal" }, { wait: 0.55 },
+    { spawn: "warden", count: 3, formation: "vee", gap: 0.42, move: "sine" }, { spawn: "gunner", count: 5, formation: "line", gap: 0.22, move: "orbit" }, { powerup: "bomb" }, { wait: 0.9 }, { clear: true },
+  ] },
+  { id: "6-3", world: 6, sub: 3, script: [
+    { wait: 0.8 }, { spawnMix: [ { type: "beacon", count: 5 }, { type: "mirrorDrone", count: 4 } ], formation: "arc", gap: 0.18, move: "sine", preBoss: true }, { powerup: "power" }, { wait: 0.7 },
+    { spawnMix: [ { type: "phaseWing", count: 8 }, { type: "mineLayer", count: 3 } ], formation: "line", gap: 0.18, move: "zigzag", preBoss: true }, { powerup: "heal" }, { wait: 0.9 },
+    { boss: 7 }, { clear: true },
+  ] },
+  { id: "7-1", world: 7, sub: 1, script: [
+    { wait: 0.6 }, { spawn: "warden", count: 4, formation: "line", gap: 0.38, move: "sine" }, { spawn: "medium", count: 7, formation: "arc", gap: 0.16, move: "zigzag" }, { powerup: "power" }, { wait: 0.55 },
+    { spawnMix: [ { type: "tether", count: 3 }, { type: "gunner", count: 5 } ], formation: "vee", gap: 0.2, move: "sine" }, { wait: 0.55 },
+    { spawn: "harvester", count: 3, formation: "arc", gap: 0.4, move: "straight" }, { powerup: "heal" }, { spawn: "phaseWing", count: 6, formation: "line", gap: 0.18, move: "zigzag" }, { wait: 0.9 }, { clear: true },
+  ] },
+  { id: "7-2", world: 7, sub: 2, script: [
+    { wait: 0.6 }, { spawnMix: [ { type: "warden", count: 4 }, { type: "shieldCarrier", count: 3 } ], formation: "line", gap: 0.24, move: "sine" }, { powerup: "power" }, { wait: 0.55 },
+    { spawnMix: [ { type: "mineLayer", count: 4 }, { type: "tether", count: 3 }, { type: "phantom", count: 5 } ], formation: "arc", gap: 0.18, move: "zigzag" }, { powerup: "bomb" }, { wait: 0.55 },
+    { spawn: "harvester", count: 4, formation: "line", gap: 0.3, move: "straight" }, { spawn: "carrier", count: 3, formation: "vee", gap: 0.42, move: "orbit" }, { powerup: "heal" }, { wait: 0.9 }, { clear: true },
+  ] },
+  { id: "7-3", world: 7, sub: 3, script: [
+    { wait: 0.8 }, { spawnMix: [ { type: "warden", count: 5 }, { type: "gunner", count: 7 } ], formation: "line", gap: 0.16, move: "sine", preBoss: true }, { powerup: "power" }, { wait: 0.7 },
+    { spawnMix: [ { type: "tether", count: 4 }, { type: "harvester", count: 3 }, { type: "phaseWing", count: 6 } ], formation: "arc", gap: 0.18, move: "zigzag", preBoss: true }, { powerup: "bomb" }, { powerup: "heal" }, { wait: 0.9 },
+    { boss: 8 }, { clear: true },
+  ] },
+  { id: "8-1", world: 8, sub: 1, script: [
+    { wait: 0.6 }, { spawnMix: [ { type: "tether", count: 4 }, { type: "beacon", count: 4 } ], formation: "line", gap: 0.22, move: "sine" }, { powerup: "power" }, { wait: 0.55 },
+    { spawn: "kamikaze", count: 5, formation: "line", gap: 0.45 }, { spawn: "mineLayer", count: 4, formation: "arc", gap: 0.34, move: "zigzag" }, { powerup: "heal" }, { wait: 0.55 },
+    { spawnMix: [ { type: "mirrorDrone", count: 5 }, { type: "phaseWing", count: 6 } ], formation: "vee", gap: 0.18, move: "sine" }, { wait: 0.9 }, { clear: true },
+  ] },
+  { id: "8-2", world: 8, sub: 2, script: [
+    { wait: 0.6 }, { spawnMix: [ { type: "warden", count: 4 }, { type: "tether", count: 4 }, { type: "sniper", count: 4 } ], formation: "arc", gap: 0.18, move: "sine" }, { powerup: "power" }, { wait: 0.55 },
+    { spawnMix: [ { type: "mineLayer", count: 5 }, { type: "beacon", count: 5 }, { type: "mirrorDrone", count: 4 } ], formation: "line", gap: 0.16, move: "zigzag" }, { powerup: "bomb" }, { wait: 0.55 },
+    { spawn: "harvester", count: 5, formation: "arc", gap: 0.32, move: "straight" }, { spawn: "kamikaze", count: 5, formation: "line", gap: 0.42 }, { powerup: "heal" }, { wait: 0.9 }, { clear: true },
+  ] },
+  { id: "8-3", world: 8, sub: 3, script: [
+    { wait: 0.8 }, { spawnMix: [ { type: "tether", count: 5 }, { type: "mineLayer", count: 5 }, { type: "warden", count: 4 } ], formation: "line", gap: 0.16, move: "sine", preBoss: true }, { powerup: "power" }, { wait: 0.7 },
+    { spawnMix: [ { type: "beacon", count: 6 }, { type: "phaseWing", count: 8 }, { type: "kamikaze", count: 4 } ], formation: "arc", gap: 0.15, move: "zigzag", preBoss: true }, { powerup: "bomb" }, { powerup: "heal" }, { wait: 0.9 },
+    { boss: 9 }, { clear: true },
+  ] },
   // GG:从老版本(空中突袭v3.6)移植回来的经典无尽关卡 —— 没有强化抽卡/事件/挑战码那一整套,单纯生存刷分。
   //   放在地图末尾,endless:true 标记让 isUnlocked/mapNodePos/drawMap 全部走独立分支,不占用世界/小关编号,也不参与"通关解锁下一关"链条。
   { id: "∞", world: 6, sub: 2, endless: true, script: [] },

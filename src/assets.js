@@ -25,6 +25,13 @@ const ImageAssets = {
       jammer: "assets/images/enemies/enemy-jammer.png",
       support: "assets/images/enemies/enemy-support.png",
       kamikaze: "assets/images/enemies/enemy-kamikaze.png",
+      beacon: "assets/images/enemies/enemy-beacon.png",
+      mineLayer: "assets/images/enemies/enemy-mine-layer.png",
+      phaseWing: "assets/images/enemies/enemy-phase-wing.png",
+      mirrorDrone: "assets/images/enemies/enemy-mirror-drone.png",
+      tether: "assets/images/enemies/enemy-tether.png",
+      warden: "assets/images/enemies/enemy-warden.png",
+      harvester: "assets/images/enemies/enemy-harvester.png",
     },
     boss: {
       0: "assets/images/bosses/boss-01-guard.png",
@@ -34,6 +41,10 @@ const ImageAssets = {
       4: "assets/images/bosses/boss-05-sky-fortress.png",
       5: "assets/images/bosses/boss-06-abyss-king.png",
       6: "assets/images/bosses/boss-07-void-devourer.png",
+      7: "assets/images/bosses/boss-08-prism-judge.png",
+      8: "assets/images/bosses/boss-09-iron-carrier.png",
+      9: "assets/images/bosses/boss-10-tide-core.png",
+      10: "assets/images/bosses/boss-11-unstable-prototype.png",
     },
     background: {
       1: {

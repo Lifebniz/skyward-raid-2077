@@ -31,6 +31,8 @@ class Player {
       const lerp = c.lerp * (this.ship.lerpMult || 1);
       this.x += (input.targetX - this.x) * lerp; this.y += (input.targetY - this.y) * lerp;
     }
+    const pull = game.pullVectorAt(this.x, this.y);
+    this.x += pull.x * dt; this.y += pull.y * dt;
     this.x = clamp(this.x, this.radius, CONFIG.WIDTH - this.radius); this.y = clamp(this.y, this.radius, CONFIG.HEIGHT - this.radius);
     if (this.invulnTimer > 0) this.invulnTimer -= dt;
     if (this.specialCooldown > 0) this.specialCooldown -= dt;
@@ -245,11 +247,31 @@ class PlayerBullet {
 }
 
 class EnemyBullet {
-  constructor(x, y, vx, vy, damage) { this.init(x, y, vx, vy, damage); }
-  init(x, y, vx, vy, damage) { this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.damage = damage; this.radius = CONFIG.enemyBullet.radius; this.dead = false; }
-  update(dt) { this.x += this.vx * dt; this.y += this.vy * dt; if (this.y > CONFIG.HEIGHT + 20 || this.y < -20 || this.x < -20 || this.x > CONFIG.WIDTH + 20) this.dead = true; }
+  constructor(x, y, vx, vy, damage, opts = null) { this.init(x, y, vx, vy, damage, opts); }
+  init(x, y, vx, vy, damage, opts = null) {
+    this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.damage = damage; this.kind = opts && opts.kind || ""; this.radius = opts && opts.radius || CONFIG.enemyBullet.radius; this.dead = false;
+    this.triggerRadius = opts && opts.triggerRadius || 0; this.fuse = opts && opts.fuse || 0; this.ringCount = opts && opts.ringCount || 0; this.ringSpeed = opts && opts.ringSpeed || 0; this.ringDamage = opts && opts.ringDamage || damage; this._armed = false;
+  }
+  update(dt) {
+    this.x += this.vx * dt; this.y += this.vy * dt;
+    if (this.kind === "mine" && game.player) {
+      const dx = game.player.x - this.x, dy = game.player.y - this.y;
+      if (!this._armed && dx * dx + dy * dy <= this.triggerRadius * this.triggerRadius) this._armed = true;
+      if (this._armed) {
+        this.fuse -= dt;
+        if (this.fuse <= 0) { game.fireRing(this.x, this.y, this.ringCount || 8, this.ringSpeed || 170, this.ringDamage || this.damage); game.spawnShockwave(this.x, this.y, this.triggerRadius || 70, "#ff922b"); this.dead = true; }
+      }
+    }
+    if (this.y > CONFIG.HEIGHT + 20 || this.y < -20 || this.x < -20 || this.x > CONFIG.WIDTH + 20) this.dead = true;
+  }
   // QQ:双色平涂改一个径向渐变(白热核心→暗红边缘),一次 fill 顺带比原来两次 fill 还省一点
   draw(ctx) {
+    if (this.kind === "mine") {
+      ctx.save(); ctx.globalAlpha = this._armed ? 0.75 + 0.25 * Math.sin(game.titleT * 24) ** 2 : 0.85;
+      ctx.fillStyle = this._armed ? "#ffd43b" : "#ff922b"; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#212529"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(this.x - this.radius * 0.55, this.y); ctx.lineTo(this.x + this.radius * 0.55, this.y); ctx.moveTo(this.x, this.y - this.radius * 0.55); ctx.lineTo(this.x, this.y + this.radius * 0.55); ctx.stroke();
+      ctx.restore(); return;
+    }
     const g = ctx.createRadialGradient(this.x - 1, this.y - 1, 0.5, this.x, this.y, this.radius);
     g.addColorStop(0, "#fff"); g.addColorStop(0.4, "#ff8787"); g.addColorStop(1, "#c92a2a");
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill();
@@ -367,6 +389,10 @@ class Enemy {
     this._carrierSpawn = 0;   // W2:carrier 裂解出的僚机短暂带一圈紫色识别环,归零后就是普通敌机(池复用要清零,不然会带着上一轮的状态)
     this._sniperWarn = 0; this._sniperAim = 0;
     this._supportTimer = (t.repairInterval || 0) * (0.45 + game.rng() * 0.25); this._supportPulse = 0; this._armorPierceFx = 0;
+    this._beaconTimer = (t.markInterval || 0) * (0.45 + game.rng() * 0.35); this._beaconWarn = 0; this._beaconX = 0;
+    this._mineTimer = (t.mineInterval || 0) * (0.55 + game.rng() * 0.35);
+    this._phaseTimer = (t.blinkInterval || 0) * (0.45 + game.rng() * 0.35); this._phaseWarn = 0; this._phaseTargetX = 0;
+    this._reflectCd = 0; this.guardShield = 0; this.guardedBy = null; this._wardenPulse = 0; this._stolenKind = ""; this._escapeTimer = 0;
   }
   rollElite() {
     if (this.type === "small" || !game.player) return null;
@@ -378,6 +404,16 @@ class Enemy {
   }
   applyMove(dt) {
     const W = CONFIG.WIDTH, m = this.mp;
+    if (this.type === "harvester") {
+      if (this._escapeTimer > 0) { this._escapeTimer -= dt; this.y -= (this.cfg.escapeSpeed || 220) * dt; return; }
+      const p = game.nearestPowerup(this.x, this.y, this.cfg.stealRadius || 180);
+      if (p) {
+        const dx = p.x - this.x, dy = p.y - this.y, d = Math.hypot(dx, dy), sp = this.speed * 1.25;
+        if (d < this.radius + p.radius + 4) game.stealPowerupFor(this, p);
+        else if (d > 1) { this.x = clamp(this.x + dx / d * sp * dt, this.radius, W - this.radius); this.y += dy / d * sp * dt; }
+        return;
+      }
+    }
     if (this.move === "sine") {
       this.y += this.speed * dt;
       this.x = clamp(this.baseX + Math.sin(this._mt * m.freq) * m.amp, this.radius, W - this.radius);
@@ -416,6 +452,11 @@ class Enemy {
     this.applyMove(dt);
     this.updateElite(dt);
     this.updateSupport(dt);
+    this.updateBeacon(dt);
+    this.updateMineLayer(dt);
+    this.updatePhaseWing(dt);
+    this.updateWarden(dt);
+    if (this._reflectCd > 0) this._reflectCd -= dt;
     if (this.y >= -this.radius && this.y <= CONFIG.HEIGHT + this.radius) this._entered = true;
     if (this._entered && (this.y > CONFIG.HEIGHT + this.radius || this.y < -this.radius - 80 || this.x < -70 || this.x > CONFIG.WIDTH + 70)) this.dead = true;
     if (this.cfg.fireInterval > 0 && this.y > 0 && this.y < CONFIG.HEIGHT * 0.7 && game.player) {
@@ -466,7 +507,75 @@ class Enemy {
     this._supportTimer = this.cfg.repairInterval || 2.4;
     if (game.repairNearbyEnemies(this) > 0) this._supportPulse = 0.45;
   }
-  damage(d) {
+  updateBeacon(dt) {
+    if (this.type !== "beacon" || this.y <= 0 || this.y >= CONFIG.HEIGHT * 0.72 || !game.player) return;
+    if (this._beaconWarn > 0) {
+      this._beaconWarn -= dt;
+      if (this._beaconWarn <= 0) {
+        const n = this.cfg.markShots || 3, gap = 24;
+        for (let i = 0; i < n; i++) game.spawnEnemyBullet(this._beaconX, -18 - i * gap, 0, this.cfg.bulletSpeed || 300, this.cfg.damage || 8);
+        this._beaconTimer = this.cfg.markInterval || 2.8;
+        Sound.tone(680, 0.08, "triangle", 0.1, 200);
+      }
+      return;
+    }
+    this._beaconTimer -= dt;
+    if (this._beaconTimer <= 0) { this._beaconX = game.player.x; this._beaconWarn = this.cfg.markDelay || 0.75; }
+  }
+  updateMineLayer(dt) {
+    if (this.type !== "mineLayer" || this.y <= 0 || this.y >= CONFIG.HEIGHT * 0.72) return;
+    this._mineTimer -= dt;
+    if (this._mineTimer > 0) return;
+    this._mineTimer = this.cfg.mineInterval || 2.2;
+    game.spawnEnemyBullet(this.x, this.y + this.radius * 0.45, 0, 58, this.cfg.damage || 9, { kind: "mine", radius: this.cfg.mineRadius || 18, triggerRadius: this.cfg.triggerRadius || 70, fuse: this.cfg.mineFuse || 0.45, ringCount: this.cfg.ringCount || 8, ringSpeed: this.cfg.ringSpeed || 170, ringDamage: this.cfg.damage || 9 });
+    Sound.tone(360, 0.07, "square", 0.08, 180);
+  }
+  updatePhaseWing(dt) {
+    if (this.type !== "phaseWing" || this.y <= 0 || this.y >= CONFIG.HEIGHT * 0.72 || !game.player) return;
+    if (this._phaseWarn > 0) {
+      this._phaseWarn -= dt;
+      if (this._phaseWarn <= 0) {
+        this.x = this.baseX = this._phaseTargetX;
+        game.fireFan(this.x, this.y + this.radius, Math.PI / 2, 46 * DEG, this.cfg.shots || 5, this.cfg.bulletSpeed || 275, this.cfg.damage || 8);
+        this._phaseTimer = this.cfg.blinkInterval || 2.4;
+        Sound.tone(760, 0.08, "sawtooth", 0.1, 220);
+      }
+      return;
+    }
+    this._phaseTimer -= dt;
+    if (this._phaseTimer <= 0) {
+      const side = game.player.x < CONFIG.WIDTH / 2 ? 1 : -1;
+      this._phaseTargetX = clamp(game.player.x + side * (this.cfg.blinkRange || 170), this.radius + 18, CONFIG.WIDTH - this.radius - 18);
+      this._phaseWarn = this.cfg.blinkDelay || 0.55;
+    }
+  }
+  updateWarden(dt) {
+    if (this.type !== "warden" || this.y <= 0 || this.y >= CONFIG.HEIGHT * 0.78) return;
+    this._wardenPulse -= dt;
+    if (this._wardenPulse > 0) return;
+    this._wardenPulse = 0.35;
+    const r = this.cfg.guardRadius || 0, max = this.cfg.maxTargets || 4;
+    let n = 0;
+    for (const e of game.enemies) {
+      if (n >= max || e.dead || e === this || e.isBoss || e.guardShield > 0) continue;
+      const dx = e.x - this.x, dy = e.y - this.y;
+      if (dx * dx + dy * dy > r * r) continue;
+      e.guardShield = this.cfg.guardShield || 8; e.guardedBy = this; n++;
+    }
+  }
+  reflectShot() {
+    if (this.type !== "mirrorDrone" || this._reflectCd > 0 || this.dead) return;
+    this._reflectCd = this.cfg.reflectCd || 0.9;
+    const dir = game.rng() < 0.5 ? -1 : 1;
+    game.spawnEnemyBullet(this.x, this.y, dir * (this.cfg.reflectSpeed || this.cfg.bulletSpeed || 230), 35, this.cfg.damage || 7);
+    this._flash = 0.08;
+  }
+  damage(d, source = "") {
+    if (this.guardShield > 0) {
+      const used = Math.min(this.guardShield, d);
+      this.guardShield -= used; d -= used; this._flash = 0.06;
+      if (this.guardShield > 0) return false;
+    }
     if (this.eliteShield > 0) {
       const mult = 1 + game.bonusValue("shieldBreaker", "shieldDamageMult");
       const used = Math.min(this.eliteShield, d * mult);
@@ -474,7 +583,9 @@ class Enemy {
       if (this.eliteShield <= 0) game.triggerShieldBreak(this);
       if (this.eliteShield > 0) return false;
     }
-    this.hp -= d; this._flash = 0.06; if (this.hp <= 0) { this.dead = true; return true; } return false;
+    this.hp -= d; this._flash = 0.06; if (this.hp <= 0) { this.dead = true; return true; }
+    if (source === "bullet") this.reflectShot();
+    return false;
   }
   // QQ:主体色改渐变(受光面亮/边缘暗)+ 整体加柔和投影,取代纯色平涂,读起来更有质感
   draw(ctx) {
@@ -545,6 +656,27 @@ class Enemy {
       ctx.beginPath(); ctx.arc(x, y, r * 0.78, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "#e6fcf5"; ctx.fillRect(x - 4, y - r * 0.45, 8, r * 0.9); ctx.fillRect(x - r * 0.45, y - 4, r * 0.9, 8);
       ctx.strokeStyle = UI.shade(this.color, -0.35); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r * 0.95, 0, Math.PI * 2); ctx.stroke();
+    } else if (t === "beacon") {
+      ctx.beginPath(); ctx.moveTo(x, y + r); ctx.lineTo(x - r * 0.55, y - r * 0.35); ctx.lineTo(x, y - r); ctx.lineTo(x + r * 0.55, y - r * 0.35); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#fff3bf"; ctx.beginPath(); ctx.arc(x, y + r * 0.12, r * 0.22, 0, Math.PI * 2); ctx.fill();
+    } else if (t === "mineLayer") {
+      ctx.beginPath(); ctx.moveTo(x - r * 0.85, y - r * 0.2); ctx.lineTo(x - r * 0.45, y - r * 0.75); ctx.lineTo(x + r * 0.45, y - r * 0.75); ctx.lineTo(x + r * 0.85, y - r * 0.2); ctx.lineTo(x + r * 0.55, y + r * 0.62); ctx.lineTo(x - r * 0.55, y + r * 0.62); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#212529"; ctx.beginPath(); ctx.arc(x - r * 0.32, y + r * 0.18, r * 0.16, 0, Math.PI * 2); ctx.arc(x + r * 0.32, y + r * 0.18, r * 0.16, 0, Math.PI * 2); ctx.fill();
+    } else if (t === "phaseWing") {
+      ctx.beginPath(); ctx.moveTo(x, y + r); ctx.lineTo(x - r * 0.35, y - r * 0.25); ctx.lineTo(x, y - r); ctx.lineTo(x + r * 0.35, y - r * 0.25); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = UI.shade(this.color, -0.28); ctx.beginPath(); ctx.moveTo(x - r * 0.25, y); ctx.lineTo(x - r, y - r * 0.55); ctx.lineTo(x - r * 0.55, y + r * 0.45); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(x + r * 0.25, y); ctx.lineTo(x + r, y - r * 0.55); ctx.lineTo(x + r * 0.55, y + r * 0.45); ctx.closePath(); ctx.fill();
+    } else if (t === "mirrorDrone") {
+      ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x - r * 0.85, y); ctx.lineTo(x, y + r); ctx.lineTo(x + r * 0.85, y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#e7f5ff"; ctx.beginPath(); ctx.arc(x, y, r * 0.24, 0, Math.PI * 2); ctx.fill();
+    } else if (t === "tether") {
+      ctx.beginPath(); ctx.arc(x, y, r * 0.76, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#c3fae8"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r * 0.42, 0, Math.PI * 2); ctx.stroke();
+    } else if (t === "warden") {
+      ctx.beginPath(); ctx.rect(x - r * 0.72, y - r * 0.72, r * 1.44, r * 1.44); ctx.fill();
+      ctx.strokeStyle = "#dbe4ff"; ctx.lineWidth = 2; ctx.strokeRect(x - r * 0.5, y - r * 0.5, r, r);
+    } else if (t === "harvester") {
+      ctx.beginPath(); ctx.moveTo(x, y + r); ctx.lineTo(x - r * 0.75, y - r * 0.55); ctx.lineTo(x, y - r * 0.35); ctx.lineTo(x + r * 0.75, y - r * 0.55); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#fff3bf"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - r * 0.22, y + r * 0.15); ctx.lineTo(x, y + r * 0.48); ctx.lineTo(x + r * 0.22, y + r * 0.15); ctx.stroke();
     } else if (t === "kamikaze") {
       ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x - r * 0.72, y + r * 0.62); ctx.lineTo(x, y + r * 0.25); ctx.lineTo(x + r * 0.72, y + r * 0.62); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#fff5f5"; ctx.lineWidth = 2;
@@ -561,7 +693,28 @@ class Enemy {
   drawRoleAura(ctx) {
     if (this.y <= 0) return;
     const x = this.x, y = this.y, r = this.radius;
-    if (this.type === "shieldCarrier" && this.eliteShield > 0 && !this.eliteCfg) {
+    if (this.guardShield > 0) {
+      ctx.save(); ctx.globalAlpha = 0.35; ctx.strokeStyle = "#91a7ff"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, r + 8 + Math.sin(this._mt * 8) * 2, 0, Math.PI * 2); ctx.stroke();
+      UI.bar(ctx, x - r, y + r + 7, r * 2, 4, clamp(this.guardShield / Math.max(1, (this.guardedBy && this.guardedBy.cfg.guardShield) || 8), 0, 1), "#91a7ff", "#91a7ff", {});
+      ctx.restore();
+    }
+    if (this.type === "beacon" && this._beaconWarn > 0) {
+      ctx.save(); ctx.globalAlpha = 0.18 + 0.25 * Math.sin(this._mt * 28) ** 2; ctx.fillStyle = "#ff6b6b"; ctx.fillRect(this._beaconX - 8, 0, 16, CONFIG.HEIGHT);
+      ctx.strokeStyle = "#ffd43b"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(this._beaconX - 16, game.player ? game.player.y : CONFIG.HEIGHT * 0.75); ctx.lineTo(this._beaconX + 16, game.player ? game.player.y : CONFIG.HEIGHT * 0.75); ctx.stroke(); ctx.restore();
+    } else if (this.type === "phaseWing" && this._phaseWarn > 0) {
+      ctx.save(); ctx.globalAlpha = 0.35 + 0.25 * Math.sin(this._mt * 28) ** 2; ctx.strokeStyle = this.color; ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
+      ctx.beginPath(); ctx.arc(this._phaseTargetX, y, r + 5, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.moveTo(this._phaseTargetX, y); ctx.lineTo(this._phaseTargetX, CONFIG.HEIGHT); ctx.stroke(); ctx.restore();
+    } else if (this.type === "tether") {
+      const rr = Math.min(this.cfg.pullRadius || 0, 135);
+      ctx.save(); ctx.globalAlpha = 0.14 + 0.12 * Math.sin(this._mt * 6) ** 2; ctx.strokeStyle = this.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke();
+      if (game.player) { ctx.globalAlpha = 0.18; ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(game.player.x, game.player.y); ctx.stroke(); }
+      ctx.restore();
+    } else if (this.type === "warden") {
+      ctx.save(); ctx.globalAlpha = 0.12 + 0.08 * Math.sin(this._mt * 6) ** 2; ctx.strokeStyle = this.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, this.cfg.guardRadius || 140, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    } else if (this.type === "harvester" && this._stolenKind) {
+      ctx.save(); ctx.globalAlpha = 0.9; ctx.fillStyle = this.color; ctx.font = "bold 10px 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.fillText("补给", x, y - r - 10); ctx.restore();
+    } else if (this.type === "shieldCarrier" && this.eliteShield > 0 && !this.eliteCfg) {
       const rr = r + 8 + Math.sin(this._mt * 8) * 2;
       ctx.save(); ctx.globalAlpha = 0.35; ctx.strokeStyle = this.color; ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke();
@@ -639,6 +792,28 @@ function runBossAttack(b, atk) {
   else if (atk.type === "spiral") { b._spiral += atk.step * DEG; for (let i = 0; i < atk.arms; i++) { const a = b._spiral + i * (Math.PI * 2 / atk.arms); g.spawnEnemyBullet(b.x, b.y, Math.cos(a) * atk.speed, Math.sin(a) * atk.speed, dmg); } }
   else if (atk.type === "wall") { const gapX = g.player.x; for (let x = 24; x < CONFIG.WIDTH - 24; x += atk.spacing) { if (Math.abs(x - gapX) < atk.gap) continue; g.spawnEnemyBullet(x, b.y + b.radius * 0.4, 0, atk.speed, dmg); } }
   else if (atk.type === "laser") { if (b._laserCd <= 0) { g.spawnBossLaser(atk.aimed ? g.player.x : b.x, atk.warn || 0.6, atk.dur || 0.8, atk.width || 46, dmg); b._laserCd = atk.cd || 3.0; } }
+  else if (atk.type === "dualLaser") {
+    if (b._laserCd <= 0) {
+      const x = atk.aimed ? g.player.x : b.x, off = atk.offset || 80;
+      g.spawnBossLaser(clamp(x - off, 32, CONFIG.WIDTH - 32), atk.warn || 0.6, atk.dur || 0.8, atk.width || 42, dmg);
+      g.spawnBossLaser(clamp(x + off, 32, CONFIG.WIDTH - 32), atk.warn || 0.6, atk.dur || 0.8, atk.width || 42, dmg);
+      b._laserCd = atk.cd || 3.4;
+    }
+  }
+  else if (atk.type === "prismBurst") {
+    if (b._laserCd <= 0) {
+      const x = g.player ? g.player.x : b.x, count = atk.count || 6, speed = atk.speed || 210;
+      g.spawnBossLaser(x, atk.warn || 0.55, atk.dur || 0.7, atk.width || 44, dmg);
+      for (let i = 0; i < count; i++) {
+        const side = i % 2 ? 1 : -1, row = Math.floor(i / 2), y = b.y + b.radius + row * 18;
+        g.spawnEnemyBullet(b.x + side * b.radius * 0.65, y, side * speed, 70 + row * 20, dmg * 0.75);
+      }
+      b._laserCd = atk.cd || 3.8;
+    }
+  }
+  else if (atk.type === "gravity") { if (b._gravityCd <= 0) { g.spawnGravityPulse(b.x, b.y, atk.warn || 0.7, atk.dur || 1.8, atk.radius || 420, atk.strength || 90, b.def.colors[b.phaseIndex] || "#4dabf7"); b._gravityCd = atk.cd || 4.4; } }
+  else if (atk.type === "escort") g.spawnBossEscort(b, atk);
+  else if (atk.type === "weak") g.openBossWeakPoint(b, Object.assign({ color: b.def.colors[b.phaseIndex] || "#ffd43b" }, atk));
 }
 
 // Y:BOSS 造型剪影(供 Boss.draw 与首页图鉴共用)
@@ -668,7 +843,7 @@ class Boss {
     this._fireScale = game.activeDiff.fireMult;              // 难度射速
     this.dead = false; this._t = 0; this._moveT = 0; this._entered = false; this._flash = 0;
     this._fireTimer = 1.2; this._spiral = 0; this._targetX = this.x;
-    this._enraged = false; this._laserCd = 0; this._lastPhaseIndex = 0;   // Y:狂暴阶段 / 镭射独立冷却
+    this._enraged = false; this._laserCd = 0; this._gravityCd = 0; this._lastPhaseIndex = 0;   // Y:狂暴阶段 / 镭射独立冷却
     this.defIndex = defIndex % CONFIG.bosses.length;   // W2:记下具体是哪个BOSS,给"击败特定BOSS"成就用
   }
   get phaseIndex() { const r = this.hp / this.maxHp, ph = this.def.phases; for (let i = 0; i < ph.length; i++) if (r > ph[i].until) return i; return ph.length - 1; }
@@ -685,7 +860,7 @@ class Boss {
   update(dt) {
     const def = this.def;
     if (!this._entered) { this.y += 90 * dt; if (this.y >= def.enterY) { this.y = def.enterY; this._entered = true; } return; }
-    this._t += dt; this._moveT += dt; if (this._flash > 0) this._flash -= dt; if (this._laserCd > 0) this._laserCd -= dt; if (this._weakTimer > 0) this._weakTimer = Math.max(0, this._weakTimer - dt); this.move(dt);
+    this._t += dt; this._moveT += dt; if (this._flash > 0) this._flash -= dt; if (this._laserCd > 0) this._laserCd -= dt; if (this._gravityCd > 0) this._gravityCd -= dt; if (this._weakTimer > 0) this._weakTimer = Math.max(0, this._weakTimer - dt); this.move(dt);
     const phaseIndex = this.phaseIndex;
     if (phaseIndex !== this._lastPhaseIndex) { this._lastPhaseIndex = phaseIndex; game.onBossPhaseChange(this, phaseIndex); }
     // Y:血量 <=20% 时触发一次狂暴,此后攻击频率永久提升
@@ -695,7 +870,10 @@ class Boss {
     this._fireTimer -= dt;
     if (this._fireTimer <= 0) { this._fireTimer = phase.cd * this._fireScale; for (const atk of phase.attacks) runBossAttack(this, atk); }
   }
-  damage(d) { this.hp -= d; this._flash = 0.05; if (this.hp <= 0) { this.dead = true; return true; } return false; }
+  damage(d) {
+    if (this.def.guardDR && game.bossEscortCount() > 0 && this._weakTimer <= 0) d *= 1 - this.def.guardDR;
+    this.hp -= d; this._flash = 0.05; if (this.hp <= 0) { this.dead = true; return true; } return false;
+  }
   draw(ctx) {
     const flash = this._flash > 0, color = flash ? "#fff" : this.def.colors[this.phaseIndex], r = this.radius, x = this.x, y = this.y;
     // Y:狂暴态外圈红色脉动光晕

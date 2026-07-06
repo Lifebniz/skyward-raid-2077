@@ -33,13 +33,18 @@ between(CONFIG.powerup.chipBossDraftDelay, 15, 30, "boss draft delay");
 between(CONFIG.powerup.chipMinDraftGap, 15, 30, "minimum endless draft gap");
 between(CONFIG.endless.maxEnemies, 8, 20, "endless max enemies");
 between(CONFIG.endless.startingDrafts, 1, 3, "endless starting drafts");
+assert.strictEqual(CONFIG.endless.startingDrafts, 2, "endless challenge should start with 2 drafts");
 between(CONFIG.endless.enemyHpBaseMult, 1.1, 2.0, "endless enemy base HP");
+assert.strictEqual(CONFIG.endless.enemyHpBaseMult, 1.55, "endless enemy base HP should match the harder baseline");
+assert.strictEqual(CONFIG.endless.enemyHpRampTime, 240, "endless enemy HP should hit the target ramp at 240s");
 between(CONFIG.endless.enemyHpRampMult, 1.5, 3.2, "endless enemy HP ramp");
 between(CONFIG.endless.dmgRampMult, 1.5, 3.5, "endless damage ramp");
 between(CONFIG.endless.boss.firstDelay, 20, 45, "first boss delay");
 between(CONFIG.endless.boss.interval, 25, 55, "boss interval");
 between(CONFIG.endless.boss.baseHpMult, 1, 1.8, "boss base HP mult");
+assert.strictEqual(CONFIG.endless.boss.baseHpMult, 1.35, "endless boss base HP should match the harder baseline");
 between(CONFIG.endless.boss.hpStep, 0.04, 0.16, "boss HP step");
+assert.strictEqual(CONFIG.endless.boss.hpStep, 0.11, "endless boss HP step should stay uncapped and steeper");
 between(CONFIG.bossPhase.weakDuration, 1.5, 4, "boss phase weak duration");
 between(CONFIG.bossPhase.weakDamageMult, 0.1, 0.45, "boss phase weak damage");
 between(CONFIG.endless.eventClearScore, 300, 1800, "event clear score");
@@ -87,6 +92,18 @@ game.endless = true; game._endlessT = 0; game._endlessEvent = null; game._endles
 assert(game.endlessEnemyHpMult() >= CONFIG.endless.enemyHpBaseMult, "endless enemies should start with the base HP multiplier");
 game._endlessT = CONFIG.endless.enemyHpRampTime;
 assert(game.endlessEnemyHpMult() >= CONFIG.endless.enemyHpBaseMult * CONFIG.endless.enemyHpRampMult, "endless enemies should reach the configured HP ramp");
+assert(Math.abs(game.endlessEnemyHpMult() - 3) < 1e-9, "endless enemies should reach 3x HP at 240s");
+const hpAtRamp = game.endlessEnemyHpMult();
+game._endlessT = CONFIG.endless.enemyHpRampTime * 2;
+assert(game.endlessEnemyHpMult() > hpAtRamp, "endless enemy HP should keep growing after the old ramp point");
+between(CONFIG.endless.spawn.countStepMax, 3, 10, "endless spawn count cap");
+const cappedSpawnCount = CONFIG.endless.spawn.countBase + CONFIG.endless.spawn.countStepMax;
+assert.strictEqual(game.endlessSpawnCount(9999), cappedSpawnCount, "endless spawn count should cap for readability and performance");
+assert(!("hpStepMax" in CONFIG.endless.boss), "endless boss HP should not have a growth cap");
+game._endlessT = CONFIG.endless.dmgDoubleInterval || 300;
+const bulletAt5m = game.endlessBulletDmgMult();
+game._endlessT = (CONFIG.endless.dmgDoubleInterval || 300) * 2;
+assert(game.endlessBulletDmgMult() > bulletAt5m, "endless bullet damage should keep growing without a cap");
 game.endless = false;
 for (const [i, pool] of CONFIG.endless.pools.entries()) {
   assert(pool.enemies && pool.enemies.length, `endless pool ${i} is empty`);
@@ -374,7 +391,7 @@ for (const a of affixes) {
   if (a.hpMult) between(a.hpMult, 0.05, 0.45, `boss affix ${a.key} hpMult`);
   if (a.fireMult) between(a.fireMult, 0.65, 1, `boss affix ${a.key} fireMult`);
   if (a.attack) {
-    assert(["laser", "ring", "escort", "repair", "weak"].includes(a.attack), `boss affix ${a.key} has unknown attack ${a.attack}`);
+    assert(["laser", "ring", "escort", "repair", "weak", "gravity", "prismBurst"].includes(a.attack), `boss affix ${a.key} has unknown attack ${a.attack}`);
     between(a.every || 0, 3, 12, `boss affix ${a.key} interval`);
   }
   if (a.count) between(a.count, 6, 24, `boss affix ${a.key} count`);
