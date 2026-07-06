@@ -665,7 +665,7 @@ class Boss {
   update(dt) {
     const def = this.def;
     if (!this._entered) { this.y += 90 * dt; if (this.y >= def.enterY) { this.y = def.enterY; this._entered = true; } return; }
-    this._t += dt; this._moveT += dt; if (this._flash > 0) this._flash -= dt; if (this._laserCd > 0) this._laserCd -= dt; this.move(dt);
+    this._t += dt; this._moveT += dt; if (this._flash > 0) this._flash -= dt; if (this._laserCd > 0) this._laserCd -= dt; if (this._weakTimer > 0) this._weakTimer = Math.max(0, this._weakTimer - dt); this.move(dt);
     const phaseIndex = this.phaseIndex;
     if (phaseIndex !== this._lastPhaseIndex) { this._lastPhaseIndex = phaseIndex; game.onBossPhaseChange(this, phaseIndex); }
     // Y:血量 <=20% 时触发一次狂暴,此后攻击频率永久提升

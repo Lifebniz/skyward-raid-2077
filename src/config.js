@@ -155,6 +155,7 @@ const CONFIG = {
     jammer: { name: "扰频", color: "#15aabf", hpMult: 1.04, scoreMult: 1.44, jamRadius: 220, weaponSlow: 1.18 },
   },
   bomb: { bossDamage: 70, flash: 0.35 },
+  bossPhase: { weakDuration: 2.4, weakDamageMult: 0.25 },
 
   // 每关一个独立 BOSS:各有移动方式(sweep 横扫 / figure8 八字 / dart 瞬移)
   // 与分阶段弹幕组合(attacks 里的 type 见 runBossAttack 弹幕库)。
@@ -299,7 +300,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 64, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 65, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

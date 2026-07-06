@@ -557,7 +557,7 @@ const game = {
   playerDamage(d, target = null) {
     let m = 1 + this.bonusValue("damage", "damageMult") + this.bonusValue("glassCannon", "damageMult") + this.vitalReactorDamageMult() + this.shieldDamageMult() + this.adrenalineValue("damageMult");
     if (target && target.isBoss) m += this.bonusValue("bossHunter", "bossDamageMult");
-    if (target && target.isBoss && target._weakTimer > 0 && target.affix) m += (target.affix.weakDamageMult || 0) + this.bonusValue("weakScanner", "weakDamageMult");
+    if (target && target.isBoss && target._weakTimer > 0) m += (target._weakDamageMult || (target.affix && target.affix.weakDamageMult) || CONFIG.bossPhase.weakDamageMult || 0) + this.bonusValue("weakScanner", "weakDamageMult");
     if (target && target.maxHp && target.hp / target.maxHp <= (CONFIG.bonuses.executioner.threshold || 0)) m += this.bonusValue("executioner", "damageMult");
     return d * m;
   },
@@ -1188,7 +1188,7 @@ const game = {
   bossDisplayName(b) { return b && b.affix ? b.affix.name + "·" + b.def.name : b.def.name; },
   bossAffixHUDText(b) {
     const a = b && b.affix;
-    if (!a) return "";
+    if (!a) return b && b._weakTimer > 0 ? "破甲窗口 " + b._weakTimer.toFixed(1) + "s" : "";
     const cd = a.attack ? " · " + Math.max(0, b._affixTimer || 0).toFixed(1) + "s" : "";
     const weak = b._weakTimer > 0 ? " · 弱点" + b._weakTimer.toFixed(1) + "s" : "";
     return a.name + " · " + (a.desc || "词缀") + weak + cd;
@@ -1206,7 +1206,6 @@ const game = {
   updateBossAffix(b, dt) {
     const a = b && b.affix;
     if (!a || !a.attack) return;
-    if (b._weakTimer > 0) b._weakTimer = Math.max(0, b._weakTimer - dt);
     b._affixTimer -= dt;
     if (b._affixTimer > 0) return;
     b._affixTimer = a.every || 5;
@@ -1220,7 +1219,8 @@ const game = {
   },
   openBossWeakPoint(b, a) {
     b._weakTimer = (a.dur || 2.5) + this.bonusValue("weakScanner", "weakDuration");
-    this.floats.push(new FloatText(b.x, b.y - b.radius - 22, "弱点暴露 +" + Math.round((a.weakDamageMult || 0) * 100) + "%", a.color));
+    b._weakDamageMult = a.weakDamageMult || CONFIG.bossPhase.weakDamageMult || 0.25;
+    this.floats.push(new FloatText(b.x, b.y - b.radius - 22, "弱点暴露 +" + Math.round(b._weakDamageMult * 100) + "%", a.color));
     return true;
   },
   repairBoss(b, a) {
@@ -1255,6 +1255,7 @@ const game = {
     pruneDead(this.enemyBullets, releaseDead.enemyBullet);
     this.lasers.length = 0;
     this.powerups.push(new PowerUp(clamp(b.x, 40, CONFIG.WIDTH - 40), b.y + b.radius, kind));
+    this.openBossWeakPoint(b, { dur: CONFIG.bossPhase.weakDuration, weakDamageMult: CONFIG.bossPhase.weakDamageMult, color });
     this.spawnShockwave(b.x, b.y, b.radius * 3, color);
     this.floats.push(new FloatText(b.x, b.y - b.radius - 16, "阶段 " + (phaseIndex + 1) + " 窗口", color));
     this.showDialogue(this.bossDisplayName(b), "装甲破裂!短暂补给窗口!", 2.2);
