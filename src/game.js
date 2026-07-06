@@ -223,7 +223,7 @@ const game = {
   finishEndlessEvent(e) {
     if (!e || !this.player) return 0;
     const kills = this._endlessStats ? (this._endlessStats.kills || 0) - (this._endlessEventStartKills || 0) : 0;
-    if (e.killGoal && kills < e.killGoal) { this.floats.push(new FloatText(this.player.x, this.player.y - 78, "目标未达成 " + kills + "/" + e.killGoal, e.color || "#adb5bd")); return 0; }
+    if (e.killGoal && kills < e.killGoal) { if (this._endlessStats) this._endlessStats.eventFails = (this._endlessStats.eventFails || 0) + 1; this.floats.push(new FloatText(this.player.x, this.player.y - 78, "目标未达成 " + kills + "/" + e.killGoal, e.color || "#adb5bd")); return 0; }
     const cfg = CONFIG.endless, clean = this._endlessStats && this._endlessStats.hits === this._endlessEventStartHits;
     const gain = Math.round((cfg.eventClearScore || 0) * (clean ? 1.5 : 1) * this.threatScoreMult());
     if (this._endlessStats) { this._endlessStats.eventClears = (this._endlessStats.eventClears || 0) + 1; this._endlessStats.eventScore = (this._endlessStats.eventScore || 0) + gain; if (clean) this._endlessStats.cleanEvents = (this._endlessStats.cleanEvents || 0) + 1; }
@@ -316,7 +316,7 @@ const game = {
   startDailyChallenge() { this.startEndless({ seed: Challenge.dailySeed(), challenge: true, daily: true }); },
   challengeSplitMarks() { return CONFIG.challenge.splits; },
   resetEndlessTelemetry() {
-    this._endlessStats = { kills: 0, bossKills: 0, hits: 0, blocked: 0, damageTaken: 0, bombs: 0, drafts: 0, picks: 0, skips: 0, rerolls: 0, events: 0, eventClears: 0, cleanEvents: 0, eventScore: 0, jammed: 0 };
+    this._endlessStats = { kills: 0, bossKills: 0, hits: 0, blocked: 0, damageTaken: 0, bombs: 0, drafts: 0, picks: 0, skips: 0, rerolls: 0, events: 0, eventClears: 0, cleanEvents: 0, eventFails: 0, eventScore: 0, jammed: 0 };
     this._endlessTimeline = []; this._endlessMarkIdx = 0;
   },
   endlessTelemetryMarks() { return [60, 120, 180, 300]; },
@@ -659,6 +659,7 @@ const game = {
     else if ((r.bossAffixes || []).length && !(tele.bossKills || 0)) tags.push("Boss压力高");
     const hpGain = Object.values(r.bonusHpGain || {}).reduce((sum, n) => sum + (n || 0), 0);
     if (hpGain >= 20) tags.push("血量构筑 +" + hpGain + "HP");
+    if (tele.eventFails) tags.push("目标失败 " + tele.eventFails);
     if (tele.cleanEvents) tags.push("完美空域 " + tele.cleanEvents);
     else if (tele.eventClears) tags.push("空域突破 " + tele.eventClears);
     if ((tele.jammed || 0) / time >= 0.18) tags.push("干扰压力高");
@@ -1905,7 +1906,7 @@ const game = {
       ctx.fillText("BONUS " + bonusText, cx, infoY); infoY += 22;
     }
     const tele = r.telemetry || {};
-    ctx.fillText(fitLine("战况 击杀 " + (tele.kills || 0) + " · Boss " + (tele.bossKills || 0) + " · 受击 " + (tele.hits || 0) + "(格挡 " + (tele.blocked || 0) + ") · 承伤 " + Math.round(tele.damageTaken || 0) + " · 空域 " + (tele.eventClears || 0) + "/" + (tele.cleanEvents || 0) + " · 干扰 " + Math.round(tele.jammed || 0) + "s · 炸弹 " + (tele.bombs || 0) + " · 选择 " + (tele.picks || 0) + "/" + (tele.drafts || 0), 356), cx, infoY); infoY += 18;
+    ctx.fillText(fitLine("战况 击杀 " + (tele.kills || 0) + " · Boss " + (tele.bossKills || 0) + " · 受击 " + (tele.hits || 0) + "(格挡 " + (tele.blocked || 0) + ") · 承伤 " + Math.round(tele.damageTaken || 0) + " · 空域 " + (tele.eventClears || 0) + "/" + (tele.cleanEvents || 0) + (tele.eventFails ? "/失败" + tele.eventFails : "") + " · 干扰 " + Math.round(tele.jammed || 0) + "s · 炸弹 " + (tele.bombs || 0) + " · 选择 " + (tele.picks || 0) + "/" + (tele.drafts || 0), 356), cx, infoY); infoY += 18;
     const timeline = (r.timeline || []).map(m => m.t + "s " + m.score + "分/" + m.kills + "杀/HP" + m.hp + "%" + (m.jam ? "/干扰" + m.jam + "s" : "")).join(" · ");
     if (timeline && !compactResult) { ctx.fillText(fitLine("节点 " + timeline, 356), cx, infoY); infoY += 22; }
     const boardY = infoY > 418 ? infoY + 16 : 434;
@@ -2727,7 +2728,7 @@ const game = {
     if (!e) return "";
     const parts = [e.sub || ""].filter(Boolean);
     const pct = v => Math.round(v * 100) + "%";
-    if (e.killGoal) parts.push("目标击杀" + e.killGoal);
+    if (e.killGoal) { const kills = Math.max(0, ((this._endlessStats || {}).kills || 0) - (this._endlessEventStartKills || 0)); parts.push("目标击杀" + Math.min(kills, e.killGoal) + "/" + e.killGoal); }
     if (e.scoreBonus) parts.push("分+" + pct(e.scoreBonus));
     if (e.threatGainMult && e.threatGainMult > 1) parts.push("威胁+" + pct(e.threatGainMult - 1));
     if (e.enemyHpMult) parts.push("敌血+" + pct(e.enemyHpMult));

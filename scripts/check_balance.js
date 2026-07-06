@@ -136,11 +136,15 @@ const killGoalEvent = CONFIG.endless.events.find(e => e.key === "annihilationOrd
 game.score = 0; game.floats = []; game._endlessStats = { hits: 0, kills: 3, eventClears: 0, eventScore: 0 }; game._endlessEventStartHits = 0; game._endlessEventStartKills = 0;
 assert.strictEqual(game.finishEndlessEvent(killGoalEvent), 0, "kill-goal event should fail without enough kills");
 assert.strictEqual(game._endlessStats.eventClears, 0, "failed kill-goal event should not count as cleared");
+assert.strictEqual(game._endlessStats.eventFails, 1, "failed kill-goal event should be tracked");
 assert(game.floats.some(f => f.text.includes("目标未达成")), "failed kill-goal event should show feedback");
+game._endlessStats.kills = 7; game._endlessEventStartKills = 3;
+assert(game.endlessEventHUDDetail(killGoalEvent).includes("4/" + killGoalEvent.killGoal), "kill-goal event HUD should show live progress");
+assert(game.endlessReviewTags({ telemetry: game._endlessStats, time: 60, bonuses: {} }).some(t => t.includes("目标失败")), "failed kill-goal events should appear in review tags");
 game.score = 0; game.floats = []; game._endlessStats = { hits: 0, kills: killGoalEvent.killGoal, eventClears: 0, eventScore: 0 }; game._endlessEventStartHits = 0; game._endlessEventStartKills = 0;
 assert(game.finishEndlessEvent(killGoalEvent) > 0, "kill-goal event should clear after enough kills");
 assert.strictEqual(game._endlessStats.eventClears, 1, "cleared kill-goal event should count as cleared");
-assert(game.endlessEventHUDDetail(killGoalEvent).includes("目标击杀"), "kill-goal event HUD should show objective");
+assert(game.endlessEventHUDDetail(killGoalEvent).includes(killGoalEvent.killGoal + "/" + killGoalEvent.killGoal), "kill-goal event HUD should show objective");
 game.score = 0; game.floats = []; game._bonusRerolls = 0; game._endlessStats = { hits: 1 }; game._endlessEventStartHits = 1;
 const eventCleanGain = game.finishEndlessEvent(CONFIG.endless.events[0]);
 assert(eventCleanGain > eventHitGain, "clean event clear should grant bonus score");
