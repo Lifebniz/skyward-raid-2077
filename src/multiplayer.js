@@ -10,49 +10,63 @@ const Multiplayer = {
   init() {
     const stage = document.getElementById("stage");
     if (!stage || !("RTCPeerConnection" in window)) return;
-    const panel = document.createElement("div");
-    panel.className = "mp-panel collapsed";
-    panel.innerHTML = `
-      <div class="mp-head">
-        <div>
-          <div class="mp-title">联机</div>
-          <div class="mp-status" data-mp-status>未连接</div>
-        </div>
-        <button class="mp-toggle" type="button" data-mp-toggle>展开</button>
+    // GG:收起态只露出贴边的半圆把手,不占版面;点一下才展开成完整面板(展开态和以前一样)
+    const widget = document.createElement("div");
+    widget.className = "mp-widget collapsed";
+    widget.innerHTML = `
+      <div class="mp-peek" data-mp-peek title="联机">
+        <span class="mp-peek-dot" data-mp-peek-dot></span>
+        <span class="mp-peek-icon">📶</span>
       </div>
-      <div class="mp-body">
-        <div class="mp-actions">
-          <button type="button" data-mp-host>创建邀请码</button>
-          <button type="button" data-mp-join>加入并生成应答</button>
-          <button type="button" data-mp-accept>接受应答</button>
-          <button type="button" data-mp-copy>复制文本</button>
-          <button type="button" data-mp-clear>清空</button>
-          <button type="button" data-mp-close>断开</button>
+      <div class="mp-panel">
+        <div class="mp-head">
+          <div>
+            <div class="mp-title">联机</div>
+            <div class="mp-status" data-mp-status>未连接</div>
+          </div>
+          <button class="mp-toggle" type="button" data-mp-toggle>收起</button>
         </div>
-        <textarea data-mp-code placeholder="房主:点 创建邀请码,复制给朋友。朋友:粘贴邀请码后点 加入并生成应答,再把应答发回房主。房主:粘贴应答后点 接受应答。"></textarea>
-        <div class="mp-hint">免费 WebRTC 点对点:当前同步队友位置,完整合作战斗后续再接。</div>
+        <div class="mp-body">
+          <div class="mp-actions">
+            <button type="button" data-mp-host>创建邀请码</button>
+            <button type="button" data-mp-join>加入并生成应答</button>
+            <button type="button" data-mp-accept>接受应答</button>
+            <button type="button" data-mp-copy>复制文本</button>
+            <button type="button" data-mp-clear>清空</button>
+            <button type="button" data-mp-close>断开</button>
+          </div>
+          <textarea data-mp-code placeholder="房主:点 创建邀请码,复制给朋友。朋友:粘贴邀请码后点 加入并生成应答,再把应答发回房主。房主:粘贴应答后点 接受应答。"></textarea>
+          <div class="mp-hint">免费 WebRTC 点对点:当前同步队友位置,完整合作战斗后续再接。</div>
+        </div>
       </div>`;
-    stage.appendChild(panel);
+    stage.appendChild(widget);
     this._ui = {
-      panel,
-      toggle: panel.querySelector("[data-mp-toggle]"),
-      status: panel.querySelector("[data-mp-status]"),
-      code: panel.querySelector("[data-mp-code]"),
+      widget,
+      peek: widget.querySelector("[data-mp-peek]"),
+      peekDot: widget.querySelector("[data-mp-peek-dot]"),
+      toggle: widget.querySelector("[data-mp-toggle]"),
+      status: widget.querySelector("[data-mp-status]"),
+      code: widget.querySelector("[data-mp-code]"),
     };
-    this._ui.toggle.addEventListener("click", () => this.togglePanel());
-    panel.querySelector("[data-mp-host]").addEventListener("click", () => this.host());
-    panel.querySelector("[data-mp-join]").addEventListener("click", () => this.join());
-    panel.querySelector("[data-mp-accept]").addEventListener("click", () => this.acceptAnswer());
-    panel.querySelector("[data-mp-copy]").addEventListener("click", () => this.copyCode());
-    panel.querySelector("[data-mp-clear]").addEventListener("click", () => { this._ui.code.value = ""; });
-    panel.querySelector("[data-mp-close]").addEventListener("click", () => this.disconnect());
+    this._ui.peek.addEventListener("click", () => this.setCollapsed(false));
+    this._ui.toggle.addEventListener("click", () => this.setCollapsed(true));
+    widget.querySelector("[data-mp-host]").addEventListener("click", () => this.host());
+    widget.querySelector("[data-mp-join]").addEventListener("click", () => this.join());
+    widget.querySelector("[data-mp-accept]").addEventListener("click", () => this.acceptAnswer());
+    widget.querySelector("[data-mp-copy]").addEventListener("click", () => this.copyCode());
+    widget.querySelector("[data-mp-clear]").addEventListener("click", () => { this._ui.code.value = ""; });
+    widget.querySelector("[data-mp-close]").addEventListener("click", () => this.disconnect());
   },
 
-  togglePanel() {
-    const collapsed = this._ui.panel.classList.toggle("collapsed");
-    this._ui.toggle.textContent = collapsed ? "展开" : "收起";
+  setCollapsed(collapsed) { this._ui.widget.classList.toggle("collapsed", collapsed); },
+  status(text) {
+    if (!this._ui) return;
+    this._ui.status.textContent = text;
+    const dot = this._ui.peekDot;
+    dot.classList.remove("on", "busy");
+    if (text === "已连接") dot.classList.add("on");
+    else if (text !== "未连接" && text !== "连接断开" && text !== "连接关闭") dot.classList.add("busy");
   },
-  status(text) { if (this._ui) this._ui.status.textContent = text; },
   encode(desc) { return btoa(JSON.stringify(desc)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, ""); },
   decode(text) {
     const clean = text.trim().replaceAll("-", "+").replaceAll("_", "/");

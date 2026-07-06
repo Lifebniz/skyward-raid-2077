@@ -11,16 +11,41 @@ html, body {
     position: absolute; left: 0; right: 0; bottom: 8px;
     text-align: center; color: #4a90d9; font-size: 12px; opacity: .6; pointer-events: none;
   }
+  /* 联机浮窗:收起时只在右边缘露出一个半圆小把手,不挡画面;点一下才展开成完整面板
+     宽度铺满 #stage 并用 flex 靠右对齐,这样面板的百分比宽度是相对画布算的,不是视口 */
+  .mp-widget {
+    position: absolute; left: 0; right: 0; top: 8%; z-index: 5;
+    display: flex; justify-content: flex-end; pointer-events: none;
+  }
+  .mp-widget .mp-panel, .mp-widget .mp-peek { pointer-events: auto; }
+  .mp-widget:not(.collapsed) .mp-peek { display: none; }
+  .mp-widget.collapsed .mp-panel { display: none; }
+  .mp-peek {
+    width: 26px; height: 52px;
+    border-radius: 100% 0 0 100% / 50% 0 0 50%;
+    background: rgba(77, 171, 247, .32);
+    border: 1px solid rgba(142, 197, 255, .45); border-right: none;
+    box-shadow: -4px 0 14px rgba(0, 0, 0, .35);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; user-select: none; touch-action: none;
+  }
+  .mp-peek-icon { font-size: 15px; margin-right: 3px; }
+  .mp-peek-dot {
+    position: absolute; top: 6px; left: 3px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #868e96; box-shadow: 0 0 4px rgba(0, 0, 0, .5);
+  }
+  .mp-peek-dot.on { background: #38d9a9; }
+  .mp-peek-dot.busy { background: #ffd43b; }
   .mp-panel {
-    position: absolute; right: 10px; top: 10px; z-index: 5;
+    margin-right: 10px;
     width: min(300px, calc(100% - 20px));
     color: #dbeafe; background: rgba(5, 12, 24, .88);
     border: 1px solid rgba(77, 171, 247, .35); border-radius: 8px;
     box-shadow: 0 10px 28px rgba(0, 0, 0, .35);
     font: 13px/1.35 "Segoe UI", "Microsoft YaHei", sans-serif;
-    pointer-events: auto; user-select: text; touch-action: auto;
+    user-select: text; touch-action: auto;
   }
-  .mp-panel.collapsed .mp-body { display: none; }
   .mp-head {
     display: flex; align-items: center; justify-content: space-between;
     gap: 8px; padding: 8px 9px; user-select: none;
