@@ -25,7 +25,7 @@ const game = {
   _mapHighlightId: null, _mapHighlightT: 0,   // MM:从图鉴跳转过来时高亮提示的关卡
   _levelTransX: 0, _levelTransY: 0, _levelTransT: 0,   // NN:进入关卡的聚焦扩散过渡(从点击处展开)
   autoNext: true, endless: false, challengeSeed: "", challengeMode: false, challengeDaily: false, challengeTarget: null, challengeSplits: [], rivalInterference: null, _rng: null, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0, _endlessEventT: 0, _endlessEventTimer: 0, _endlessEvent: null, _endlessHazardT: 0, _endlessEventStartHits: 0, _endlessEventsSeen: [], _endlessRecentEvents: [], _endlessStats: null, _endlessTimeline: [], _endlessMarkIdx: 0,
-  _endlessBossAffixesSeen: [],
+  _endlessBossAffixesSeen: [], _endlessRecentBossAffixes: [],
   _shake: 0, _shakeT: 0, _hitStopT: 0,   // N:打击感
   // 触控按钮放大,便于拇指操作
   bombBtn: { x: 58, y: CONFIG.HEIGHT - 70, r: 42 },
@@ -166,7 +166,7 @@ const game = {
     this.resetDepthSystems();
     this.flashTimer = 0; this.warningTimer = 0; this._hpTrailRatio = 1;
     this._endlessT = 0; this._endlessSpawnT = CONFIG.endless.spawn.initialDelay; this._endlessBossT = CONFIG.endless.boss.firstDelay; this._endlessBossN = 0;
-    this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = CONFIG.endless.eventInterval * 0.65; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessBossAffixesSeen = [];
+    this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = CONFIG.endless.eventInterval * 0.65; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessBossAffixesSeen = []; this._endlessRecentBossAffixes = [];
     this.resetEndlessTelemetry();
     director.begin(null);
     input.targetX = CONFIG.player.startX; input.targetY = CONFIG.player.startY;
@@ -1059,9 +1059,13 @@ const game = {
     if (this.endless) {
       const cfg = CONFIG.endless.boss, mult = 1 + Math.min(this._endlessBossN, cfg.hpStepMax) * cfg.hpStep;
       b.maxHp = Math.round(b.maxHp * mult); b.hp = b.maxHp;
-      this.applyEndlessBossAffix(b, this.pick(cfg.affixes || []));
+      this.applyEndlessBossAffix(b, this.pickEndlessBossAffix(cfg.affixes || []));
     }
     this.enemies.push(b); this.boss = b; this.warningTimer = 2.2; this.showDialogue(this.bossDisplayName(b), b.def.taunt, 3.8); return b;
+  },
+  pickEndlessBossAffix(affixes) {
+    const list = affixes || [], recent = this._endlessRecentBossAffixes || [], fresh = list.filter(a => !recent.includes(a.key));
+    return this.pick(fresh.length ? fresh : list);
   },
   bossDisplayName(b) { return b && b.affix ? b.affix.name + "·" + b.def.name : b.def.name; },
   bossAffixHUDText(b) {
@@ -1078,6 +1082,7 @@ const game = {
     if (affix.fireMult) b._fireScale *= affix.fireMult;
     if (affix.scoreMult) b.score = Math.round(b.score * affix.scoreMult);
     this._endlessBossAffixesSeen.push(affix.name + "·" + b.def.name);
+    this._endlessRecentBossAffixes = [affix.key].concat((this._endlessRecentBossAffixes || []).filter(k => k !== affix.key)).slice(0, 2);
     this.floats.push(new FloatText(b.x, b.def.enterY - b.radius - 18, "Boss词缀 " + affix.name, affix.color));
   },
   updateBossAffix(b, dt) {

@@ -144,6 +144,10 @@ unique(affixes.map(a => a.key), "boss affixes");
 assert(affixes.some(a => a.key === "ewar"), "boss affixes should include electronic warfare pressure");
 assert(affixes.some(a => a.key === "exposedCore"), "boss affixes should include weak point windows");
 assert(affixes.some(a => a.key === "phantomEscort"), "boss affixes should include phantom escort pressure");
+const recentAffixKeys = affixes.slice(0, 2).map(a => a.key);
+game._endlessRecentBossAffixes = recentAffixKeys.slice(); game._rng = () => 0;
+const pickedAffix = game.pickEndlessBossAffix(affixes);
+assert(!recentAffixKeys.includes(pickedAffix.key), "boss affix picker should avoid recent repeats when possible");
 for (const a of affixes) {
   assert(a.name && a.desc, `boss affix ${a.key} needs readable text`);
   if (a.scoreMult) between(a.scoreMult, 1, 1.35, `boss affix ${a.key} scoreMult`);
@@ -174,6 +178,9 @@ const phantomEscort = affixes.find(a => a.key === "phantomEscort");
 game.enemies = []; game.floats = []; game.boss = { x: 220, y: 120, radius: 50 };
 game.spawnBossEscort(game.boss, phantomEscort);
 assert(game.enemies.some(e => e.type === "phantom"), "phantomEscort should spawn phantom adds");
+game.floats = []; game._endlessBossAffixesSeen = []; game._endlessRecentBossAffixes = [];
+game.applyEndlessBossAffix({ x: 100, radius: 40, hp: 100, maxHp: 100, score: 100, _fireScale: 1, def: { name: "Test", enterY: 120 } }, phantomEscort);
+assert.strictEqual(game._endlessRecentBossAffixes[0], phantomEscort.key, "applied boss affix should be remembered");
 
 const bonusKeys = new Set(Object.keys(CONFIG.bonuses));
 for (const key of CONFIG.bonusOrder) assert(bonusKeys.has(key), `bonusOrder references missing bonus ${key}`);
