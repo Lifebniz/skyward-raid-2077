@@ -137,6 +137,12 @@ game.bonuses = { missileRack: 1 }; game._chipChoices = []; game._rng = () => 0.9
 game.drawChipChoices();
 assert(hasDraftRoute("导弹"), "draft should include an option for the current focused route");
 assert(game.draftFocusText(game.cardInfo("bonus:explosivePayload")).includes("路线续构"), "focused route cards should show draft reason text");
+game.boss = null;
+const bossHunterBaseWeight = game.draftCardWeight("bonus:bossHunter");
+game.boss = { dead: false };
+assert(game.draftCardWeight("bonus:bossHunter") > bossHunterBaseWeight, "boss counter cards should be weighted higher during bosses");
+assert(game.draftBossText(game.cardInfo("bonus:bossHunter")).includes("Boss"), "boss counter cards should show draft reason text");
+game.boss = null;
 game.state = "playing"; game._endlessT = CONFIG.powerup.chipMinEndlessTime - 0.01; game._nextChipDraftAt = 0; game._endlessStats = { drafts: 0 };
 assert.strictEqual(game.updateChipDraftTimer(), false, "draft timer should wait until the fixed delay");
 game._endlessT = CONFIG.powerup.chipMinEndlessTime;

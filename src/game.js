@@ -735,6 +735,9 @@ const game = {
     const top = this.buildRouteSummary().top;
     return top.score >= 3 && this.draftCardRoute(card) === top.name ? "路线续构" : "";
   },
+  draftBossText(card) {
+    return this.isBossCounterCard(card) ? "Boss对策" : "";
+  },
   draftCardRoute(card) {
     return !card ? "" : card.type === "chip" ? this.chipRouteName(card.key) : ((this.routePreviewInfo(card) || {}).top || {}).name || "";
   },
@@ -767,6 +770,7 @@ const game = {
     else if (info && top.score >= 3 && info.top.name === top.name) w *= 1.35;
     const eventBias = this.activeEventRouteBias();
     if (eventBias && this.draftCardRoute(card) === eventBias) w *= 1.55;
+    if (this.isBossCounterCard(card)) w *= 1.45;
     return w;
   },
   chipChoiceRect(i) { return { x: 40, y: 238 + i * 104, w: CONFIG.WIDTH - 80, h: 92 }; },
@@ -782,6 +786,9 @@ const game = {
   isHpDraftCard(id) {
     const card = this.cardInfo(id), b = card && card.type === "bonus" ? CONFIG.bonuses[card.key] : null;
     return !!(b && (b.hp || b.hpPct || b.heal || b.healPct));
+  },
+  isBossCounterCard(card) {
+    return !!(this.boss && !this.boss.dead && card && card.type === "bonus" && ["bossHunter", "weakScanner", "executioner", "damage", "glassCannon", "vitalReactor"].includes(card.key));
   },
   drawChipChoices(exclude = []) {
     const skip = new Set(exclude);
@@ -1729,7 +1736,7 @@ const game = {
       this.drawChipCardIcon(ctx, card, r.x + 48, r.y + r.h / 2, 27);
       this.drawRarityBadge(ctx, r.x + r.w - 18, r.y + 28, card.rarity, rarityColor);
       ctx.textAlign = "left";
-      const tags = [this.draftEventBiasText(card), this.draftFocusText(card)].filter(Boolean).join(" · ");
+      const tags = [this.draftEventBiasText(card), this.draftFocusText(card), this.draftBossText(card)].filter(Boolean).join(" · ");
       ctx.fillStyle = rarityColor; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.fillText((i + 1) + " · " + (card.type === "chip" ? "限时技能" : "永久 BONUS") + " · " + this.draftProgressText(card) + (tags ? " · " + tags : ""), r.x + 88, r.y + 25);
       ctx.fillStyle = "#fff"; ctx.font = "bold 23px 'Segoe UI', sans-serif"; ctx.fillText(card.name, r.x + 88, r.y + 51);
       ctx.fillStyle = "#ced4da"; ctx.font = "14px 'Segoe UI', sans-serif";

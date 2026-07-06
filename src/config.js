@@ -295,7 +295,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 56, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 57, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
