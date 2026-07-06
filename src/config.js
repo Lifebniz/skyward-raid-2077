@@ -69,7 +69,7 @@ const CONFIG = {
     zigzag:   { amp: 110, period: 1.4 },            // 锯齿折返
     swoop:    { holdY: 210, hold: 0.7, diveVy: 2.4 }, // 下降→驻留→俯冲
     dive:     { speedMul: 1.7, triggerY: 0.16 },    // 下降片刻后瞄准玩家直冲(神风)
-    rearChase:{ warn: 2, boost: 2, boostMul: 1.8, speedMul: 1, turn: 4 },
+    rearChase:{ warn: 2, boost: 2.5, boostMul: 200 / 155, speedMul: 1, turn: 4, track: 2.5 },
     orbit:    { radius: 60, speed: 2.2 },            // Z:绕基准点公转,同时缓慢下降(比 sine 多了纵向摆动)
   },
 
@@ -168,6 +168,7 @@ const CONFIG = {
   },
   bomb: { bossDamage: 70, flash: 0.35 },
   bossPhase: { weakDuration: 2.4, weakDamageMult: 0.25 },
+  bossInvuln: { minCount: 2, maxCount: 3, minDuration: 5, maxDuration: 10 },
 
   // 每关一个独立 BOSS:各有移动方式(sweep 横扫 / figure8 八字 / dart 瞬移)
   // 与分阶段弹幕组合(attacks 里的 type 见 runBossAttack 弹幕库)。
@@ -295,7 +296,7 @@ const CONFIG = {
   // dmgRampTime/dmgRampMult:经典无尽关卡(endlessLite)敌弹伤害从 t=0 的 1 倍线性增长,到 dmgRampTime 秒时封顶为 dmgRampMult 倍
   // GG:dmgDoubleInterval 给无尽挑战(非 lite)用——伤害按 2^(t/此值) 指数增长,不封顶,每过这么多秒伤害翻一倍
   endless: {
-    hpMult: 0.7, maxEnemies: 14, diffKey: "normal", startingDrafts: 2, dmgRampTime: 300, dmgRampMult: 3, dmgDoubleInterval: 300, enemyHpBaseMult: 1.55, enemyHpRampTime: 240, enemyHpRampMult: 3 / 1.55,
+    hpMult: 0.7, maxEnemies: 14, diffKey: "normal", startingDrafts: 2, dmgRampTime: 300, dmgRampMult: 3, dmgDoubleInterval: 300, enemyHpBaseMult: 1.55, enemyHpRampTime: 240, enemyHpRampMult: 3 / 1.55, enemyHpLateTime: 80, enemyHpLateMult: 2.5,
     worldInterval: 40, powerupChance: 0.09,
     eventInterval: 28, eventDuration: 16, eventClearScore: 700, eventCleanShield: 18, eventCleanShieldDur: 5,
     spawn: { initialDelay: 1.0, intervalBase: 1.8, intervalDecay: 0.008, intervalMin: 0.8, countBase: 2, countStepSec: 15, countStepMax: 5 },
@@ -365,7 +366,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 79, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 80, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

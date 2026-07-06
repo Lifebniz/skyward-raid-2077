@@ -19,14 +19,14 @@ sandbox.pools = {
   homingShot: { get(x, y, overcharge) { return { x, y, overcharge }; } },
 };
 sandbox.Sound = { powerup() {}, tone() {} };
-vm.runInContext(fs.readFileSync("src/entities.js", "utf8") + "\nglobalThis.Enemy = Enemy; globalThis.EnemyBullet = EnemyBullet; globalThis.Missile = Missile; globalThis.PlayerLaser = PlayerLaser;", sandbox);
-const { Enemy, EnemyBullet, Missile, PlayerLaser } = sandbox;
+vm.runInContext(fs.readFileSync("src/entities.js", "utf8") + "\nglobalThis.Enemy = Enemy; globalThis.EnemyBullet = EnemyBullet; globalThis.Missile = Missile; globalThis.PlayerLaser = PlayerLaser; globalThis.Boss = Boss;", sandbox);
+const { Enemy, EnemyBullet, Missile, PlayerLaser, Boss } = sandbox;
 
 const between = (value, min, max, label) => assert(value >= min && value <= max, `${label} ${value} outside ${min}-${max}`);
 const unique = (items, label) => assert.strictEqual(new Set(items).size, items.length, `${label} has duplicate keys`);
 
 assert(CONFIG && CONFIG.player && CONFIG.endless, "CONFIG did not load");
-assert.strictEqual(CONFIG.challenge.rulesVersion, 79, "challenge rules should bump for enemy special hazards");
+assert.strictEqual(CONFIG.challenge.rulesVersion, 80, "challenge rules should bump for enemy durability and boss locks");
 
 between(CONFIG.powerup.chipMinEndlessTime, 15, 30, "first endless draft delay");
 between(CONFIG.powerup.chipDraftInterval, 15, 30, "endless draft interval");
@@ -44,6 +44,8 @@ assert.strictEqual(CONFIG.endless.powerupChance, 0.09, "endless powerup chance s
 between(CONFIG.endless.enemyHpBaseMult, 1.1, 2.0, "endless enemy base HP");
 assert.strictEqual(CONFIG.endless.enemyHpBaseMult, 1.55, "endless enemy base HP should match the harder baseline");
 assert.strictEqual(CONFIG.endless.enemyHpRampTime, 240, "endless enemy HP should hit the target ramp at 240s");
+assert.strictEqual(CONFIG.endless.enemyHpLateTime, 80, "endless enemies should get tougher after 80s");
+assert.strictEqual(CONFIG.endless.enemyHpLateMult, 2.5, "endless enemies should be at least 2.5x HP after 80s");
 between(CONFIG.endless.enemyHpRampMult, 1.5, 3.2, "endless enemy HP ramp");
 between(CONFIG.endless.dmgRampMult, 1.5, 3.5, "endless damage ramp");
 between(CONFIG.endless.boss.firstDelay, 20, 45, "first boss delay");
@@ -54,6 +56,10 @@ between(CONFIG.endless.boss.hpStep, 0.04, 0.16, "boss HP step");
 assert.strictEqual(CONFIG.endless.boss.hpStep, 0.11, "endless boss HP step should stay uncapped and steeper");
 between(CONFIG.bossPhase.weakDuration, 1.5, 4, "boss phase weak duration");
 between(CONFIG.bossPhase.weakDamageMult, 0.1, 0.45, "boss phase weak damage");
+between(CONFIG.bossInvuln.minCount, 2, 3, "boss invuln min count");
+between(CONFIG.bossInvuln.maxCount, 2, 3, "boss invuln max count");
+between(CONFIG.bossInvuln.minDuration, 5, 10, "boss invuln min duration");
+between(CONFIG.bossInvuln.maxDuration, 5, 10, "boss invuln max duration");
 between(CONFIG.endless.eventClearScore, 300, 1800, "event clear score");
 assert.strictEqual(CONFIG.endless.eventClearScore, 700, "event clear score should be toned down");
 between(CONFIG.endless.eventCleanShield, 8, 50, "event clean shield");
@@ -80,7 +86,9 @@ assert.strictEqual(kamikaze.fromBottom, true, "kamikaze should enter from behind
 assert(kamikaze.crashDamage > CONFIG.crashDamage, "kamikaze should hit harder than normal collisions");
 assert(CONFIG.moves.rearChase, "rear chase movement should exist");
 assert.strictEqual(CONFIG.moves.rearChase.warn, 2, "rear chase should warn for 2 seconds");
-assert.strictEqual(CONFIG.moves.rearChase.boost, 2, "rear chase should boost for 2 seconds");
+assert.strictEqual(CONFIG.moves.rearChase.boost, 2.5, "rear chase should boost for 2.5 seconds");
+assert.strictEqual(CONFIG.moves.rearChase.track, 2.5, "rear chase should keep tracking during the 2.5s boost");
+assert(Math.abs(CONFIG.enemy.kamikaze.speed * CONFIG.moves.rearChase.boostMul - CONFIG.enemy.small.speed) < 1e-9, "rear chase boost should match the fastest small plane speed");
 assert(CONFIG.moves.rearChase.boostMul > CONFIG.moves.rearChase.speedMul, "rear chase boost should be faster than normal chase");
 const beacon = CONFIG.enemy.beacon, gunner = CONFIG.enemy.gunner, mineLayer = CONFIG.enemy.mineLayer, tether = CONFIG.enemy.tether;
 assert(beacon && gunner && mineLayer && tether, "enemy special types should exist");
@@ -117,6 +125,8 @@ assert(game.jamFactor(100, 100) < jammedWithoutFilter, "signalFilter should redu
 game.bonuses = {};
 game.endless = true; game._endlessT = 0; game._endlessEvent = null; game._endlessEventTimer = 0;
 assert(game.endlessEnemyHpMult() >= CONFIG.endless.enemyHpBaseMult, "endless enemies should start with the base HP multiplier");
+game._endlessT = CONFIG.endless.enemyHpLateTime;
+assert(Math.abs(game.endlessEnemyHpMult() - CONFIG.endless.enemyHpLateMult) < 1e-9, "endless enemies should lock to 2.5x HP after 80s");
 game._endlessT = CONFIG.endless.enemyHpRampTime;
 assert(game.endlessEnemyHpMult() >= CONFIG.endless.enemyHpBaseMult * CONFIG.endless.enemyHpRampMult, "endless enemies should reach the configured HP ramp");
 assert(Math.abs(game.endlessEnemyHpMult() - 3) < 1e-9, "endless enemies should reach 3x HP at 240s");
@@ -233,7 +243,7 @@ rearChaser.update(0.5);
 assert(!rearChaser.dead, "kamikaze should not be culled before entering from behind");
 assert(rearChaser.y < rearStartY, "kamikaze should move toward the player from behind");
 const rearSpeedAt = mt => { rearChaser.x = CONFIG.WIDTH / 2; rearChaser.y = CONFIG.HEIGHT + rearChaser.radius; rearChaser.vx = 0; rearChaser.vy = 0; rearChaser._mt = mt; rearChaser.applyMove(0.1); return Math.hypot(rearChaser.vx, rearChaser.vy); };
-const rearWarnSpeed = rearSpeedAt(1), rearBoostSpeed = rearSpeedAt(2.2), rearNormalSpeed = rearSpeedAt(4.2);
+const rearWarnSpeed = rearSpeedAt(1), rearBoostSpeed = rearSpeedAt(2.2), rearNormalSpeed = rearSpeedAt(4.8);
 assert(rearBoostSpeed > rearWarnSpeed * 1.5, "kamikaze should accelerate after its 2 second warning");
 assert(rearNormalSpeed < rearBoostSpeed, "kamikaze should return to normal speed after its boost");
 game.player = { x: 220, y: 300, radius: 10, hp: 100, takeDamage(d) { this.hp -= d; }, applySlow(mult, dur) { this.slowMult = mult; this.slowTimer = dur; } };
@@ -476,6 +486,22 @@ assert(game.playerDamage(100, game.boss) > weakDamage, "weakScanner should incre
 game.floats = []; game.boss = { isBoss: true, x: 100, y: 100, radius: 40, hp: 100, maxHp: 100, affix: exposedCore, _weakTimer: 0 };
 game.openBossWeakPoint(game.boss, exposedCore);
 assert(game.boss._weakTimer > exposedCore.dur, "weakScanner should extend weak window duration");
+game._rng = () => 0; game.endless = false; game.floats = []; game.shockwaves = []; game.enemies = [];
+const lockBoss = new Boss(0);
+game.boss = lockBoss; game.enemies = [lockBoss];
+assert.strictEqual(lockBoss._invulnTotal, CONFIG.bossInvuln.minCount, "boss lock count should start at configured minimum");
+assert.strictEqual(lockBoss.damage(lockBoss.maxHp), false, "boss should lock HP instead of dying at the first lock threshold");
+assert.strictEqual(lockBoss.hp, Math.round(lockBoss.maxHp * 2 / 3), "boss first lock should clamp HP to the first threshold");
+between(lockBoss._invulnTimer, CONFIG.bossInvuln.minDuration, CONFIG.bossInvuln.maxDuration, "boss invuln timer");
+assert(game.bossAffixHUDText(lockBoss).includes("无敌"), "boss HUD should show invulnerability timing");
+const lockHp = lockBoss.hp;
+lockBoss.damage(lockBoss.maxHp);
+assert.strictEqual(lockBoss.hp, lockHp, "boss should ignore damage while invulnerable");
+lockBoss._invulnTimer = 0;
+assert.strictEqual(lockBoss.damage(lockBoss.maxHp), false, "boss should lock HP at the second threshold");
+assert.strictEqual(lockBoss.hp, Math.round(lockBoss.maxHp / 3), "boss second lock should clamp HP to the second threshold");
+lockBoss._invulnTimer = 0;
+assert.strictEqual(lockBoss.damage(lockBoss.maxHp), true, "boss should die after all lock charges are spent");
 game.bonuses = {}; game.enemyBullets = [{ dead: false }]; game.lasers = [{ dead: false }]; game.powerups = []; game.floats = []; game.player = { power: CONFIG.powerup.chipMinPower };
 const phaseBoss = { isBoss: true, x: 100, y: 120, radius: 40, hp: 100, maxHp: 100, _fireTimer: 0, def: { name: "PhaseTest", colors: ["#fff", "#ffd43b"], enterY: 120 } };
 game.onBossPhaseChange(phaseBoss, 1);

@@ -476,11 +476,16 @@ class Enemy {
       if (!this._aimed) { this.y += this.speed * dt; if (this.y > CONFIG.HEIGHT * m.triggerY && game.player) { const a = Math.atan2(game.player.y - this.y, game.player.x - this.x), sp = this.speed * m.speedMul; this.vx = Math.cos(a) * sp; this.vy = Math.sin(a) * sp; this._aimed = true; } }
       else { this.x += this.vx * dt; this.y += this.vy * dt; }
     } else if (this.move === "rearChase") {
-      const p = game.player || { x: this.x, y: -this.radius }, phaseMul = this._mt < (m.warn || 2) ? 0.7 : (this._mt < (m.warn || 2) + (m.boost || 2) ? (m.boostMul || 1.8) : (m.speedMul || 1));
-      const sp = this.speed * phaseMul, a = Math.atan2(p.y - this.y, p.x - this.x), turn = clamp((m.turn || 4) * dt, 0, 1);
+      const p = game.player || { x: this.x, y: -this.radius }, warn = m.warn || 2, track = m.track || m.boost || 2, phaseMul = this._mt < warn ? 0.7 : (this._mt < warn + (m.boost || 2) ? (m.boostMul || 1.8) : (m.speedMul || 1));
+      const sp = this.speed * phaseMul, tracking = this._mt < warn + track, a = Math.atan2(p.y - this.y, p.x - this.x), turn = tracking ? clamp((m.turn || 4) * dt, 0, 1) : 0;
       if (!this.vx && !this.vy) { this.vx = 0; this.vy = -sp; }
-      this.vx += (Math.cos(a) * sp - this.vx) * turn;
-      this.vy += (Math.sin(a) * sp - this.vy) * turn;
+      if (tracking) {
+        this.vx += (Math.cos(a) * sp - this.vx) * turn;
+        this.vy += (Math.sin(a) * sp - this.vy) * turn;
+      } else {
+        const d = Math.hypot(this.vx, this.vy) || 1;
+        this.vx = this.vx / d * sp; this.vy = this.vy / d * sp;
+      }
       this.x = clamp(this.x + this.vx * dt, -this.radius, W + this.radius);
       this.y += this.vy * dt;
     } else if (this.move === "orbit") {   // Z:绕基准点公转 + 缓慢下降
@@ -925,6 +930,9 @@ class Boss {
     this._fireTimer = 1.2; this._spiral = 0; this._targetX = this.x;
     this._enraged = false; this._laserCd = 0; this._gravityCd = 0; this._lastPhaseIndex = 0;   // Y:狂暴阶段 / 镭射独立冷却
     this.defIndex = defIndex % CONFIG.bosses.length;   // W2:记下具体是哪个BOSS,给"击败特定BOSS"成就用
+    const inv = CONFIG.bossInvuln || {}, min = inv.minCount || 0, max = inv.maxCount || min;
+    this._invulnTotal = min + Math.floor(game.rng() * Math.max(1, max - min + 1));
+    this._invulnLeft = this._invulnTotal; this._invulnTimer = 0;
   }
   get phaseIndex() { const r = this.hp / this.maxHp, ph = this.def.phases; for (let i = 0; i < ph.length; i++) if (r > ph[i].until) return i; return ph.length - 1; }
   get phase() { return this.phaseIndex + 1; }         // 兼容旧引用
@@ -940,7 +948,7 @@ class Boss {
   update(dt) {
     const def = this.def;
     if (!this._entered) { this.y += 90 * dt; if (this.y >= def.enterY) { this.y = def.enterY; this._entered = true; } return; }
-    this._t += dt; this._moveT += dt; if (this._flash > 0) this._flash -= dt; if (this._laserCd > 0) this._laserCd -= dt; if (this._gravityCd > 0) this._gravityCd -= dt; if (this._weakTimer > 0) this._weakTimer = Math.max(0, this._weakTimer - dt); this.move(dt);
+    this._t += dt; this._moveT += dt; if (this._flash > 0) this._flash -= dt; if (this._laserCd > 0) this._laserCd -= dt; if (this._gravityCd > 0) this._gravityCd -= dt; if (this._weakTimer > 0) this._weakTimer = Math.max(0, this._weakTimer - dt); if (this._invulnTimer > 0) this._invulnTimer = Math.max(0, this._invulnTimer - dt); this.move(dt);
     const phaseIndex = this.phaseIndex;
     if (phaseIndex !== this._lastPhaseIndex) { this._lastPhaseIndex = phaseIndex; game.onBossPhaseChange(this, phaseIndex); }
     // Y:血量 <=20% 时触发一次狂暴,此后攻击频率永久提升
@@ -951,14 +959,25 @@ class Boss {
     if (this._fireTimer <= 0) { this._fireTimer = phase.cd * this._fireScale; for (const atk of phase.attacks) runBossAttack(this, atk); }
   }
   damage(d) {
+    if (this._invulnTimer > 0) { this._flash = 0.04; return false; }
     if (this.def.guardDR && game.bossEscortCount() > 0 && this._weakTimer <= 0) d *= 1 - this.def.guardDR;
-    this.hp -= d; this._flash = 0.09; if (this.hp <= 0) { this.dead = true; return true; } return false;
+    const threshold = this._invulnLeft > 0 ? this._invulnLeft / (this._invulnTotal + 1) : 0, nextHp = this.hp - d;
+    if (threshold > 0 && this.hp / this.maxHp > threshold && nextHp / this.maxHp <= threshold) {
+      this.hp = Math.max(1, Math.round(this.maxHp * threshold)); this._flash = 0.09; this.startInvuln(); return false;
+    }
+    this.hp = nextHp; this._flash = 0.09; if (this.hp <= 0) { this.dead = true; return true; } return false;
+  }
+  startInvuln() {
+    const inv = CONFIG.bossInvuln || {}, min = inv.minDuration || 5, max = inv.maxDuration || min;
+    this._invulnTimer = min + game.rng() * Math.max(0, max - min); this._invulnLeft--;
+    if (game.onBossInvuln) game.onBossInvuln(this);
   }
   draw(ctx) {
     const flash = this._flash > 0, color = flash ? "#fff" : this.def.colors[this.phaseIndex], r = this.radius, x = this.x, y = this.y;
     // Y:狂暴态外圈红色脉动光晕
     if (this._enraged) { const gr = r + 14 + Math.sin(this._t * 6) * 4; ctx.fillStyle = "rgba(255,40,40,.22)"; ctx.beginPath(); ctx.arc(x, y, gr, 0, Math.PI * 2); ctx.fill(); }
     if (this.affix && !flash) { ctx.strokeStyle = UI.rgba(this.affix.color, .72); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, r + 20 + Math.sin(this._t * 5) * 3, 0, Math.PI * 2); ctx.stroke(); }
+    if (this._invulnTimer > 0) { ctx.strokeStyle = "rgba(116,192,252,.92)"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y, r + 28 + Math.sin(this._t * 8) * 4, 0, Math.PI * 2); ctx.stroke(); }
     const bossImage = ImageAssets.boss(this.defIndex);
     if (ImageAssets.draw(ctx, bossImage, x, y, r * 2.45)) {
       if (flash) {

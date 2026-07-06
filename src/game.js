@@ -653,7 +653,9 @@ const game = {
   endlessEnemyHpMult() {
     if (!this.endless) return 1;
     const e = CONFIG.endless;
-    return (e.enemyHpBaseMult || 1) * (1 + (this._endlessT / e.enemyHpRampTime) * (e.enemyHpRampMult - 1)) * (1 + this.endlessEventValue("enemyHpMult", 0));
+    const ramp = (e.enemyHpBaseMult || 1) * (1 + (this._endlessT / e.enemyHpRampTime) * (e.enemyHpRampMult - 1));
+    const late = this._endlessT >= (e.enemyHpLateTime || Infinity) ? (e.enemyHpLateMult || 1) : 1;
+    return Math.max(ramp, late) * (1 + this.endlessEventValue("enemyHpMult", 0));
   },
   shipWeaponValue(prop, fallback) {
     const b = ((this.player && this.player.ship) || this.ship).weaponBias || {};
@@ -1350,10 +1352,12 @@ const game = {
   bossDisplayName(b) { return b && b.affix ? b.affix.name + "·" + b.def.name : b.def.name; },
   bossAffixHUDText(b) {
     const a = b && b.affix;
-    if (!a) return b && b._weakTimer > 0 ? "破甲窗口 " + b._weakTimer.toFixed(1) + "s" : "";
+    const invuln = b && b._invulnTimer > 0 ? "无敌屏障 " + b._invulnTimer.toFixed(1) + "s" : "";
+    if (!a) return invuln || (b && b._weakTimer > 0 ? "破甲窗口 " + b._weakTimer.toFixed(1) + "s" : "");
     const cd = a.attack ? " · " + Math.max(0, b._affixTimer || 0).toFixed(1) + "s" : "";
     const weak = b._weakTimer > 0 ? " · 弱点" + b._weakTimer.toFixed(1) + "s" : "";
-    return a.name + " · " + (a.desc || "词缀") + weak + cd;
+    const shield = invuln ? " · " + invuln : "";
+    return a.name + " · " + (a.desc || "词缀") + shield + weak + cd;
   },
   applyEndlessBossAffix(b, affix) {
     if (!b || !affix) return;
@@ -1417,6 +1421,11 @@ const game = {
   },
   // Y:BOSS 狂暴触发提示(HP<=20% 时一次性)
   onBossEnrage(b) { this.showDialogue(this.bossDisplayName(b), "狂暴!攻击频率大幅提升!", 3.0); this.addShake(6, 0.28); Sound.hit(); Haptics.bomb(); },
+  onBossInvuln(b) {
+    this.floats.push(new FloatText(b.x, b.y - b.radius - 28, "锁血屏障 " + Math.ceil(b._invulnTimer) + "s", "#74c0fc"));
+    this.spawnShockwave(b.x, b.y, b.radius * 2.5, "#74c0fc");
+    this.addShake(4, 0.18); Sound.powerup();
+  },
   onBossPhaseChange(b, phaseIndex) {
     if (phaseIndex <= 0) return;
     const color = b.def.colors[phaseIndex] || "#ffd43b", kind = this.canDrop("chip") ? "chip" : "power";
