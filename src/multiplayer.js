@@ -59,13 +59,18 @@ const Multiplayer = {
   },
 
   setCollapsed(collapsed) { this._ui.widget.classList.toggle("collapsed", collapsed); },
+  // GG:状态不只点亮右上角小圆点,连收起态的信标圆钮和展开面板里的状态文字也跟着变色(呼应游戏内 HUD 的状态配色:
+  // 已连接=青绿 / 连接中等busy态=黄 / 其余=默认蓝),让"缩在边框"的信标本身就能看出联机状态,不用展开才知道
   status(text) {
     if (!this._ui) return;
     this._ui.status.textContent = text;
-    const dot = this._ui.peekDot;
-    dot.classList.remove("on", "busy");
-    if (text === "已连接") dot.classList.add("on");
-    else if (text !== "未连接" && text !== "连接断开" && text !== "连接关闭") dot.classList.add("busy");
+    const on = text === "已连接";
+    const busy = !on && text !== "未连接" && text !== "连接断开" && text !== "连接关闭";
+    for (const el of [this._ui.peekDot, this._ui.peek, this._ui.status]) {
+      el.classList.remove("on", "busy", "mp-on", "mp-busy");
+      if (el === this._ui.peekDot) { if (on) el.classList.add("on"); else if (busy) el.classList.add("busy"); }
+      else { if (on) el.classList.add("mp-on"); else if (busy) el.classList.add("mp-busy"); }
+    }
   },
   encode(desc) { return btoa(JSON.stringify(desc)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, ""); },
   decode(text) {

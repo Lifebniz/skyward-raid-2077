@@ -14,10 +14,13 @@ const UI = {
   hex2rgb(h) { let c = h.replace("#", ""); if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2]; return [parseInt(c.slice(0, 2), 16), parseInt(c.slice(2, 4), 16), parseInt(c.slice(4, 6), 16)]; },
   rgba(h, a) { const [r, g, b] = this.hex2rgb(h); return "rgba(" + r + "," + g + "," + b + "," + a + ")"; },
   // QQ:明暗混色 —— amt>0 往白混(变亮),amt<0 往黑混(变暗),给纯色形状做渐变立体感用
+  // GG:返回 hex(而非 rgb(...))—— canvas fillStyle/colorStop 两种格式都认,但 hex 还能继续喂给 UI.rgba() 二次调透明度
+  //   (之前的 rgb(...) 格式会被 UI.rgba 内部的 hex2rgb 当 hex 硬切,切出 NaN,报 addColorStop 颜色解析错误)
   shade(h, amt) {
     const [r, g, b] = this.hex2rgb(h);
     const f = (c) => Math.max(0, Math.min(255, Math.round(amt >= 0 ? c + (255 - c) * amt : c * (1 + amt))));
-    return "rgb(" + f(r) + "," + f(g) + "," + f(b) + ")";
+    const hex = (c) => c.toString(16).padStart(2, "0");
+    return "#" + hex(f(r)) + hex(f(g)) + hex(f(b));
   },
   // X6:按当前 ctx.font 逐字符量宽度换行(中文没有空格分词,逐字符贪心断行足够用)——调用前必须先设好 ctx.font,
   //   最多返回 maxLines 行,超出的部分会被截断(而不是无限换行撑爆版面),末尾补"…"提示被截断。
