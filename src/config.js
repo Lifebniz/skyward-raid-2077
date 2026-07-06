@@ -275,6 +275,7 @@ const CONFIG = {
       { key: "overloadField", name: "过载磁场", color: "#ffd43b", sub: "分数提升,威胁提升", routeBias: "风险", scoreBonus: 0.25, threatGainMult: 1.3 },
       { key: "ambush", name: "伏击航道", color: "#74c0fc", sub: "敌群加密,补给偏防御", routeBias: "生存", spawnBonus: 2, powerupChanceAdd: 0.08, forceDrop: "heal" },
       { key: "armoredAirspace", name: "重甲空域", color: "#74c0fc", sub: "敌机生命提升,补给偏防御", routeBias: "生存", enemyHpMult: 0.35, powerupChanceAdd: 0.06, forceDrop: "heal" },
+      { key: "noHitRun", name: "无伤穿越", color: "#38d9a9", sub: "限时无伤,受击目标失败", routeBias: "生存", minTime: 70, spawnBonus: 1, powerupChanceAdd: 0.05, forceDrop: "heal", scoreBonus: 0.12, noHitGoal: true },
       { key: "annihilationOrder", name: "歼灭令", color: "#ffd43b", sub: "限时击杀目标,完成才结算", routeBias: "主炮", minTime: 80, enemyType: "medium", enemyChance: 0.48, spawnBonus: 2, scoreBonus: 0.10, killGoal: 16 },
       { key: "aceHunt", name: "猎杀王牌", color: "#ff6b6b", sub: "精英敌增多,击破王牌目标", routeBias: "主炮", minTime: 100, enemyType: "gunner", enemyChance: 0.55, eliteChance: 0.72, spawnBonus: 1, scoreBonus: 0.14, eliteGoal: 4 },
       { key: "repairConvoy", name: "维修航队", color: "#51cf66", sub: "支援机增多,敌群更耐打", routeBias: "导弹", minTime: 110, enemyType: "support", enemyChance: 0.4, spawnBonus: 1, enemyHpMult: 0.18, scoreBonus: 0.12 },
@@ -305,7 +306,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 71, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 72, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

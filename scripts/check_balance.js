@@ -82,6 +82,7 @@ assert(eventKeys.includes("phantomWing"), "endless events should include phantom
 assert(eventKeys.includes("carrierRaid"), "endless events should include carrier split pressure");
 assert(eventKeys.includes("annihilationOrder"), "endless events should include a kill-goal objective");
 assert(eventKeys.includes("aceHunt"), "endless events should include an elite hunt objective");
+assert(eventKeys.includes("noHitRun"), "endless events should include a no-hit objective");
 const routeNames = new Set(["主炮", "激光", "追踪", "导弹", "生存", "风险"]);
 const drops = new Set(["power", "heal", "bomb", "wing", "chip"]);
 for (const e of CONFIG.endless.events) {
@@ -94,6 +95,7 @@ for (const e of CONFIG.endless.events) {
   if (e.spawnBonus != null) between(e.spawnBonus, 0, 3, `event ${e.key} spawnBonus`);
   if (e.killGoal != null) between(e.killGoal, 6, 30, `event ${e.key} killGoal`);
   if (e.eliteGoal != null) between(e.eliteGoal, 2, 10, `event ${e.key} eliteGoal`);
+  if (e.noHitGoal != null) assert.strictEqual(e.noHitGoal, true, `event ${e.key} noHitGoal should be true when present`);
   if (e.scoreBonus != null) between(e.scoreBonus, 0, 0.35, `event ${e.key} scoreBonus`);
   if (e.threatGainMult != null) between(e.threatGainMult, 1, 1.5, `event ${e.key} threatGainMult`);
   if (e.forceDrop) assert(drops.has(e.forceDrop), `event ${e.key} has invalid forceDrop ${e.forceDrop}`);
@@ -125,6 +127,10 @@ assert.strictEqual(aceHunt.enemyType, "gunner", "ace hunt should force durable g
 assert(aceHunt.minTime >= 90, "ace hunt should be a mid endless event");
 assert(aceHunt.eliteChance >= 0.6, "ace hunt should reliably spawn elites");
 assert(aceHunt.eliteGoal >= 3, "ace hunt should require multiple elite kills");
+const noHitRun = CONFIG.endless.events.find(e => e.key === "noHitRun");
+assert(noHitRun.minTime >= 60, "no-hit run should not appear immediately");
+assert.strictEqual(noHitRun.routeBias, "生存", "no-hit run should bias survival drafts");
+assert.strictEqual(noHitRun.noHitGoal, true, "no-hit run should require no hits");
 const recentEventKeys = CONFIG.endless.events.slice(0, 2).map(e => e.key);
 game.endless = true; game._endlessT = 999; game._endlessEvent = null; game._endlessRecentEvents = recentEventKeys.slice(); game._endlessEventsSeen = []; game._endlessStats = { events: 0, hits: 0 }; game._rng = () => 0;
 game.triggerEndlessEvent();
@@ -164,6 +170,16 @@ game.score = 0; game.floats = []; game._endlessStats = { hits: 0, eliteKills: ac
 assert(game.finishEndlessEvent(aceHunt) > 0, "elite-goal event should clear after enough elite kills");
 assert.strictEqual(game._endlessStats.eventClears, 1, "cleared elite-goal event should count as cleared");
 assert(game.endlessReviewTags({ telemetry: { eliteKills: 8 }, time: 90, bonuses: {} }).some(t => t.includes("精英猎手")), "elite kill review should tag elite hunters");
+game.score = 0; game.floats = []; game._endlessStats = { hits: 2, eventClears: 0, eventScore: 0 }; game._endlessEventStartHits = 1;
+assert.strictEqual(game.finishEndlessEvent(noHitRun), 0, "no-hit event should fail after taking a hit");
+assert.strictEqual(game._endlessStats.eventClears, 0, "failed no-hit event should not count as cleared");
+assert.strictEqual(game._endlessStats.eventFails, 1, "failed no-hit event should be tracked");
+assert(game.floats.some(f => f.text.includes("无伤失败")), "failed no-hit event should show feedback");
+assert(game.endlessEventHUDDetail(noHitRun).includes("受击1/1"), "no-hit event HUD should show failed hit progress");
+game.score = 0; game.floats = []; game._endlessStats = { hits: 1, eventClears: 0, eventScore: 0 }; game._endlessEventStartHits = 1;
+assert(game.endlessEventHUDDetail(noHitRun).includes("受击0/1"), "no-hit event HUD should show clean progress");
+assert(game.finishEndlessEvent(noHitRun) > 0, "no-hit event should clear without hits");
+assert.strictEqual(game._endlessStats.eventClears, 1, "cleared no-hit event should count as cleared");
 game.score = 0; game.floats = []; game._bonusRerolls = 0; game._endlessStats = { hits: 1 }; game._endlessEventStartHits = 1;
 const eventCleanGain = game.finishEndlessEvent(CONFIG.endless.events[0]);
 assert(eventCleanGain > eventHitGain, "clean event clear should grant bonus score");

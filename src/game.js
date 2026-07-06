@@ -222,8 +222,10 @@ const game = {
   },
   finishEndlessEvent(e) {
     if (!e || !this.player) return 0;
+    const hits = this._endlessStats ? (this._endlessStats.hits || 0) - (this._endlessEventStartHits || 0) : 0;
     const kills = this._endlessStats ? (this._endlessStats.kills || 0) - (this._endlessEventStartKills || 0) : 0;
     const eliteKills = this._endlessStats ? (this._endlessStats.eliteKills || 0) - (this._endlessEventStartEliteKills || 0) : 0;
+    if (e.noHitGoal && hits > 0) { if (this._endlessStats) this._endlessStats.eventFails = (this._endlessStats.eventFails || 0) + 1; this.floats.push(new FloatText(this.player.x, this.player.y - 78, "无伤失败 受击" + hits, e.color || "#adb5bd")); return 0; }
     if (e.killGoal && kills < e.killGoal) { if (this._endlessStats) this._endlessStats.eventFails = (this._endlessStats.eventFails || 0) + 1; this.floats.push(new FloatText(this.player.x, this.player.y - 78, "目标未达成 " + kills + "/" + e.killGoal, e.color || "#adb5bd")); return 0; }
     if (e.eliteGoal && eliteKills < e.eliteGoal) { if (this._endlessStats) this._endlessStats.eventFails = (this._endlessStats.eventFails || 0) + 1; this.floats.push(new FloatText(this.player.x, this.player.y - 78, "王牌未击破 " + eliteKills + "/" + e.eliteGoal, e.color || "#adb5bd")); return 0; }
     const cfg = CONFIG.endless, clean = this._endlessStats && this._endlessStats.hits === this._endlessEventStartHits;
@@ -2747,6 +2749,7 @@ const game = {
     if (!e) return "";
     const parts = [e.sub || ""].filter(Boolean);
     const pct = v => Math.round(v * 100) + "%";
+    if (e.noHitGoal) { const hits = Math.max(0, ((this._endlessStats || {}).hits || 0) - (this._endlessEventStartHits || 0)); parts.push("受击" + Math.min(hits, 1) + "/1"); }
     if (e.killGoal) { const kills = Math.max(0, ((this._endlessStats || {}).kills || 0) - (this._endlessEventStartKills || 0)); parts.push("目标击杀" + Math.min(kills, e.killGoal) + "/" + e.killGoal); }
     if (e.eliteGoal) { const kills = Math.max(0, ((this._endlessStats || {}).eliteKills || 0) - (this._endlessEventStartEliteKills || 0)); parts.push("王牌击破" + Math.min(kills, e.eliteGoal) + "/" + e.eliteGoal); }
     if (e.scoreBonus) parts.push("分+" + pct(e.scoreBonus));
