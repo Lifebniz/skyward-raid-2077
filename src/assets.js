@@ -72,6 +72,21 @@ const ImageAssets = {
         mid: "assets/images/backgrounds/world-05-mid.png",
         fg: "assets/images/backgrounds/world-05-fg.png",
       },
+      6: {
+        base: "assets/images/backgrounds/world-06-base.png",
+        mid: "assets/images/backgrounds/world-06-mid.png",
+        fg: "assets/images/backgrounds/world-06-fg.png",
+      },
+      7: {
+        base: "assets/images/backgrounds/world-07-base.png",
+        mid: "assets/images/backgrounds/world-07-mid.png",
+        fg: "assets/images/backgrounds/world-07-fg.png",
+      },
+      8: {
+        base: "assets/images/backgrounds/world-08-base.png",
+        mid: "assets/images/backgrounds/world-08-mid.png",
+        fg: "assets/images/backgrounds/world-08-fg.png",
+      },
     },
   },
   cache: {},
