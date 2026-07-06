@@ -72,6 +72,16 @@ assert.strictEqual(CONFIG.bonuses.damage.damageMult, 0.12, "damage bonus should 
 assert.strictEqual(CONFIG.bonuses.fireRate.cooldownMult, 0.08, "fireRate bonus should be toned down");
 assert.strictEqual(CONFIG.bonuses.perfectLine.damageMult, 0.10, "perfectLine damage should be toned down");
 assert.strictEqual(CONFIG.bonuses.bossHunter.bossDamageMult, 0.30, "bossHunter bonus should be toned down");
+const pickBuffCards = ["chip:chargeCore", "chip:capacitor", "bonus:maxHp", "bonus:livingArmor", "bonus:medicalReservoir", "bonus:repairLoop", "bonus:missileInterceptor", "bonus:comboBattery", "bonus:emergencyBarrier"];
+for (const id of pickBuffCards) {
+  const card = game.cardInfo(id), buff = card && card.pickBuff;
+  assert(buff && buff.label, `${id} should show a pick buff label`);
+  if (buff.energy) between(buff.energy, 1, 12, `${id} pick energy`);
+  if (buff.shield) between(buff.shield, 1, 14, `${id} pick shield`);
+  if (buff.healPct) between(buff.healPct, 0.01, 0.08, `${id} pick heal pct`);
+  if (buff.clearBullets) between(buff.clearBullets, 100, 180, `${id} pick clear range`);
+}
+assert(game.draftPickBuffText(game.cardInfo("bonus:missileInterceptor")).includes("附带"), "pick buff should be visible in draft preview");
 
 const enemyKeys = new Set(Object.keys(CONFIG.enemy));
 const shieldCarrier = CONFIG.enemy.shieldCarrier;
@@ -386,6 +396,27 @@ assert(game.draftCardWeight("bonus:eliteHunter") > eliteHunterBaseWeight, "elite
 game.drawChipChoices();
 assert(game._chipChoices.includes("bonus:eliteHunter"), "elite pressure draft should include eliteHunter");
 assert(game.draftEliteText(game.cardInfo("bonus:eliteHunter")).includes("精英"), "elite pressure cards should show counter text");
+const realBurst = game.burst;
+game.burst = () => {};
+game.player = {
+  x: 100, y: 100, hp: 50, maxHp: 100, energy: 0, shieldHp: 0,
+  addEnergy(n) { this.energy += n; },
+  heal(n) { this.hp = Math.min(this.maxHp, this.hp + n); },
+  grantShield(n, dur) { this.shieldHp = n; this.shieldTimer = dur; },
+};
+game.floats = []; game.shockwaves = []; game.enemies = [];
+game.enemyBullets = [{ x: 112, y: 100, dead: false }, { x: 310, y: 100, dead: false }];
+assert.strictEqual(game.applyDraftPickBuff(game.cardInfo("bonus:missileInterceptor")), true, "missileInterceptor pick buff should apply");
+assert(game.enemyBullets[0].dead && !game.enemyBullets[1].dead, "missileInterceptor pick buff should clear only nearby bullets");
+game.applyDraftPickBuff(game.cardInfo("chip:chargeCore"));
+assert.strictEqual(game.player.energy, CONFIG.chips.chargeCore.pickBuff.energy, "chargeCore pick buff should grant a small energy boost");
+game.applyDraftPickBuff(game.cardInfo("chip:capacitor"));
+assert(game.player.shieldHp > 0 && game.player.shieldTimer > 0, "capacitor pick buff should grant a small shield");
+game.applyDraftPickBuff(game.cardInfo("bonus:repairLoop"));
+assert(game.player.hp > 50, "repairLoop pick buff should immediately heal a little");
+assert(game.floats.some(f => f.text.includes("能量") || f.text.includes("护盾") || f.text.includes("修复") || f.text.includes("清弹")), "pick buffs should show float feedback");
+game.burst = realBurst;
+game.player = { power: CONFIG.powerup.chipMinPower, hp: 100, maxHp: 100 };
 game.state = "playing"; game._endlessT = CONFIG.powerup.chipMinEndlessTime - 0.01; game._lastChipDraftAt = -Infinity; game._nextChipDraftAt = 0; game._endlessStats = { drafts: 0 };
 assert.strictEqual(game.updateChipDraftTimer(), false, "draft timer should wait until the fixed delay");
 game._endlessT = CONFIG.powerup.chipMinEndlessTime;

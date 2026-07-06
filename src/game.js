@@ -691,7 +691,7 @@ const game = {
   },
   cardInfo(id) {
     const parts = id.split(":"), type = parts[0], key = parts[1], src = type === "chip" ? CONFIG.chips[key] : CONFIG.bonuses[key];
-    return src ? { type, key, name: src.name, desc: src.desc || "", color: src.color || "#4dabf7", rarity: src.rarity || "普通", weight: src.weight || 100 } : null;
+    return src ? { type, key, name: src.name, desc: src.desc || "", color: src.color || "#4dabf7", rarity: src.rarity || "普通", weight: src.weight || 100, pickBuff: src.pickBuff || null } : null;
   },
   buildRouteSummary(source = this.bonuses) {
     const routes = [
@@ -825,8 +825,15 @@ const game = {
     if (key === "swarmCore") return "追踪弹 +" + this.bonusValue(key, "extraCount") + "→+" + this.withDraftBonus(key, () => this.bonusValue(key, "extraCount"));
     return "";
   },
+  draftPickBuffText(card) {
+    const buff = card && card.pickBuff;
+    return buff && buff.label ? "附带 " + buff.label : "";
+  },
   draftPreviewText(card) {
-    return [this.draftStatPreviewText(card), this.routePreviewText(card)].filter(Boolean).join(" · ");
+    return [this.draftStatPreviewText(card), this.routePreviewText(card), this.draftPickBuffText(card)].filter(Boolean).join(" · ");
+  },
+  draftPickBuffTag(card) {
+    return card && card.pickBuff ? "附带Buff" : "";
   },
   draftEventBiasText(card) {
     const bias = this.activeEventRouteBias();
@@ -993,6 +1000,20 @@ const game = {
     Sound.powerup();
     return true;
   },
+  applyDraftPickBuff(card) {
+    const buff = card && card.pickBuff, p = this.player;
+    if (!buff || !p) return false;
+    if (buff.energy && p.addEnergy) p.addEnergy(buff.energy);
+    if (buff.shield && p.grantShield) p.grantShield(Math.min(buff.maxShield || 36, (p.shieldHp || 0) + buff.shield), buff.dur || 4);
+    if (buff.healPct && p.heal && p.maxHp) {
+      const before = p.hp;
+      p.heal(Math.max(1, Math.round(p.maxHp * buff.healPct)));
+      if (p.hp > before) this.triggerRepairPulse(p);
+    }
+    if (buff.clearBullets) this.clearEnemyBulletsNear(p.x, p.y, buff.clearBullets, card.color, "附带拦截");
+    this.floats.push(new FloatText(p.x, p.y - 86, buff.label || "附带Buff", card.color));
+    return true;
+  },
   chooseChip(i) {
     const card = this.cardInfo(this._chipChoices[i] || "");
     if (!card) return false;
@@ -1003,6 +1024,7 @@ const game = {
     this.resumeAfterDraft();
     if (card.type === "chip") this.activateChip(card.key, "芯片 " + card.name);
     else this.activateBonus(card.key);
+    this.applyDraftPickBuff(card);
     const afterResonance = card.type === "bonus" ? this.routeEffectText() : "";
     if (afterResonance && afterResonance !== beforeResonance && this.player) this.floats.push(new FloatText(this.player.x, this.player.y - 70, "路线共鸣 " + afterResonance, card.color));
     this.grantOverflowScore(card.color);
@@ -2063,7 +2085,7 @@ const game = {
       // GG:先给品质徽标预留出空间(badgeW+间距),标签行只在剩下的宽度里跑马灯,徽标最后单独画在最上层,
       //   两者绝不会互相覆盖——即使算错一两像素,徽标也画在标签之后,天然盖在标签上面而不是反过来。
       const badgeW = this.rarityBadgeWidth(ctx, card.rarity), tagMaxW = r.x + r.w - 18 - badgeW - 10 - (r.x + 88);
-      const tags = [this.draftSurvivalText(card), this.draftHpText(card), this.draftEventBiasText(card), this.draftFocusText(card), this.draftBossText(card), this.draftEliteText(card), this.draftShieldText(card)].filter(Boolean).join(" · ");
+      const tags = [this.draftPickBuffTag(card), this.draftSurvivalText(card), this.draftHpText(card), this.draftEventBiasText(card), this.draftFocusText(card), this.draftBossText(card), this.draftEliteText(card), this.draftShieldText(card)].filter(Boolean).join(" · ");
       ctx.fillStyle = rarityColor; ctx.font = "bold 13px 'Segoe UI', sans-serif";
       this.drawMarqueeText(ctx, (i + 1) + " · " + (card.type === "chip" ? "限时技能" : "永久 BONUS") + " · " + this.draftProgressText(card) + (tags ? " · " + tags : ""), r.x + 88, r.y + 25, tagMaxW);
       this.drawRarityBadge(ctx, r.x + r.w - 18, r.y + 28, card.rarity, rarityColor);
