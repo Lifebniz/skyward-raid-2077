@@ -785,6 +785,8 @@ const game = {
     if (!this._chipChoices.some(id => id.startsWith("bonus:")) && bonusPool.length) takeWeighted(bonusPool);
     const survivalPool = pool.filter(id => id.startsWith("bonus:") && this.draftCardRoute(this.cardInfo(id)) === "生存");
     if (!hasBonusRoute("生存") && survivalPool.length) takeWeighted(survivalPool);
+    const top = this.buildRouteSummary().top, routePool = top.score >= 3 ? pool.filter(id => this.draftCardRoute(this.cardInfo(id)) === top.name) : [];
+    if (this._chipChoices.length < 3 && top.score >= 3 && !hasBonusRoute(top.name) && routePool.length) takeWeighted(routePool);
     while (this._chipChoices.length < 3 && pool.length && takeWeighted(pool)) {}
   },
   beginChipDraft() {
