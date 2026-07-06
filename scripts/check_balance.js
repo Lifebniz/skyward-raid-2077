@@ -146,6 +146,12 @@ const exposedCore = affixes.find(a => a.key === "exposedCore");
 game.player = { hp: 100, maxHp: 100, shieldHp: 0 }; game.bonuses = {};
 game.boss = { isBoss: true, hp: 100, maxHp: 100, affix: exposedCore, _weakTimer: exposedCore.dur };
 assert(game.playerDamage(100, game.boss) > 100, "exposedCore should increase boss damage during weak window");
+const weakDamage = game.playerDamage(100, game.boss);
+game.bonuses = { weakScanner: 1 };
+assert(game.playerDamage(100, game.boss) > weakDamage, "weakScanner should increase weak window damage");
+game.floats = []; game.boss = { isBoss: true, x: 100, y: 100, radius: 40, hp: 100, maxHp: 100, affix: exposedCore, _weakTimer: 0 };
+game.openBossWeakPoint(game.boss, exposedCore);
+assert(game.boss._weakTimer > exposedCore.dur, "weakScanner should extend weak window duration");
 
 const bonusKeys = new Set(Object.keys(CONFIG.bonuses));
 for (const key of CONFIG.bonusOrder) assert(bonusKeys.has(key), `bonusOrder references missing bonus ${key}`);
@@ -159,6 +165,9 @@ between(CONFIG.bonuses.vitalReactor.damageMult, 0.02, 0.08, "vitalReactor damage
 between(CONFIG.bonuses.vitalReactor.maxDamageMult, 0.1, 0.4, "vitalReactor maxDamageMult");
 between(CONFIG.bonuses.shieldAmplifier.damageMult, 0.08, 0.3, "shieldAmplifier damageMult");
 between(CONFIG.bonuses.signalFilter.jamResist, 0.08, 0.3, "signalFilter jamResist");
+assert(bonusKeys.has("weakScanner"), "missing weak window build bonus");
+between(CONFIG.bonuses.weakScanner.weakDamageMult, 0.1, 0.5, "weakScanner weakDamageMult");
+between(CONFIG.bonuses.weakScanner.weakDuration, 0.2, 1.2, "weakScanner weakDuration");
 between(CONFIG.bonuses.livingArmor.every, 8, 18, "livingArmor kill interval");
 between(CONFIG.bonuses.livingArmor.hp, 1, 6, "livingArmor hp gain");
 between(CONFIG.bonuses.livingArmor.maxHp, 18, 60, "livingArmor max HP per stack");

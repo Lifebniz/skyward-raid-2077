@@ -552,7 +552,7 @@ const game = {
   playerDamage(d, target = null) {
     let m = 1 + this.bonusValue("damage", "damageMult") + this.bonusValue("glassCannon", "damageMult") + this.vitalReactorDamageMult() + this.shieldDamageMult() + this.adrenalineValue("damageMult");
     if (target && target.isBoss) m += this.bonusValue("bossHunter", "bossDamageMult");
-    if (target && target.isBoss && target._weakTimer > 0 && target.affix) m += target.affix.weakDamageMult || 0;
+    if (target && target.isBoss && target._weakTimer > 0 && target.affix) m += (target.affix.weakDamageMult || 0) + this.bonusValue("weakScanner", "weakDamageMult");
     if (target && target.maxHp && target.hp / target.maxHp <= (CONFIG.bonuses.executioner.threshold || 0)) m += this.bonusValue("executioner", "damageMult");
     return d * m;
   },
@@ -601,12 +601,12 @@ const game = {
   },
   buildRouteSummary(source = this.bonuses) {
     const routes = [
-      { name: "主炮", color: "#ffd43b", weights: { damage: 1, fireRate: 1, pierce: 2, kineticAmmo: 2, heavyRounds: 3, armorPiercer: 3, armorCaliber: 2, vitalReactor: 1, sideCannons: 3, chainSpark: 1, pointDefense: 1, shieldAmplifier: 1, executioner: 1, glassCannon: 1, overdrive: 1 } },
-      { name: "激光", color: "#cc5de8", weights: { damage: 1, range: 1, laserLens: 3, laserSplitter: 3, chargeAmp: 1, bossHunter: 1, glassCannon: 1 } },
+      { name: "主炮", color: "#ffd43b", weights: { damage: 1, fireRate: 1, pierce: 2, kineticAmmo: 2, heavyRounds: 3, armorPiercer: 3, armorCaliber: 2, vitalReactor: 1, sideCannons: 3, chainSpark: 1, pointDefense: 1, shieldAmplifier: 1, executioner: 1, glassCannon: 1, weakScanner: 1, overdrive: 1 } },
+      { name: "激光", color: "#cc5de8", weights: { damage: 1, range: 1, laserLens: 3, laserSplitter: 3, chargeAmp: 1, bossHunter: 1, weakScanner: 2, glassCannon: 1 } },
       { name: "追踪", color: "#4dabf7", weights: { range: 1, fireRate: 1, swarmCore: 3, homingShards: 3, signalFilter: 2, magnetCore: 1, comboBattery: 1, comboSurge: 1 } },
-      { name: "导弹", color: "#ff922b", weights: { missileRack: 3, explosivePayload: 3, clusterWarheads: 3, missileInterceptor: 2, fireRate: 1, range: 1, bossHunter: 1 } },
+      { name: "导弹", color: "#ff922b", weights: { missileRack: 3, explosivePayload: 3, clusterWarheads: 3, missileInterceptor: 2, fireRate: 1, range: 1, bossHunter: 1, weakScanner: 2 } },
       { name: "生存", color: "#38d9a9", weights: { maxHp: 2, reinforcedHull: 3, armorPlating: 3, fieldRepair: 3, leech: 2, livingArmor: 3, painConverter: 1, salvage: 2, shieldAmplifier: 3, armorCaliber: 2, vitalReactor: 3, reactiveArmor: 2, lastStand: 3, emergencyBarrier: 3, magnetCore: 1, pointDefense: 2, missileInterceptor: 1, signalFilter: 1 } },
-      { name: "风险", color: "#ff6b6b", weights: { glassCannon: 3, overdrive: 3, adrenaline: 3, painConverter: 2, comboSurge: 2, executioner: 1, bossHunter: 1 } },
+      { name: "风险", color: "#ff6b6b", weights: { glassCannon: 3, overdrive: 3, adrenaline: 3, painConverter: 2, comboSurge: 2, executioner: 1, bossHunter: 1, weakScanner: 1 } },
     ].map(r => {
       const score = Object.keys(r.weights).reduce((sum, key) => sum + (source[key] || 0) * r.weights[key], 0);
       const stage = score >= 7 ? "成型" : score >= 3 ? "偏向" : "起步";
@@ -697,6 +697,7 @@ const game = {
     if (key === "armorPiercer") return "高血主炮 +" + pct(this.bonusValue(key, "heavyDamageMult")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "heavyDamageMult")));
     if (key === "shieldAmplifier") return "有盾伤害 +" + pct(this.bonusValue(key, "damageMult")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "damageMult")));
     if (key === "signalFilter") return "干扰抗性 +" + pct(this.bonusValue(key, "jamResist")) + "→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "jamResist")));
+    if (key === "weakScanner") return "弱点 +" + pct(this.bonusValue(key, "weakDamageMult")) + " / +" + num(this.bonusValue(key, "weakDuration")) + "s→+" + pct(this.withDraftBonus(key, () => this.bonusValue(key, "weakDamageMult"))) + " / +" + num(this.withDraftBonus(key, () => this.bonusValue(key, "weakDuration"))) + "s";
     if (["damage", "glassCannon", "bossHunter"].includes(key)) return "伤害倍率 " + pct(this.playerDamage(1, { isBoss: key === "bossHunter", hp: 1, maxHp: 1 })) + "→" + pct(this.withDraftBonus(key, () => this.playerDamage(1, { isBoss: key === "bossHunter", hp: 1, maxHp: 1 })));
     if (["fireRate", "overdrive"].includes(key)) return "武器冷却 " + pct(this.weaponCooldownMult()) + "→" + pct(this.withDraftBonus(key, () => this.weaponCooldownMult()));
     if (["armorPlating"].includes(key)) return "承伤 " + pct(this.damageTakenMult()) + "→" + pct(this.withDraftBonus(key, () => this.damageTakenMult()));
@@ -1073,7 +1074,7 @@ const game = {
     Sound.tone(620, 0.08, "triangle", 0.1, 180);
   },
   openBossWeakPoint(b, a) {
-    b._weakTimer = a.dur || 2.5;
+    b._weakTimer = (a.dur || 2.5) + this.bonusValue("weakScanner", "weakDuration");
     this.floats.push(new FloatText(b.x, b.y - b.radius - 22, "弱点暴露 +" + Math.round((a.weakDamageMult || 0) * 100) + "%", a.color));
     return true;
   },
@@ -2534,6 +2535,7 @@ const game = {
     if (key === "vitalReactor" && n > 0) return b.name + " +" + Math.round(this.vitalReactorDamageMult() * 100) + "%";
     if (key === "shieldAmplifier" && n > 0) return b.name + " +" + Math.round(this.bonusValue(key, "damageMult") * 100) + "%" + (this.player && this.player.shieldHp > 0 ? " 激活" : "");
     if (key === "signalFilter" && n > 0) return b.name + " +" + Math.round(this.bonusValue(key, "jamResist") * 100) + "%";
+    if (key === "weakScanner" && n > 0) return b.name + " +" + Math.round(this.bonusValue(key, "weakDamageMult") * 100) + "% +" + (Math.round(this.bonusValue(key, "weakDuration") * 10) / 10) + "s";
     return b.name + "×" + n;
   },
   drawEndlessEventHUD(ctx) {

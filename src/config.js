@@ -95,7 +95,7 @@ const CONFIG = {
     sideGuns: { name: "侧翼炮组", desc: "主炮附加斜向火力", color: "#ffd43b", duration: 10, angle: 22 },
     volatileCore: { name: "危险过载", desc: "分数更高,承伤也更高", color: "#ff6b6b", duration: 9, scoreBonus: 0.35, threatGainMult: 1.35, damageTakenMult: 1.18 },
   },
-  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "leech", "livingArmor", "painConverter", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "shieldAmplifier", "kineticAmmo", "heavyRounds", "armorPiercer", "armorCaliber", "vitalReactor", "sideCannons", "laserLens", "laserSplitter", "swarmCore", "homingShards", "signalFilter", "explosivePayload", "clusterWarheads", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "adrenaline", "emergencyBarrier", "overdrive"],
+  bonusOrder: ["damage", "fireRate", "range", "maxHp", "reinforcedHull", "armorPlating", "fieldRepair", "leech", "livingArmor", "painConverter", "missileRack", "pierce", "chainSpark", "pointDefense", "salvage", "shieldAmplifier", "kineticAmmo", "heavyRounds", "armorPiercer", "armorCaliber", "vitalReactor", "sideCannons", "laserLens", "laserSplitter", "swarmCore", "homingShards", "signalFilter", "explosivePayload", "clusterWarheads", "missileInterceptor", "magnetCore", "comboBattery", "comboSurge", "chargeAmp", "executioner", "reactiveArmor", "lastStand", "glassCannon", "bossHunter", "weakScanner", "adrenaline", "emergencyBarrier", "overdrive"],
   bonuses: {
     damage: { name: "火力校准", desc: "全武器伤害 +15%", color: "#ff6b6b", damageMult: 0.15 },
     fireRate: { name: "加速扳机", desc: "主炮/副武器射速 +10%", color: "#4dabf7", cooldownMult: 0.10 },
@@ -136,6 +136,7 @@ const CONFIG = {
     lastStand: { name: "黑匣子保险", desc: "致命伤保留 1 生命并展开护盾", color: "#845ef7", rarity: "史诗", weight: 12, shield: 32, maxShield: 90, dur: 5, cooldown: 70 },
     glassCannon: { name: "玻璃大炮", desc: "全武器伤害 +35%,承伤 +20%", color: "#ff6b6b", rarity: "稀有", weight: 28, damageMult: 0.35, damageTakenMult: 0.20 },
     bossHunter: { name: "猎首协议", desc: "对 Boss 伤害 +40%", color: "#cc5de8", rarity: "稀有", weight: 30, bossDamageMult: 0.40 },
+    weakScanner: { name: "弱点标定", desc: "Boss弱点窗口 +0.4秒,弱点伤害 +25%", color: "#ffd43b", rarity: "稀有", weight: 26, weakDamageMult: 0.25, weakDuration: 0.4 },
     adrenaline: { name: "肾上腺素", desc: "半血以下伤害和射速大幅提升", color: "#ff8787", rarity: "史诗", weight: 16, threshold: 0.5, damageMult: 0.30, cooldownMult: 0.18 },
     emergencyBarrier: { name: "应急力场", desc: "低血量受伤自动展开护盾", color: "#74c0fc", rarity: "史诗", weight: 14, threshold: 0.35, shield: 28, maxShield: 70, dur: 6, cooldown: 18 },
     overdrive: { name: "过载弹幕", desc: "射速 +25%,承伤 +15%", color: "#ffd43b", rarity: "史诗", weight: 12, cooldownMult: 0.25, damageTakenMult: 0.15 },
@@ -287,7 +288,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 44, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 45, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
