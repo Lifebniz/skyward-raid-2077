@@ -5,6 +5,8 @@ const vm = require("vm");
 const assert = require("assert");
 
 const sandbox = { console, Math };
+sandbox.Settings = { data: { controlMode: "touch" } };
+sandbox.input = { targetX: 270, targetY: 800, joyDX: 0, joyDY: 0 };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync("src/config.js", "utf8") + "\nglobalThis.CONFIG = CONFIG;", sandbox);
 vm.runInContext(fs.readFileSync("src/core.js", "utf8"), sandbox);
@@ -18,9 +20,10 @@ sandbox.pools = {
   enemyBullet: { get(x, y, vx, vy, damage, opts) { return { x, y, vx, vy, damage, dead: false, kind: opts && opts.kind || "", radius: opts && opts.radius || CONFIG.enemyBullet.radius }; } },
   homingShot: { get(x, y, overcharge) { return { x, y, overcharge }; } },
 };
-sandbox.Sound = { powerup() {}, tone() {} };
-vm.runInContext(fs.readFileSync("src/entities.js", "utf8") + "\nglobalThis.Enemy = Enemy; globalThis.EnemyBullet = EnemyBullet; globalThis.Missile = Missile; globalThis.PlayerLaser = PlayerLaser; globalThis.Boss = Boss;", sandbox);
-const { Enemy, EnemyBullet, Missile, PlayerLaser, Boss } = sandbox;
+sandbox.Sound = { powerup() {}, tone() {}, laser() {} };
+sandbox.Haptics = { powerup() {} };
+vm.runInContext(fs.readFileSync("src/entities.js", "utf8") + "\nglobalThis.Player = Player; globalThis.Enemy = Enemy; globalThis.EnemyBullet = EnemyBullet; globalThis.Missile = Missile; globalThis.PlayerLaser = PlayerLaser; globalThis.Boss = Boss;", sandbox);
+const { Player, Enemy, EnemyBullet, Missile, PlayerLaser, Boss } = sandbox;
 
 const between = (value, min, max, label) => assert(value >= min && value <= max, `${label} ${value} outside ${min}-${max}`);
 const unique = (items, label) => assert.strictEqual(new Set(items).size, items.length, `${label} has duplicate keys`);
@@ -32,7 +35,7 @@ assert.strictEqual(CONFIG.player.maxPower, 8, "player max power should allow one
 assert.strictEqual(CONFIG.player.maxOvercharge, 8, "player overcharge cap should allow longer endless scaling");
 assert.strictEqual(CONFIG.wingMax, 5, "wing cap should allow stronger endless scaling");
 assert(CONFIG.weapon[CONFIG.player.maxPower], "maxPower should have a weapon pattern");
-assert.strictEqual(CONFIG.challenge.rulesVersion, 85, "challenge rules should bump for enemy durability tuning");
+assert.strictEqual(CONFIG.challenge.rulesVersion, 86, "challenge rules should bump for automatic charge release");
 assert(CONFIG.endlessDifficulties && CONFIG.endlessDifficulties.normal && CONFIG.endlessDifficulties.hell, "endless difficulties should define normal and hell");
 assert(CONFIG.endlessDifficulties.normal.enemyHpMult < CONFIG.endlessDifficulties.hell.enemyHpMult, "normal endless enemies should have less HP than hell");
 assert(CONFIG.endlessDifficulties.normal.bossHpMult < CONFIG.endlessDifficulties.hell.bossHpMult, "normal endless bosses should have less HP than hell");
@@ -793,6 +796,22 @@ assert(routeMissile.damage > baseMissile.damage && routeMissile.splash > baseMis
 game.bonuses = {}; const baseLaser = new PlayerLaser(100, 100, 0);
 game.bonuses = { laserLens: 3 }; const routeLaser = new PlayerLaser(100, 100, 0);
 assert(routeLaser.damage > baseLaser.damage && routeLaser.life > baseLaser.life, "laser route should increase laser damage and duration");
+const realSpawnPlayerLaser = game.spawnPlayerLaser, realSpawnShockwave = game.spawnShockwave;
+game.endless = false; game.endlessLite = false; game.state = "playing"; game.ship = CONFIG.ships.balanced; game.diff = CONFIG.difficulties.normal;
+game.chips = {}; game.bonuses = {}; game.playerLasers = []; game.shockwaves = []; game.floats = [];
+game.player = new Player(); game.player.power = CONFIG.charge.minPower; game.player._fireTimer = 999; game.player._flameTimer = 999;
+sandbox.input.targetX = game.player.x; sandbox.input.targetY = game.player.y;
+game.spawnPlayerLaser = function(x, y, overcharge) { this.playerLasers.push({ x, y, overcharge }); };
+game.spawnShockwave = function(x, y, maxR, color) { this.shockwaves.push({ x, y, maxR, color }); };
+game.player.update(0.01);
+assert(game.player.charging, "charge weapon should start charging automatically when ready");
+game.player.charge = CONFIG.charge.max - 0.01;
+game.player.update(0.02);
+assert.strictEqual(game.player.charging, false, "charge weapon should auto release at full charge");
+assert.strictEqual(game.player.charge, 0, "auto released charge should reset charge meter");
+assert.strictEqual(game.playerLasers.length, 1, "auto released charge should fire one laser");
+assert(game.player.chargeCooldown > 0, "auto released charge should enter cooldown");
+game.spawnPlayerLaser = realSpawnPlayerLaser; game.spawnShockwave = realSpawnShockwave;
 game.bonuses = {}; assert.strictEqual(game.homingVolleyBonus(), 0, "homing route should not add shots before ready");
 game.bonuses = { swarmCore: 3 }; assert.strictEqual(game.homingVolleyBonus(), 1, "homing route should add one homing shot when ready");
 assert(game.homingCooldownMult() < 1 && game.routeEffectText().includes("追踪+1"), "homing route should speed up and show resonance text");

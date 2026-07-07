@@ -41,7 +41,11 @@ class Player {
     if (this.invulnTimer > 0) this.invulnTimer -= dt;
     if (this.specialCooldown > 0) this.specialCooldown -= dt;
     if (this.chargeCooldown > 0) this.chargeCooldown -= dt;
-    if (this.charging) this.charge = Math.min(CONFIG.charge.max, this.charge + dt * game.chipValue("chargeCore", "chargeRate", 1) * game.shipWeaponValue("chargeRate", 1));
+    if (!this.charging && game.chargeReady()) game.startCharge();
+    if (this.charging) {
+      this.charge = Math.min(CONFIG.charge.max, this.charge + dt * game.chipValue("chargeCore", "chargeRate", 1) * game.shipWeaponValue("chargeRate", 1));
+      if (this.charge >= CONFIG.charge.max) game.releaseCharge();
+    }
     if (this.stealthTimer > 0) this.stealthTimer -= dt;
     if (this.shieldTimer > 0) { this.shieldTimer -= dt; if (this.shieldTimer <= 0) { this.shieldHp = 0; this.shieldMax = 0; } }
     this.addEnergy(CONFIG.special.passiveGainPerSec * dt);   // X3:必杀能量随时间缓慢自然回复,不完全依赖击杀
