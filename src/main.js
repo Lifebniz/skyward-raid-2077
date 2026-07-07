@@ -15,7 +15,9 @@ Progress.load();                                   // 载入关卡进度
 Achievements.load();                               // OO:载入成就进度
 game.diff = CONFIG.difficulties[Settings.data.diff];
 game.ship = CONFIG.ships[Settings.data.ship] || CONFIG.ships.balanced;
-game.autoNext = Settings.data.autoNext !== false;
+game.autoNext = !!Settings.data.autoNext;
+game.autoSpecial = !!Settings.data.autoSpecial;
+game.autoLaser = !!Settings.data.autoLaser;
 if (Settings.data.seenTutorial) game.toTitle(); else game.toTutorial();   // FF:首次启动自动展示新手引导
 let last = performance.now();
 function loop(now) {

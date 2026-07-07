@@ -1065,31 +1065,39 @@ class PowerUp {
     }
     ctx.globalAlpha = 0.75; ImageAssets.draw(ctx, ImageAssets.effect("powerupGlow"), x, y, r * 3.1); ctx.globalAlpha = 1;
     if (ImageAssets.draw(ctx, ImageAssets.uiPowerup(this.kind), x, y, r * 2.5)) { ctx.restore(); return; }
-    ctx.shadowColor = bg; ctx.shadowBlur = 12 * pulse;
-    const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, 2, x, y, r * 1.4);
-    g.addColorStop(0, UI.shade(bg, 0.55)); g.addColorStop(0.65, bg); g.addColorStop(1, UI.shade(bg, -0.45));
-    UI.roundRect(ctx, x - r, y - r, r * 2, r * 2, 6); ctx.fillStyle = g; ctx.fill();
+    drawPowerupToken(ctx, x, y, r, this.kind, bg, 12 * pulse);
     ctx.restore();
-    UI.roundRect(ctx, x - r + 1.5, y - r + 1.5, r * 2 - 3, r * 2 - 3, 5);
-    ctx.strokeStyle = "rgba(255,255,255,.92)"; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = "#fff";
-    if (this.kind === "heal") {           // 血包:白色十字
-      ctx.fillRect(x - 3, y - 8, 6, 16); ctx.fillRect(x - 8, y - 3, 16, 6);
-    } else if (this.kind === "power") {   // 火力:白色双上箭头
-      for (let k = 0; k < 2; k++) { const oy = k * 8 - 4; ctx.beginPath(); ctx.moveTo(x, y + oy - 4); ctx.lineTo(x - 7, y + oy + 4); ctx.lineTo(x + 7, y + oy + 4); ctx.closePath(); ctx.fill(); }
-    } else if (this.kind === "chip") {
-      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4); ctx.fillRect(-7, -7, 14, 14); ctx.restore();
-      ctx.fillStyle = "#4dabf7"; ctx.fillRect(x - 3, y - 3, 6, 6);
-      ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.6;
-      for (const [dx, dy] of [[0, -11], [11, 0], [0, 11], [-11, 0]]) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + dx, y + dy); ctx.stroke(); }
-    } else if (this.kind === "bomb") {     // 炸弹:圆弹体 + 引线 + 火星
-      ctx.beginPath(); ctx.arc(x, y + 2, 7, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x + 8, y - 9); ctx.stroke();
-      ctx.fillStyle = "#ffd43b"; ctx.beginPath(); ctx.arc(x + 9, y - 10, 2.6, 0, Math.PI * 2); ctx.fill();
-    } else {                              // 僚机:两片小机翼
-      ctx.beginPath(); ctx.moveTo(x - 2, y - 8); ctx.lineTo(x - 11, y + 6); ctx.lineTo(x - 2, y + 3); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(x + 2, y - 8); ctx.lineTo(x + 11, y + 6); ctx.lineTo(x + 2, y + 3); ctx.closePath(); ctx.fill();
-    }
+  }
+}
+// OO:掉落物图标的完整绘制(渐变底 + 描边 + 白色图案)——单独抽出来,图鉴的道具页直接复用,
+// 保证图鉴里看到的图案和局内实际掉落的道具像素级一致,不用维护两份画法。
+function drawPowerupToken(ctx, x, y, r, kind, bg, glowBlur = 8) {
+  bg = bg || { heal: "#e03131", power: "#2f9e44", bomb: "#5f3dc4", wing: "#495057", chip: "#4dabf7" }[kind] || "#adb5bd";
+  ctx.save(); ctx.shadowColor = bg; ctx.shadowBlur = glowBlur;
+  const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, 2, x, y, r * 1.4);
+  g.addColorStop(0, UI.shade(bg, 0.55)); g.addColorStop(0.65, bg); g.addColorStop(1, UI.shade(bg, -0.45));
+  UI.roundRect(ctx, x - r, y - r, r * 2, r * 2, 6); ctx.fillStyle = g; ctx.fill();
+  ctx.restore();
+  UI.roundRect(ctx, x - r + 1.5, y - r + 1.5, r * 2 - 3, r * 2 - 3, 5);
+  ctx.strokeStyle = "rgba(255,255,255,.92)"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = "#fff";
+  const s = r / 14;
+  if (kind === "heal") {           // 血包:白色十字
+    ctx.fillRect(x - 3 * s, y - 8 * s, 6 * s, 16 * s); ctx.fillRect(x - 8 * s, y - 3 * s, 16 * s, 6 * s);
+  } else if (kind === "power") {   // 火力:白色双上箭头
+    for (let k = 0; k < 2; k++) { const oy = k * 8 * s - 4 * s; ctx.beginPath(); ctx.moveTo(x, y + oy - 4 * s); ctx.lineTo(x - 7 * s, y + oy + 4 * s); ctx.lineTo(x + 7 * s, y + oy + 4 * s); ctx.closePath(); ctx.fill(); }
+  } else if (kind === "chip") {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4); ctx.fillRect(-7 * s, -7 * s, 14 * s, 14 * s); ctx.restore();
+    ctx.fillStyle = "#4dabf7"; ctx.fillRect(x - 3 * s, y - 3 * s, 6 * s, 6 * s);
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.6;
+    for (const [dx, dy] of [[0, -11], [11, 0], [0, 11], [-11, 0]]) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + dx * s, y + dy * s); ctx.stroke(); }
+  } else if (kind === "bomb") {     // 炸弹:圆弹体 + 引线 + 火星
+    ctx.beginPath(); ctx.arc(x, y + 2 * s, 7 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 4 * s, y - 4 * s); ctx.lineTo(x + 8 * s, y - 9 * s); ctx.stroke();
+    ctx.fillStyle = "#ffd43b"; ctx.beginPath(); ctx.arc(x + 9 * s, y - 10 * s, 2.6 * s, 0, Math.PI * 2); ctx.fill();
+  } else {                          // 僚机:两片小机翼
+    ctx.beginPath(); ctx.moveTo(x - 2 * s, y - 8 * s); ctx.lineTo(x - 11 * s, y + 6 * s); ctx.lineTo(x - 2 * s, y + 3 * s); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x + 2 * s, y - 8 * s); ctx.lineTo(x + 11 * s, y + 6 * s); ctx.lineTo(x + 2 * s, y + 3 * s); ctx.closePath(); ctx.fill();
   }
 }
 

@@ -69,7 +69,11 @@ canvas.addEventListener("pointerdown", (e) => {
     const i = game.clearedMenuHit(p.x, p.y); if (i === 0) game.settle(game.autoNext); else if (i === 1) game.startFarm(); return;
   }
   // UU:BUG修复——按钮文案是"返回首页"但之前调的是 toMap()(尤其无尽模式下,无尽没有"当前关卡"概念,落到地图页很莫名其妙)
-  if (game.state === "paused") { const i = game.pauseMenuHit(p.x, p.y); if (i === 0) game.resume(); else if (i === 1) { game._resetArmed = false; game._settingsReturnState = "paused"; game.state = "settings"; } else if (i === 2) { game.endless = false; game.toTitle(); } else if (i === 3 && game.endless) game.settleEndless(); return; }
+  if (game.state === "paused") {
+    if (game.pauseToggleHit(0, p.x, p.y)) { game.autoSpecial = !game.autoSpecial; Settings.set("autoSpecial", game.autoSpecial); return; }
+    if (game.pauseToggleHit(1, p.x, p.y)) { game.autoLaser = !game.autoLaser; Settings.set("autoLaser", game.autoLaser); return; }
+    const i = game.pauseMenuHit(p.x, p.y); if (i === 0) game.resume(); else if (i === 1) { game._resetArmed = false; game._settingsReturnState = "paused"; game.state = "settings"; } else if (i === 2) { game.endless = false; game.toTitle(); } else if (i === 3 && game.endless) game.settleEndless(); return;
+  }
   if (game.state !== "playing") { game.toMap(); return; }                                            // 结算/失败界面 → 返回地图
   if (game.farming && game.settleButtonHit(p.x, p.y)) { game.settle(); return; }                     // 刷分中点结算
   if (game.specialButtonHit(p.x, p.y)) { game.useSpecial(); return; }                                // 必杀按钮
@@ -88,6 +92,7 @@ canvas.addEventListener("pointermove", (e) => {
   if (game.state === "settings" && game._sliderDrag === "sfx") { game.setSfxVolumeFromX(p.x); return; }
   if (game.state === "settings" && game._sliderDrag === "music") { game.setMusicVolumeFromX(p.x); return; }
   if (game.state === "map" && game._mapDragging) { game.mapPointerMove(p.x, p.y); return; }
+  if (game.state === "codex" && game._codexUpgradeDragging) { game.codexUpgradePointerMove(p.y); return; }
   // YY:忽略非移动手指发来的坐标——否则点技能/炸弹/暂停按钮的那根手指稍微一动就会把飞机的移动目标改成按钮位置
   if (e.pointerId !== input.movePointerId) return;
   if (input.joystickActive) { updateJoystick(p.x, p.y); return; }
@@ -101,12 +106,12 @@ canvas.addEventListener("pointerup", (e) => {
   if (game.state === "codex" && game._codexDragging) { const p = toLogic(e.clientX, e.clientY); game.codexSwipe(p.x); }
   if (game.state === "tutorial" && game._tutorialDragging) { const p = toLogic(e.clientX, e.clientY); game.tutorialSwipe(p.x); }
   if (game.state === "map" && game._mapDragging) { const p = toLogic(e.clientX, e.clientY); game.mapPointerUp(p.x, p.y); }
-  game._shipDragging = false; game._codexDragging = false; game._tutorialDragging = false; game._mapDragging = false;
+  game._shipDragging = false; game._codexDragging = false; game._tutorialDragging = false; game._mapDragging = false; game._codexUpgradeDragging = false;
 });
 canvas.addEventListener("pointercancel", (e) => {
   if (e.pointerId === input.chargePointerId) { game.releaseCharge(); input.chargePointerId = null; }
   if (e.pointerId === input.movePointerId) { input.dragging = false; resetJoystick(); input.movePointerId = null; }
-  game._sliderDrag = false; game._shipDragging = false; game._codexDragging = false; game._tutorialDragging = false; game._mapDragging = false;
+  game._sliderDrag = false; game._shipDragging = false; game._codexDragging = false; game._tutorialDragging = false; game._mapDragging = false; game._codexUpgradeDragging = false;
 });
 window.addEventListener("keydown", (e) => {
   Sound.resume(); Music.resume(true);

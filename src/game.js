@@ -19,14 +19,16 @@ const game = {
   _hpTrailRatio: 1,   // AA:血条"残影"—— 掉血后缓慢跟随下降,做视觉反馈
   _lastState: "title", _stateFadeT: 1,   // BB:菜单/覆盖层统一淡入(状态一变就重置为0,0.3秒淡到1)
   _settleAnimT: 0,   // BB:结算类数字滚动动画计时
-  _codexBossIdx: 0, _codexDragStartX: 0, _codexDragging: false, _codexTab: "guide",   // Z:首页图鉴(关卡预览+BOSS轮播)+ OO:成就标签
+  _codexBossIdx: 0, _codexDragStartX: 0, _codexDragging: false, _codexTab: "boss",   // Z:首页图鉴(关卡预览+BOSS轮播)+ OO:成就/道具/强化标签
+  _codexUpgradeScrollY: 0, _codexUpgradeDragStartY: 0, _codexUpgradeDragStartScroll: 0, _codexUpgradeDragging: false,   // OO:强化图鉴纵向滚动
   _tutorialPage: 0, _tutorialDragStartX: 0, _tutorialDragging: false,   // FF:新手引导翻页
   // MM:地图纵向滚动(为世界数超过一屏做准备)+ 拖动/点击手势区分
   _mapScrollY: 0, _mapDragStartX: 0, _mapDragStartY: 0, _mapDragStartScrollY: 0, _mapDragging: false, _mapDragMoved: false,
   _mapHighlightId: null, _mapHighlightT: 0,   // MM:从图鉴跳转过来时高亮提示的关卡
   _levelTransX: 0, _levelTransY: 0, _levelTransT: 0,   // NN:进入关卡的聚焦扩散过渡(从点击处展开)
   _worldTransFrom: 1, _worldTransT: 99,   // VV:战斗中背景世界切换的交叉淡入
-  autoNext: true, endless: false, endlessLite: false, _endlessFrom: "title", challengeSeed: "", challengeMode: false, challengeDaily: false, challengeTarget: null, challengeSplits: [], rivalInterference: null, _rng: null, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0, _endlessEventT: 0, _endlessEventTimer: 0, _endlessEvent: null, _endlessHazardT: 0, _endlessEventStartHits: 0, _endlessEventStartKills: 0, _endlessEventStartEliteKills: 0, _endlessEventsSeen: [], _endlessRecentEvents: [], _endlessStats: null, _endlessTimeline: [], _endlessMarkIdx: 0,
+  autoNext: false, autoSpecial: false, autoLaser: false,   // OO:三项默认均不勾选(结算/技能/激光自动化,用户可在结算页/暂停页开启)
+  endless: false, endlessLite: false, _endlessFrom: "title", challengeSeed: "", challengeMode: false, challengeDaily: false, challengeTarget: null, challengeSplits: [], rivalInterference: null, _rng: null, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0, _endlessEventT: 0, _endlessEventTimer: 0, _endlessEvent: null, _endlessHazardT: 0, _endlessEventStartHits: 0, _endlessEventStartKills: 0, _endlessEventStartEliteKills: 0, _endlessEventsSeen: [], _endlessRecentEvents: [], _endlessStats: null, _endlessTimeline: [], _endlessMarkIdx: 0,
   _endlessBossAffixesSeen: [], _endlessRecentBossAffixes: [],
   _shake: 0, _shakeT: 0, _hitStopT: 0,   // N:打击感
   // 触控按钮放大,便于拇指操作
@@ -78,9 +80,11 @@ const game = {
   },
 
   // ── Z:首页图鉴(关卡预览网格 + BOSS轮播 + OO:成就标签页,独立于机型选择页的拖拽状态)──
-  toCodex() { this.state = "codex"; this._codexBossIdx = 0; this._codexTab = "guide"; },
+  toCodex() { this.state = "codex"; this._codexBossIdx = 0; this._codexTab = "boss"; },
   codexBackRect() { return { x: 20, y: 28, w: 90, h: 36 }; },
-  codexTabRect(i) { const w = 140, gap = 12, total = 2 * w + gap, x0 = (CONFIG.WIDTH - total) / 2; return { x: x0 + i * (w + gap), y: 70, w, h: 36 }; },
+  // OO:图鉴四个标签(BOSS/道具/强化/成就),固定顺序,标签名/配色见 drawCodex
+  codexTabKeys() { return ["boss", "item", "upgrade", "achievements"]; },
+  codexTabRect(i) { const w = 118, gap = 8, total = 4 * w + 3 * gap, x0 = (CONFIG.WIDTH - total) / 2; return { x: x0 + i * (w + gap), y: 70, w, h: 36 }; },
   // OO:加了标签页之后网格/BOSS卡片整体下移,这里是唯一算 BOSS 卡片顶部 y 的地方,箭头/点击区/drawCodex 都从这取,不要各自硬编数字
   // WW:行数原来硬编码成3(对应12关/4列正好3行),第5世界加进来后关卡数变15,网格变成4行,
   //   硬编码3还按老高度算的话 BOSS 区域会往上盖住网格第4行——改成按 LEVELS.length 动态算行数。
@@ -93,19 +97,34 @@ const game = {
   codexPointerDown(px, py) {
     const inR = (r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
     if (inR(this.codexBackRect())) { this.toTitle(); return; }
-    if (inR(this.codexTabRect(0))) { this._codexTab = "guide"; return; }
-    if (inR(this.codexTabRect(1))) { this._codexTab = "achievements"; return; }
-    if (this._codexTab !== "guide") return;   // OO:成就页没有左右滑动/箭头这些交互
+    const tabs = this.codexTabKeys();
+    for (let i = 0; i < tabs.length; i++) if (inR(this.codexTabRect(i))) { this._codexTab = tabs[i]; return; }
+    if (this._codexTab === "upgrade") {   // OO:强化图鉴纵向拖动滚动,和地图节点区域同一套手感
+      this._codexUpgradeDragStartY = py; this._codexUpgradeDragStartScroll = this._codexUpgradeScrollY; this._codexUpgradeDragging = true;
+      return;
+    }
+    if (this._codexTab !== "boss") return;   // OO:成就/道具页没有左右滑动/箭头这些交互
     if (inR(this.codexArrowRect(-1))) { this._codexBossIdx = (this._codexBossIdx - 1 + CONFIG.bosses.length) % CONFIG.bosses.length; return; }
     if (inR(this.codexArrowRect(1))) { this._codexBossIdx = (this._codexBossIdx + 1) % CONFIG.bosses.length; return; }
     if (inR(this.codexAppearRect()) && bossLevelIds(this._codexBossIdx).length) { this.jumpToLevelFromCodex(this._codexBossIdx); return; }
     this._codexDragStartX = px; this._codexDragging = true;
   },
   codexSwipe(px) {
-    if (this._codexTab !== "guide") return;
+    if (this._codexTab !== "boss") return;
     const dx = px - this._codexDragStartX, n = CONFIG.bosses.length;
     if (dx < -40) this._codexBossIdx = (this._codexBossIdx + 1) % n;
     else if (dx > 40) this._codexBossIdx = (this._codexBossIdx - 1 + n) % n;
+  },
+  // OO:强化图鉴(无限挑战强化词条)纵向滚动区域 —— 和地图节点区域(mapViewportRect/mapMaxScroll)同一套算法
+  codexUpgradeViewportRect() { return { top: 118, bottom: CONFIG.HEIGHT - 56 }; },
+  codexUpgradeRowH() { return 62; },
+  codexUpgradeGap() { return 8; },
+  codexUpgradeContentH() { return CONFIG.bonusOrder.length * (this.codexUpgradeRowH() + this.codexUpgradeGap()) - this.codexUpgradeGap(); },
+  codexUpgradeMaxScroll() { const vp = this.codexUpgradeViewportRect(); return Math.max(0, this.codexUpgradeContentH() - (vp.bottom - vp.top)); },
+  codexUpgradePointerMove(py) {
+    if (!this._codexUpgradeDragging) return;
+    const dy = py - this._codexUpgradeDragStartY;
+    this._codexUpgradeScrollY = clamp(this._codexUpgradeDragStartScroll - dy, 0, this.codexUpgradeMaxScroll());
   },
 
   // ── FF:新手引导(首次启动自动展示,首页"？帮助"可重看;左右滑动/箭头翻页,同一套交互模式)──
@@ -136,6 +155,9 @@ const game = {
   // GG:无尽挑战/无尽关卡暂停时多一个"直接结算"选项(第4个按钮),常规关卡没有这个概念,按钮数按 this.endless 动态算
   pauseMenuCount() { return this.endless ? 4 : 3; },
   pauseMenuHit(px, py) { for (let i = 0; i < this.pauseMenuCount(); i++) { const r = this.pauseMenuRect(i); if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return i; } return -1; },
+  // OO:暂停页"自动使用机型技能/自动使用激光"开关 —— 紧跟在菜单按钮下方,复用设置页的开关按钮视觉语言
+  pauseToggleRect(i) { const w = 110, h = 40, x = CONFIG.WIDTH / 2 + 20, y0 = this.pauseMenuRect(this.pauseMenuCount()).y + 16; return { x, y: y0 + i * 52, w, h }; },
+  pauseToggleHit(i, px, py) { const r = this.pauseToggleRect(i); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
   pauseButtonHit(x, y) { const b = this.pauseBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
   // 开始某一关(索引)
   startLevel(i) {
@@ -1667,6 +1689,13 @@ const game = {
     this.floats.push(new FloatText(p.x, p.y - 42, "蓄力激光 " + Math.round(ratio * 100) + "%", "#ffd43b"));
     Sound.laser(); Haptics.powerup();
   },
+  // OO:自动激光——就绪就起蓄力,蓄满就立即松手打出满蓄力一击,不占用玩家手动蓄力的按钮/按键
+  updateAutoLaser() {
+    const p = this.player, c = CONFIG.charge;
+    if (!p) return;
+    if (!p.charging) { if (this.chargeReady()) this.startCharge(); return; }
+    if (p.charge >= c.max) this.releaseCharge();
+  },
 
   // B:必杀 —— 能量满 + 冷却结束才可释放。X4:效果按机型分派(specialType),不再是所有机型统一的全屏重伤:
   //   攻击型 nuke(全屏重伤+短暂无敌,原效果保留)/防御型 shield(回血+护盾)/侦查型 stealth(长时间隐身)/平衡型 wave(冲击波抵消弹幕)
@@ -1925,6 +1954,8 @@ const game = {
     }
     this.updateGravityPulses(dt);
     this.player.update(dt);
+    if (this.autoSpecial) this.useSpecial();   // OO:自动机型技能——useSpecial 内部自己判断能量/冷却,静默 no-op 很安全,每帧调用即可
+    if (this.autoLaser) this.updateAutoLaser();
     this.playerBullets.forEach(o => o.update(dt));
     this.homingShots.forEach(o => o.update(dt));
     this.missiles.forEach(o => o.update(dt));
@@ -2364,6 +2395,13 @@ const game = {
     UI.button(ctx, this.pauseMenuRect(1), { label: "⚙ 设置 SETTINGS", color: "#4dabf7", font: 19 });
     UI.button(ctx, this.pauseMenuRect(2), { label: "返回首页 HOME", color: "#adb5bd", font: 21 });
     if (this.endless) UI.button(ctx, this.pauseMenuRect(3), { label: "直接结算 SETTLE", color: "#ffd43b", font: 19 });
+    // OO:自动使用机型技能/自动使用激光 —— 默认均不勾选,和设置页的"开 ON / 关 OFF"开关同一套视觉
+    const t0 = this.pauseToggleRect(0), t1 = this.pauseToggleRect(1);
+    ctx.textAlign = "left"; ctx.fillStyle = "#adb5bd"; ctx.font = "16px 'Segoe UI', sans-serif";
+    ctx.fillText("自动使用机型技能", cx - 140, t0.y + t0.h / 2 + 6);
+    ctx.fillText("自动使用激光", cx - 140, t1.y + t1.h / 2 + 6);
+    UI.button(ctx, t0, { label: this.autoSpecial ? "开" : "关", color: this.autoSpecial ? "#38d9a9" : "#868e96", active: this.autoSpecial, font: 16, radius: 10 });
+    UI.button(ctx, t1, { label: this.autoLaser ? "开" : "关", color: this.autoLaser ? "#38d9a9" : "#868e96", active: this.autoLaser, font: 16, radius: 10 });
     ctx.textAlign = "left";
   },
 
@@ -2514,10 +2552,12 @@ const game = {
     ctx.textAlign = "center";
     ctx.fillStyle = "#fff"; ctx.font = "bold 26px 'Segoe UI', sans-serif"; ctx.fillText("图鉴", cx, 50);
     UI.button(ctx, this.codexBackRect(), { label: "‹ 首页", color: "#adb5bd", font: 15, radius: 10 });
-    // OO:图鉴 / 成就 标签切换
-    UI.button(ctx, this.codexTabRect(0), { label: "图鉴", color: "#4dabf7", active: this._codexTab === "guide", font: 16, radius: 10 });
-    UI.button(ctx, this.codexTabRect(1), { label: "成就", color: "#ffd43b", active: this._codexTab === "achievements", font: 16, radius: 10 });
+    // OO:图鉴四个标签 —— BOSS / 道具 / 强化 / 成就
+    const tabDefs = [["boss", "BOSS", "#4dabf7"], ["item", "道具", "#51cf66"], ["upgrade", "强化", "#cc5de8"], ["achievements", "成就", "#ffd43b"]];
+    tabDefs.forEach(([key, label, color], i) => UI.button(ctx, this.codexTabRect(i), { label, color, active: this._codexTab === key, font: 14, radius: 10 }));
     if (this._codexTab === "achievements") { this.drawAchievements(ctx); return; }
+    if (this._codexTab === "item") { this.drawItemCodex(ctx); return; }
+    if (this._codexTab === "upgrade") { this.drawUpgradeCodex(ctx); return; }
 
     // 关卡预览网格:4列 x 3行,共 12 关,纯展示(通关地图去实际进入关卡)
     ctx.textAlign = "left"; ctx.fillStyle = "#868e96"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText("关卡预览", 18, 128); ctx.textAlign = "center";
@@ -2572,7 +2612,54 @@ const game = {
     ctx.textAlign = "left";
   },
 
-  // ── OO:成就列表(图鉴页第二个标签)——纯展示,一屏放得下不用滚动 ──
+  // ── OO:道具图鉴(图鉴第二个标签)——展示局内会掉落的补给种类,图标直接复用 drawPowerupToken(entities.js),
+  //   保证和实际掉落物像素级一致,数量少(5种)不用滚动 ──
+  drawItemCodex(ctx) {
+    const cx = CONFIG.WIDTH / 2, rowH = 76, gap = 10, x0 = 20, w = CONFIG.WIDTH - 40, order = CONFIG.powerupOrder;
+    ctx.textAlign = "left"; ctx.fillStyle = "#868e96"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText("补给道具", 18, 128);
+    order.forEach((kind, i) => {
+      const info = CONFIG.powerupInfo[kind], y = 138 + i * (rowH + gap);
+      UI.panel(ctx, x0, y, w, rowH, 12, { accent: info.color });
+      drawPowerupToken(ctx, x0 + 40, y + rowH / 2, 15, kind, info.color, 6);
+      ctx.fillStyle = info.labelColor || info.color; ctx.font = "bold 17px 'Segoe UI', sans-serif"; ctx.fillText(info.name, x0 + 76, y + 30);
+      ctx.fillStyle = "#dee2e6"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText(info.desc, x0 + 76, y + 54);
+    });
+    ctx.textAlign = "center"; ctx.fillStyle = "#4a90d9"; ctx.font = "13px 'Segoe UI', sans-serif";
+    ctx.fillText("补给由关卡战斗中掉落,靠近后会被自动吸附拾取", cx, 138 + order.length * (rowH + gap) + 20);
+    ctx.textAlign = "left";
+  },
+
+  // ── OO:强化图鉴(图鉴第三个标签)——无限挑战/关卡内可抽取的强化词条(CONFIG.bonuses)全览,
+  //   数量较多(40+条),纵向裁剪+拖动滚动,和地图节点区域(mapViewportRect 系列)同一套算法 ──
+  drawUpgradeCodex(ctx) {
+    const cx = CONFIG.WIDTH / 2, vp = this.codexUpgradeViewportRect(), scrollY = this._codexUpgradeScrollY;
+    const rowH = this.codexUpgradeRowH(), gap = this.codexUpgradeGap(), x0 = 20, w = CONFIG.WIDTH - 40;
+    ctx.textAlign = "left"; ctx.fillStyle = "#868e96"; ctx.font = "13px 'Segoe UI', sans-serif";
+    ctx.fillText("无限挑战强化词条(共 " + CONFIG.bonusOrder.length + " 项)", 18, vp.top - 10);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, vp.top, CONFIG.WIDTH, vp.bottom - vp.top); ctx.clip();
+    ctx.translate(0, -scrollY);
+    CONFIG.bonusOrder.forEach((key, i) => {
+      const y = vp.top + i * (rowH + gap);
+      if (y + rowH < scrollY - 30 || y > scrollY + (vp.bottom - vp.top) + 30) return;   // 屏外行跳过,省绘制
+      const b = CONFIG.bonuses[key];
+      UI.panel(ctx, x0, y, w, rowH, 10, { accent: b.color });
+      ctx.fillStyle = b.color; ctx.font = "bold 15px 'Segoe UI', sans-serif"; ctx.fillText(b.name + (b.rarity ? "  ·  " + b.rarity : ""), x0 + 14, y + 24);
+      ctx.fillStyle = "#dee2e6"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText(b.desc, x0 + 14, y + 46);
+    });
+    ctx.restore();
+    // 极简滚动条提示(和地图节点区域同一套画法)
+    const maxScroll = this.codexUpgradeMaxScroll();
+    if (maxScroll > 0) {
+      const trackH = vp.bottom - vp.top, thumbH = Math.max(30, trackH * trackH / (trackH + maxScroll)), thumbY = vp.top + (trackH - thumbH) * (scrollY / maxScroll);
+      ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.fillRect(CONFIG.WIDTH - 8, vp.top, 4, trackH);
+      ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fillRect(CONFIG.WIDTH - 8, thumbY, 4, thumbH);
+    }
+    ctx.textAlign = "center"; ctx.fillStyle = "#4a90d9"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText("上下拖动查看全部强化词条", cx, CONFIG.HEIGHT - 32);
+    ctx.textAlign = "left";
+  },
+
+  // ── OO:成就列表(图鉴第四个标签)——纯展示,一屏放得下不用滚动 ──
   drawAchievements(ctx) {
     const cx = CONFIG.WIDTH / 2, rowH = 70, gap = 8, x0 = 20, w = CONFIG.WIDTH - 40;
     let unlockedCount = 0;
