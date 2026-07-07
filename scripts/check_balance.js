@@ -72,7 +72,8 @@ assert.strictEqual(CONFIG.bonuses.damage.damageMult, 0.12, "damage bonus should 
 assert.strictEqual(CONFIG.bonuses.fireRate.cooldownMult, 0.08, "fireRate bonus should be toned down");
 assert.strictEqual(CONFIG.bonuses.perfectLine.damageMult, 0.10, "perfectLine damage should be toned down");
 assert.strictEqual(CONFIG.bonuses.bossHunter.bossDamageMult, 0.30, "bossHunter bonus should be toned down");
-const pickBuffCards = ["chip:chargeCore", "chip:capacitor", "bonus:maxHp", "bonus:livingArmor", "bonus:medicalReservoir", "bonus:repairLoop", "bonus:missileInterceptor", "bonus:comboBattery", "bonus:emergencyBarrier"];
+const pickBuffCards = ["chip:chargeCore", "chip:capacitor", "bonus:maxHp", "bonus:livingArmor", "bonus:medicalReservoir", "bonus:repairLoop", "bonus:painConverter", "bonus:salvage", "bonus:shieldBreaker", "bonus:missileInterceptor", "bonus:magnetCore", "bonus:comboBattery", "bonus:lastStand", "bonus:emergencyBarrier"];
+assert(pickBuffCards.length >= 14, "draft pick buffs should cover more card routes");
 for (const id of pickBuffCards) {
   const card = game.cardInfo(id), buff = card && card.pickBuff;
   assert(buff && buff.label, `${id} should show a pick buff label`);
@@ -82,6 +83,9 @@ for (const id of pickBuffCards) {
   if (buff.clearBullets) between(buff.clearBullets, 100, 180, `${id} pick clear range`);
 }
 assert(game.draftPickBuffText(game.cardInfo("bonus:missileInterceptor")).includes("附带"), "pick buff should be visible in draft preview");
+assert(game.draftPickBuffText(game.cardInfo("bonus:missileInterceptor")).includes("拦截"), "pick buff preview should name the tactical kind");
+assert(game.draftPickBuffTag(game.cardInfo("chip:capacitor")).includes("护盾"), "pick buff tag should name shield cards clearly");
+assert.strictEqual(game.draftPickBuffKind(game.cardInfo("bonus:comboBattery")), "蓄盾", "mixed energy+shield pick buff should have its own kind");
 
 const enemyKeys = new Set(Object.keys(CONFIG.enemy));
 const shieldCarrier = CONFIG.enemy.shieldCarrier;
@@ -414,6 +418,12 @@ game.applyDraftPickBuff(game.cardInfo("chip:capacitor"));
 assert(game.player.shieldHp > 0 && game.player.shieldTimer > 0, "capacitor pick buff should grant a small shield");
 game.applyDraftPickBuff(game.cardInfo("bonus:repairLoop"));
 assert(game.player.hp > 50, "repairLoop pick buff should immediately heal a little");
+const energyBeforePickBuff = game.player.energy;
+game.applyDraftPickBuff(game.cardInfo("bonus:painConverter"));
+assert.strictEqual(game.player.energy, energyBeforePickBuff + CONFIG.bonuses.painConverter.pickBuff.energy, "painConverter pick buff should grant only a small energy boost");
+game.enemyBullets = [{ x: 110, y: 100, dead: false }, { x: 260, y: 100, dead: false }];
+game.applyDraftPickBuff(game.cardInfo("bonus:shieldBreaker"));
+assert(game.enemyBullets[0].dead && !game.enemyBullets[1].dead, "shieldBreaker pick buff should add a small tactical clear");
 assert(game.floats.some(f => f.text.includes("能量") || f.text.includes("护盾") || f.text.includes("修复") || f.text.includes("清弹")), "pick buffs should show float feedback");
 game.burst = realBurst;
 game.player = { power: CONFIG.powerup.chipMinPower, hp: 100, maxHp: 100 };

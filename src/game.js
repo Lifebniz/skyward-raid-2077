@@ -827,13 +827,30 @@ const game = {
   },
   draftPickBuffText(card) {
     const buff = card && card.pickBuff;
-    return buff && buff.label ? "附带 " + buff.label : "";
+    const kind = this.draftPickBuffKind(card);
+    return buff && buff.label ? "附带 " + kind + " · " + buff.label : "";
   },
   draftPreviewText(card) {
     return [this.draftStatPreviewText(card), this.routePreviewText(card), this.draftPickBuffText(card)].filter(Boolean).join(" · ");
   },
+  draftPickBuffKind(card) {
+    const buff = card && card.pickBuff;
+    if (!buff) return "";
+    if (buff.kind) return buff.kind;
+    if (buff.clearBullets) return "拦截";
+    if (buff.healPct) return "修复";
+    if (buff.energy && buff.shield) return "蓄盾";
+    if (buff.energy) return "充能";
+    if (buff.shield) return "护盾";
+    return "战术";
+  },
+  draftPickBuffColor(card) {
+    const colors = { "拦截": "#ff922b", "修复": "#38d9a9", "蓄盾": "#ffd43b", "充能": "#ffd43b", "护盾": "#74c0fc" };
+    return colors[this.draftPickBuffKind(card)] || (card && card.color) || "#4dabf7";
+  },
   draftPickBuffTag(card) {
-    return card && card.pickBuff ? "附带Buff" : "";
+    const kind = this.draftPickBuffKind(card);
+    return kind ? "附带:" + kind : "";
   },
   draftEventBiasText(card) {
     const bias = this.activeEventRouteBias();
@@ -1993,6 +2010,16 @@ const game = {
     ctx.fillStyle = color; ctx.textAlign = "center"; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.fillText(text, x - w / 2, y - 4);
     ctx.restore();
   },
+  drawDraftPickBuffBadge(ctx, card, x, y, w) {
+    const kind = this.draftPickBuffKind(card);
+    if (!kind) return;
+    const color = this.draftPickBuffColor(card);
+    ctx.save();
+    ctx.fillStyle = UI.rgba(color, .22); UI.roundRect(ctx, x, y, w, 18, 8); ctx.fill();
+    ctx.strokeStyle = UI.rgba(color, .82); ctx.lineWidth = 1.1; UI.roundRect(ctx, x, y, w, 18, 8); ctx.stroke();
+    ctx.fillStyle = color; ctx.textAlign = "center"; ctx.font = "bold 12px 'Segoe UI', sans-serif"; ctx.fillText("附带 " + kind, x + w / 2, y + 13);
+    ctx.restore();
+  },
   drawChipCardIcon(ctx, card, x, y, r) {
     const key = card.key, col = card.color;
     UI.roundButton(ctx, x, y, r, col, { alpha: .86, stroke: UI.rgba(col, .9), lineWidth: 1.8 });
@@ -2081,6 +2108,7 @@ const game = {
       const rarityColor = { "普通": "#adb5bd", "稀有": "#cc5de8", "史诗": "#ffd43b" }[card.rarity] || "#adb5bd";
       UI.panel(ctx, r.x, r.y, r.w, r.h, 12, { accent: card.color, top: UI.rgba(card.color, .14), bottom: "rgba(255,255,255,.03)", lineWidth: card.rarity === "史诗" ? 2.4 : 1.5 });
       this.drawChipCardIcon(ctx, card, r.x + 48, r.y + r.h / 2, 27);
+      this.drawDraftPickBuffBadge(ctx, card, r.x + 13, r.y + 70, 70);
       ctx.textAlign = "left";
       // GG:先给品质徽标预留出空间(badgeW+间距),标签行只在剩下的宽度里跑马灯,徽标最后单独画在最上层,
       //   两者绝不会互相覆盖——即使算错一两像素,徽标也画在标签之后,天然盖在标签上面而不是反过来。
