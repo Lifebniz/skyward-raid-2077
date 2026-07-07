@@ -296,10 +296,10 @@ const CONFIG = {
   endlessDifficulties: {
     normal: {
       key: "normal", name: "普通 NORMAL", color: "#4dabf7",
-      playerHpMult: 1, playerDmgMult: 1, startWings: 0, startPower: 0,
+      playerHpMult: 1, playerDmgMult: 3, startWings: 0, startPower: 0,
       startingDrafts: 2, draftInterval: 30,
-      enemyHpMult: 0.50, bossHpMult: 0.62, enemySpeedMult: 1,
-      enemyHpBoostMult: 1.6, enemyHpDoubleInterval: 240,
+      enemyHpMult: 0.45, bossHpMult: 0.52, enemySpeedMult: 1,
+      enemyHpBoostMult: 1.45, enemyHpDoubleInterval: 300,
       dmgRampMult: 2.2, dmgDoubleInterval: 420,
       scoreMult: 1.0, fireMult: 1.0, dmgMult: 1.0, invuln: 1.2, startBombs: 3,
     },

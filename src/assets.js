@@ -11,6 +11,12 @@ const ImageAssets = {
       defender: "assets/images/ships/player-defender.png",
       scout: "assets/images/ships/player-scout.png",
     },
+    wingman: {
+      balanced: "assets/images/ships/player-wingman-balanced.png",
+      attacker: "assets/images/ships/player-wingman-attacker.png",
+      defender: "assets/images/ships/player-wingman-defender.png",
+      scout: "assets/images/ships/player-wingman-scout.png",
+    },
     enemy: {
       small: "assets/images/enemies/enemy-small.png",
       medium: "assets/images/enemies/enemy-medium.png",
@@ -192,7 +198,7 @@ const ImageAssets = {
     return [
       bg.base, bg.mid, bg.fg,
       this.manifest.player[shipKey] || this.manifest.player.balanced,
-      "assets/images/ships/player-wingman-" + this.slug(shipKey) + ".png",
+      this.manifest.wingman[shipKey] || this.manifest.wingman.balanced,
       "assets/images/ui/icons/icon-bomb.png",
       "assets/images/ui/icons/icon-special-" + this.slug(ship && ship.specialType || "nuke") + ".png",
       "assets/images/ui/icons/icon-power-upgrade.png",
@@ -241,8 +247,8 @@ const ImageAssets = {
   },
   player(key) { return this.ready(this.manifest.player[key]); },
   wingman(key) {
-    return this.ready("assets/images/ships/player-wingman-" + this.slug(key) + ".png")
-      || this.ready("assets/images/ships/player-wingman-balanced.png");
+    const src = this.manifest.wingman[key] || (key ? "assets/images/ships/player-wingman-" + this.slug(key) + ".png" : null);
+    return this.ready(src) || this.ready(this.manifest.wingman.balanced);
   },
   enemy(type) { return this.ready(this.manifest.enemy[type]); },
   boss(index) { return this.ready(this.manifest.boss[index]); },

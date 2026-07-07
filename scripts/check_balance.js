@@ -41,6 +41,11 @@ assert(CONFIG.endlessDifficulties.normal.dmgDoubleInterval > CONFIG.endless.dmgD
 assert(CONFIG.endlessDifficulties.hell.playerHpMult > 1 && CONFIG.endlessDifficulties.hell.playerDmgMult > 1, "hell should grant strong player buffs");
 assert.strictEqual(CONFIG.endlessDifficulties.hell.playerDmgMult, 4, "hell player damage should be doubled again");
 assert(CONFIG.endlessDifficulties.hell.startWings > 0 && CONFIG.endlessDifficulties.hell.startPower > 0, "hell should grant starting wings and power");
+assert.strictEqual(CONFIG.endlessDifficulties.normal.playerDmgMult, 3, "normal should grant 3x player damage");
+assert.strictEqual(CONFIG.endlessDifficulties.normal.enemyHpMult, 0.45, "normal endless enemy HP should be lower");
+assert.strictEqual(CONFIG.endlessDifficulties.normal.bossHpMult, 0.52, "normal endless boss HP should be lower");
+assert.strictEqual(CONFIG.endlessDifficulties.normal.enemyHpBoostMult, 1.45, "normal endless 60s HP boost should be lower");
+assert.strictEqual(CONFIG.endlessDifficulties.normal.enemyHpDoubleInterval, 300, "normal endless enemy HP should grow slower");
 assert.strictEqual(CONFIG.endlessDifficulties.normal.startingDrafts, 2, "normal should start with 2 immediate drafts");
 assert.strictEqual(CONFIG.endlessDifficulties.hell.startingDrafts, 3, "hell should start with 3 immediate drafts");
 assert.strictEqual(CONFIG.endlessDifficulties.normal.draftInterval, 30, "normal follow-up drafts should use 30s cadence");
