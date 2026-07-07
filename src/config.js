@@ -291,7 +291,7 @@ const CONFIG = {
   //   (60秒能从0攒满,纯粹是保底,不会比正常边打边攒更快),避免"没打到东西的时候必杀完全不涨"的干等感
   // X4:机型专属必杀参数——shieldHp/shieldDur/healOnShield 给防御型;stealthDur 给侦查型;waveDamage/waveSpeed/waveWidthGrow 给平衡型
   special: { bossDamage: 110, gainPerKill: 3, gainBossKill: 25, passiveGainPerSec: 1.7, invuln: 0.8, cooldown: 15,
-    shieldHp: 60, shieldDur: 9, healOnShield: 0.3, stealthDur: 4.0, waveDamage: 45 },
+    shieldHp: 52, shieldDur: 9, healOnShield: 0.3, stealthDur: 4.0, waveDamage: 45 },
   // F 无尽模式:玩家血量倍率更低、同屏敌人上限更小。T:难度统一固定,不跟随地图选择
   // dmgRampTime/dmgRampMult:经典无尽关卡(endlessLite)敌弹伤害从 t=0 的 1 倍线性增长,到 dmgRampTime 秒时封顶为 dmgRampMult 倍
   // GG:dmgDoubleInterval 给无尽挑战(非 lite)用——伤害按 2^(t/此值) 指数增长,不封顶,每过这么多秒伤害翻一倍

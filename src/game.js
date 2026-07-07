@@ -3270,7 +3270,7 @@ const game = {
       ctx.fillStyle = this.boss._enraged ? "#ff3b3b" : "#ff8787"; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.textAlign = "right";
       ctx.fillText((this.boss._enraged ? "⚠ 狂暴 · " : "") + "BOSS  " + this.bossDisplayName(this.boss), CONFIG.WIDTH - 20, by - 5);
       const affixText = this.bossAffixHUDText(this.boss);
-      if (affixText) { ctx.fillStyle = this.boss.affix.color || "#adb5bd"; ctx.font = "bold 12px 'Segoe UI', sans-serif"; ctx.fillText(affixText, CONFIG.WIDTH - 20, by + bh + 15); }
+      if (affixText) { ctx.fillStyle = (this.boss.affix && this.boss.affix.color) || "#adb5bd"; ctx.font = "bold 12px 'Segoe UI', sans-serif"; ctx.fillText(affixText, CONFIG.WIDTH - 20, by + bh + 15); }
       ctx.textAlign = "left";
     }
 
