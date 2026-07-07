@@ -945,6 +945,122 @@ Generate a 256x256 transparent PNG event icon for frost net in a sci-fi arcade s
 Generate a 256x256 transparent PNG event icon for harvest rush in a sci-fi arcade shooter. Design: gold-black harvester claw grabbing a glowing pickup core with speed streaks, risk-reward looting motif, readable at 32px, no text, no numbers, no logo, no UI frame.
 ```
 
+## 开始菜单专用 UI 图片
+
+这些资源用于首页标题界面。文字仍然可以由游戏 Canvas 绘制，所以按钮底纹、光效、图标尽量不要包含文字。`title-wordmark.png` 和 `title-subtitle.png` 是可选项；如果 image 2 生成文字不稳定，可以先不生成这两个，游戏会继续使用 Canvas 文字。
+
+### 首页暗角光效
+
+目标路径：`assets/images/ui/title/title-vignette.png`
+
+```text
+Generate a 1080x1920 transparent PNG overlay for the title screen of a vertical sci-fi arcade shooter. Design: subtle dark blue cinematic vignette around the edges, faint cyan and violet vertical light streaks, tiny star particles, transparent center, no solid background, no text, no logo, no UI buttons. It should sit over a sci-fi scrolling background and improve readability of the title and menu.
+```
+
+### 标题发光底纹
+
+目标路径：`assets/images/ui/title/title-logo-glow.png`
+
+```text
+Generate a 768x320 transparent PNG glow plate for a title logo in a vertical sci-fi arcade shooter. Design: broad soft cyan-blue and violet energy glow behind a central title, subtle angular aircraft HUD lines, light refraction, no text, no letters, no logo, no button frame, transparent background. Keep it elegant and not too bright.
+```
+
+### 标题文字图（可选）
+
+目标路径：`assets/images/ui/title/title-wordmark.png`
+
+```text
+Generate a 1024x256 transparent PNG title wordmark for a Chinese sci-fi arcade shooter. Exact visible text: 空中突袭. Bold clean futuristic Chinese display lettering, white with subtle cyan edge glow, centered, no extra words, no English, no logo mark, no background. If the characters cannot be rendered exactly and legibly, do not stylize them heavily; prioritize perfect readability.
+```
+
+### 副标题文字图（可选）
+
+目标路径：`assets/images/ui/title/title-subtitle.png`
+
+```text
+Generate a 1024x160 transparent PNG subtitle wordmark for a sci-fi arcade shooter title screen. Exact visible text: 2 0 7 7 · 原创空战. Thin futuristic cyan-blue lettering, centered, clean and readable, no extra words, no logo, no background. If text rendering is unstable, keep the composition very simple and prioritize exact characters.
+```
+
+### 首页悬浮小战机
+
+目标路径：`assets/images/ui/title/title-hero-ship.png`
+
+```text
+Generate a 256x256 transparent PNG small hero ship emblem for the title screen of a vertical top-down sci-fi arcade shooter. Design: friendly blue-cyan player aircraft icon, nose pointing upward, centered, symmetrical, compact triangular silhouette, bright cockpit core, soft glow, readable at 40px. No text, no logo, no UI frame, no black or white background.
+```
+
+### 关卡地图按钮底纹
+
+目标路径：`assets/images/ui/title/title-button-map.png`
+
+```text
+Generate a 600x116 transparent PNG large title menu button skin with no text. Theme: stage map / campaign. Rounded rectangle glass panel, cyan-green neon border, subtle tactical map grid and tiny route dots inside, semi-transparent dark teal fill, polished sci-fi UI style. No words, no numbers, no logo, no icons that look like letters, transparent outside the button.
+```
+
+### 无尽挑战按钮底纹
+
+目标路径：`assets/images/ui/title/title-button-challenge.png`
+
+```text
+Generate a 600x116 transparent PNG large title menu button skin with no text. Theme: endless challenge. Rounded rectangle glass panel, orange neon border, subtle heat and speed streaks, faint warning-triangle geometry, semi-transparent dark amber fill, polished sci-fi UI style. No words, no numbers, no logo, transparent outside the button.
+```
+
+### 挑战码按钮底纹
+
+目标路径：`assets/images/ui/title/title-button-rival.png`
+
+```text
+Generate a 600x116 transparent PNG large title menu button skin with no text. Theme: rival challenge code. Rounded rectangle glass panel, gold-yellow neon border, faint encrypted circuit pattern, small abstract duel reticle motifs, semi-transparent dark gold fill, polished sci-fi UI style. No words, no numbers, no logo, transparent outside the button.
+```
+
+### 机型选择按钮底纹
+
+目标路径：`assets/images/ui/title/title-button-ship.png`
+
+```text
+Generate a 600x116 transparent PNG large title menu button skin with no text. Theme: ship selection. Rounded rectangle glass panel, blue neon border, faint aircraft blueprint lines, tiny wing silhouettes as abstract shapes, semi-transparent dark blue fill, polished sci-fi UI style. No words, no numbers, no logo, transparent outside the button.
+```
+
+### 设置小图标
+
+目标路径：`assets/images/ui/title/title-icon-settings.png`
+
+```text
+Generate a 256x256 transparent PNG title menu icon for settings in a sci-fi arcade shooter UI. Design: compact white-cyan futuristic gear with small inner energy core, readable at 20px, no circular button background, no text, no numbers, no logo, transparent background.
+```
+
+### 图鉴小图标
+
+目标路径：`assets/images/ui/title/title-icon-codex.png`
+
+```text
+Generate a 256x256 transparent PNG title menu icon for codex/gallery in a sci-fi arcade shooter UI. Design: small glowing white-cyan holographic book or archive panel with two pages and a tiny aircraft silhouette, readable at 20px, no circular button background, no text, no numbers, no logo.
+```
+
+### 帮助小图标
+
+目标路径：`assets/images/ui/title/title-icon-help.png`
+
+```text
+Generate a 256x256 transparent PNG title menu icon for help/tutorial in a sci-fi arcade shooter UI. Design: clean white-cyan question beacon symbol inside a tiny HUD bracket, readable at 20px, no circular button background, no text except the question-mark shape itself, no numbers, no logo, transparent background.
+```
+
+### 排行榜悬浮按钮图标（预留）
+
+目标路径：`assets/images/ui/title/title-icon-leaderboard.png`
+
+```text
+Generate a 256x256 transparent PNG title menu icon for leaderboard/statistics in a sci-fi arcade shooter UI. Design: blue circular holographic badge with three ascending white bars and subtle cyan rim glow, readable at 48px, no text, no numbers, no logo, transparent outside the badge.
+```
+
+### 底部提示光效
+
+目标路径：`assets/images/ui/title/title-footer-glow.png`
+
+```text
+Generate a 1080x256 transparent PNG footer overlay for a vertical sci-fi arcade shooter title screen. Design: very subtle cyan-blue horizontal glow near the bottom, thin HUD scan lines, tiny particles, transparent upper area, no text, no logo, no UI buttons. It should sit behind keyboard/help hint text without reducing readability.
+```
+
 ## 生成后检查
 
 - 所有特效和 UI 图标都必须是 PNG 透明背景；没有黑底、白底、纯色底、文字、数字、水印。
@@ -952,3 +1068,4 @@ Generate a 256x256 transparent PNG event icon for harvest rush in a sci-fi arcad
 - 火区和冰区保留透明中心或半透明空隙，不能遮住弹幕。
 - 地雷、预警圈、镭射条、牵引线和弱点标记在深色/亮色背景上都应可读。
 - 如果 image 2 自动生成了按钮底或卡片底，请重新生成为“中心符号 + 透明背景”版本，方便后续代码统一绘制 UI 容器。
+- 开始菜单按钮底纹不要包含文字；文字由游戏绘制，避免生成文字不清晰。

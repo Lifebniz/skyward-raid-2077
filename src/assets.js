@@ -91,6 +91,23 @@ const ImageAssets = {
   },
   cache: {},
   boundsCache: {},
+  slug(key) {
+    return String(key || "")
+      .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase();
+  },
+  ensure(src) {
+    if (!src || typeof Image === "undefined") return null;
+    if (!this.cache[src]) {
+      const img = new Image();
+      img.decoding = "async";
+      img.src = src;
+      this.cache[src] = img;
+    }
+    return this.cache[src];
+  },
   sources(value, out = []) {
     if (!value) return out;
     if (typeof value === "string") out.push(value);
@@ -108,7 +125,7 @@ const ImageAssets = {
     }
   },
   ready(src) {
-    const img = src && this.cache[src];
+    const img = typeof src === "string" ? this.ensure(src) : src;
     return img && img.complete && img.naturalWidth > 0 ? img : null;
   },
   bounds(img) {
@@ -144,17 +161,36 @@ const ImageAssets = {
     }
   },
   player(key) { return this.ready(this.manifest.player[key]); },
+  wingman(key) {
+    return this.ready("assets/images/ships/player-wingman-" + this.slug(key) + ".png")
+      || this.ready("assets/images/ships/player-wingman-balanced.png");
+  },
   enemy(type) { return this.ready(this.manifest.enemy[type]); },
   boss(index) { return this.ready(this.manifest.boss[index]); },
   background(world, layer) {
     const bg = this.manifest.background[world];
     return this.ready(bg && bg[layer]);
   },
+  effect(key) { return this.ready("assets/images/effects/effect-" + this.slug(key) + ".png"); },
+  title(key) { return this.ready("assets/images/ui/title/title-" + this.slug(key) + ".png"); },
+  uiIcon(key) { return this.ready("assets/images/ui/icons/icon-" + this.slug(key) + ".png"); },
+  uiPowerup(key) { return this.ready("assets/images/ui/powerups/icon-powerup-" + this.slug(key) + ".png"); },
+  uiChip(key) { return this.ready("assets/images/ui/chips/icon-chip-" + this.slug(key) + ".png"); },
+  uiBonus(key) { return this.ready("assets/images/ui/bonuses/icon-bonus-" + this.slug(key) + ".png"); },
+  uiEvent(key) { return this.ready("assets/images/ui/events/icon-event-" + this.slug(key) + ".png"); },
   draw(ctx, img, x, y, size, rotation = 0) {
     if (!img) return false;
     const box = this.bounds(img) || { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
     const scale = size / Math.max(box.w, box.h);
     const w = box.w * scale, h = box.h * scale;
+    ctx.save(); ctx.translate(x, y); if (rotation) ctx.rotate(rotation);
+    ctx.drawImage(img, box.x, box.y, box.w, box.h, -w / 2, -h / 2, w, h);
+    ctx.restore();
+    return true;
+  },
+  drawRect(ctx, img, x, y, w, h, rotation = 0) {
+    if (!img) return false;
+    const box = this.bounds(img) || { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
     ctx.save(); ctx.translate(x, y); if (rotation) ctx.rotate(rotation);
     ctx.drawImage(img, box.x, box.y, box.w, box.h, -w / 2, -h / 2, w, h);
     ctx.restore();

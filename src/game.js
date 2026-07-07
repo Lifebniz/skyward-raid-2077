@@ -5,7 +5,7 @@
  * ===================================================================== */
 const game = {
   state: "title", diff: CONFIG.difficulties.normal, ship: CONFIG.ships.balanced, currentLevel: 0, world: 1, player: null, boss: null,
-  playerBullets: [], homingShots: [], missiles: [], playerLasers: [], enemyBullets: [], enemies: [], powerups: [], particles: [], floats: [], lasers: [], gravityPulses: [], shockwaves: [], specialWaves: [],
+  playerBullets: [], homingShots: [], missiles: [], playerLasers: [], enemyBullets: [], enemies: [], powerups: [], particles: [], imageEffects: [], floats: [], lasers: [], gravityPulses: [], shockwaves: [], specialWaves: [],
   score: 0, combo: 0, comboTimer: 0, maxCombo: 0,
   threat: 0, chips: {}, bonuses: {}, _chipCursor: 0, _chipChoices: [], _chipRerolls: 0, _bonusRerolls: 0, _nextChipDraftAt: 0, _bonusKillN: 0, _noHitT: 0, _fieldRepairT: 0, _repairLoopT: 0, _emergencyBarrierCd: 0, _lastStandCd: 0, _leechCd: 0, _startingDrafts: 0, _inStartingDraft: false, _chipStats: {}, _bonusStats: {}, _bonusHpGain: {}, _maxThreatLevel: 0,
   flashTimer: 0, bannerText: "", bannerSub: "", bannerTimer: 0, warningTimer: 0, titleT: 0, _sliderDrag: false,
@@ -13,6 +13,7 @@ const game = {
   topScores: [], _recorded: false,
   farming: false, _reached: false, _farmTimer: 0, _farmWaveN: 0, _clearScore: 0, settleResult: null, _resetArmed: false, _settingsReturnState: "title",
   _itemSpawnTimer: 0,   // Q:常规关卡(非无尽)每隔 CONFIG.powerup.autoInterval 秒自动刷新一个道具
+  _overflowBatch: {},
   _bombsUsedThisLevel: 0,   // OO:本关用了几个炸弹(给"轻装上阵"成就用)
   _shipIdx: 0, _shipDragStartX: 0, _shipDragging: false,   // R:首页机型选择(左右滑动)
   _hpTrailRatio: 1,   // AA:血条"残影"—— 掉血后缓慢跟随下降,做视觉反馈
@@ -24,6 +25,7 @@ const game = {
   _mapScrollY: 0, _mapDragStartX: 0, _mapDragStartY: 0, _mapDragStartScrollY: 0, _mapDragging: false, _mapDragMoved: false,
   _mapHighlightId: null, _mapHighlightT: 0,   // MM:从图鉴跳转过来时高亮提示的关卡
   _levelTransX: 0, _levelTransY: 0, _levelTransT: 0,   // NN:进入关卡的聚焦扩散过渡(从点击处展开)
+  _worldTransFrom: 1, _worldTransT: 99,   // VV:战斗中背景世界切换的交叉淡入
   autoNext: true, endless: false, endlessLite: false, _endlessFrom: "title", challengeSeed: "", challengeMode: false, challengeDaily: false, challengeTarget: null, challengeSplits: [], rivalInterference: null, _rng: null, _endlessT: 0, _endlessSpawnT: 0, _endlessBossT: 0, _endlessBossN: 0, _endlessEventT: 0, _endlessEventTimer: 0, _endlessEvent: null, _endlessHazardT: 0, _endlessEventStartHits: 0, _endlessEventStartKills: 0, _endlessEventStartEliteKills: 0, _endlessEventsSeen: [], _endlessRecentEvents: [], _endlessStats: null, _endlessTimeline: [], _endlessMarkIdx: 0,
   _endlessBossAffixesSeen: [], _endlessRecentBossAffixes: [],
   _shake: 0, _shakeT: 0, _hitStopT: 0,   // N:打击感
@@ -52,6 +54,8 @@ const game = {
   realLevelCount() { return LEVELS.filter(l => !l.endless).length; },
   setDiff(diffKey) { this.diff = CONFIG.difficulties[diffKey]; Settings.set("diff", diffKey); },
   setShip(shipKey) { this.ship = CONFIG.ships[shipKey]; Settings.set("ship", shipKey); },
+  worldTransitionDur() { return 1.4; },
+  setWorld(world, fade = false) { if (this.world === world) return; this._worldTransFrom = this.world; this._worldTransT = fade ? 0 : this.worldTransitionDur(); this.world = world; },
   // R:首页机型选择(左右滑动的卡片页,关卡地图的机型选项保留不变)
   shipSelectOrder() { return CONFIG.shipOrder; },
   toShipSelect() { this.state = "shipselect"; const order = this.shipSelectOrder(), i = order.indexOf(this.ship.key); this._shipIdx = i >= 0 ? i : 0; },
@@ -136,14 +140,15 @@ const game = {
   // 开始某一关(索引)
   startLevel(i) {
     this.currentLevel = i; this.world = LEVELS[i].world; this.endless = false; this.endlessLite = false; this.challengeSeed = ""; this.challengeMode = false; this.challengeDaily = false; this.challengeTarget = null; this.challengeSplits = []; this.rivalInterference = null; this._rng = null; this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = 0; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventStartKills = 0; this._endlessEventStartEliteKills = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessStats = null; this._endlessTimeline = []; this._endlessMarkIdx = 0;
+    this._worldTransFrom = this.world; this._worldTransT = this.worldTransitionDur();
     this.state = "playing";
     this.player = new Player(); this.boss = null;
-    this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.floats = []; this.lasers = []; this.gravityPulses = []; this.shockwaves = []; this.specialWaves = [];
+    this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.imageEffects = []; this.floats = []; this.lasers = []; this.gravityPulses = []; this.shockwaves = []; this.specialWaves = [];
     this.score = 0; this.combo = 0; this.comboTimer = 0; this.maxCombo = 0;
     this.resetDepthSystems();
     this.flashTimer = 0; this.warningTimer = 0; this._recorded = false;
     this.farming = false; this._reached = false; this._farmTimer = 0; this._farmWaveN = 0; this.settleResult = null;
-    this._itemSpawnTimer = this.itemAutoInterval(); this._hpTrailRatio = 1; this._bombsUsedThisLevel = 0;
+    this._itemSpawnTimer = this.itemAutoInterval(); this._overflowBatch = {}; this._hpTrailRatio = 1; this._bombsUsedThisLevel = 0;
     director.begin(LEVELS[i].script);
     input.targetX = CONFIG.player.startX; input.targetY = CONFIG.player.startY;
     Sound.start(); Music.play(); this.banner("STAGE " + LEVELS[i].id, CONFIG.worldIntro[(LEVELS[i].world - 1) % CONFIG.worldIntro.length]);
@@ -167,12 +172,13 @@ const game = {
     this.endless = true; this.endlessLite = !!opts.lite; this._endlessFrom = opts.from || "title";
     this.challengeSeed = opts.seed || Challenge.randomSeed(); this.challengeMode = !!opts.challenge; this.challengeDaily = !!opts.daily; this.challengeTarget = opts.target || null; this.challengeSplits = []; this.rivalInterference = (typeof RivalInterference !== "undefined") ? RivalInterference.create(this.challengeTarget) : null; this._rng = Challenge.rng(this.challengeSeed);
     this.farming = false; this._reached = false; this.currentLevel = 0; this.world = 1;
+    this._worldTransFrom = this.world; this._worldTransT = this.worldTransitionDur();
     this.state = "playing";
     this.player = new Player(); this.boss = null;
-    this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.floats = []; this.lasers = []; this.gravityPulses = []; this.shockwaves = []; this.specialWaves = [];
+    this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.imageEffects = []; this.floats = []; this.lasers = []; this.gravityPulses = []; this.shockwaves = []; this.specialWaves = [];
     this.score = 0; this.combo = 0; this.comboTimer = 0; this.maxCombo = 0;
     this.resetDepthSystems();
-    this.flashTimer = 0; this.warningTimer = 0; this._hpTrailRatio = 1;
+    this.flashTimer = 0; this.warningTimer = 0; this._hpTrailRatio = 1; this._overflowBatch = {};
     this._endlessT = 0; this._endlessSpawnT = CONFIG.endless.spawn.initialDelay; this._endlessBossT = CONFIG.endless.boss.firstDelay; this._endlessBossN = 0;
     this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = CONFIG.endless.eventInterval * 0.65; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventStartKills = 0; this._endlessEventStartEliteKills = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessBossAffixesSeen = []; this._endlessRecentBossAffixes = [];
     this.resetEndlessTelemetry();
@@ -326,7 +332,7 @@ const game = {
       this.updateEndlessEvent(dt);
       this.updateRivalInterference();
     }
-    this.world = 1 + (Math.floor(this._endlessT / CONFIG.endless.worldInterval) % CONFIG.themes.length);   // 背景随时间轮换
+    this.setWorld(1 + (Math.floor(this._endlessT / CONFIG.endless.worldInterval) % CONFIG.themes.length), true);   // 背景随时间轮换
     this._endlessSpawnT -= dt;
     if (this._endlessSpawnT <= 0 && this.enemies.length < CONFIG.endless.maxEnemies) {
       const t = this._endlessT;
@@ -653,9 +659,35 @@ const game = {
   endlessEnemyHpMult() {
     if (!this.endless) return 1;
     const e = CONFIG.endless;
-    const ramp = (e.enemyHpBaseMult || 1) * (1 + (this._endlessT / e.enemyHpRampTime) * (e.enemyHpRampMult - 1));
-    const late = this._endlessT >= (e.enemyHpLateTime || Infinity) ? (e.enemyHpLateMult || 1) : 1;
-    return Math.max(ramp, late) * (1 + this.endlessEventValue("enemyHpMult", 0));
+    const boostTime = e.enemyHpBoostTime == null ? Infinity : e.enemyHpBoostTime;
+    const base = e.enemyHpBaseMult || 1;
+    const late = this._endlessT >= boostTime
+      ? (e.enemyHpBoostMult || 3) * Math.pow(2, (this._endlessT - boostTime) / (e.enemyHpDoubleInterval || 20))
+      : base;
+    return Math.max(base, late) * (1 + this.endlessEventValue("enemyHpMult", 0));
+  },
+  endlessEnemyHpFloor() {
+    if (!this.endless) return 0;
+    const e = CONFIG.endless, t = e.enemyHpFloorTime == null ? Infinity : e.enemyHpFloorTime;
+    if (this._endlessT < t) return 0;
+    const start = e.enemyHpFloor || 0, targetTime = e.enemyHpFloorTargetTime || t, target = e.enemyHpFloorTarget || start;
+    let floor = start;
+    if (this._endlessT < targetTime) {
+      const p = clamp((this._endlessT - t) / Math.max(1, targetTime - t), 0, 1);
+      floor = start * Math.pow(Math.max(1, target / Math.max(1, start)), p);
+    } else {
+      floor = target * Math.pow(2, (this._endlessT - targetTime) / (e.enemyHpFloorDoubleInterval || 180));
+    }
+    return Math.round(Math.min(e.enemyHpFloorMax || floor, floor));
+  },
+  endlessBossHpMult(n = this._endlessBossN) {
+    const cfg = CONFIG.endless.boss || {};
+    if (n <= 0) return cfg.baseHpMult || 1;
+    return Math.min(cfg.hpGrowthMax || Infinity, (cfg.secondHpMult || 5) * Math.pow(cfg.hpGrowthMult || 2, n - 1));
+  },
+  endlessBossDamageReduction(n = this._endlessBossN) {
+    const cfg = CONFIG.endless.boss || {};
+    return n <= 0 ? 0 : Math.min(cfg.drMax || 0.5, (cfg.drStart || 0.2) + Math.max(0, n - 1) * (cfg.drStep || 0.1));
   },
   shipWeaponValue(prop, fallback) {
     const b = ((this.player && this.player.ship) || this.ship).weaponBias || {};
@@ -1067,7 +1099,7 @@ const game = {
     if (!this.endless || this.endlessLite || this.state !== "playing" || !this.canClaimChipReward()) return false;
     return this.claimChipReward();
   },
-  claimChipReward() {
+  claimChipReward(score = true) {
     if (this.endless) {
       if (!this.canClaimChipReward()) return false;
       const reason = this._pendingBossDraft ? "Boss击破奖励 · 强化提前" : "";
@@ -1076,7 +1108,7 @@ const game = {
       this.beginChipDraft(reason); return true;
     }
     const key = this.activateNextChip(), c = CONFIG.chips[key];
-    this.grantOverflowScore(c ? c.color : "#4dabf7");
+    if (score) this.grantOverflowScore(c ? c.color : "#4dabf7");
     return true;
   },
   scheduleBossDraftReward(src) {
@@ -1100,6 +1132,7 @@ const game = {
     const cfg = CONFIG.bonuses.chainSpark, target = this.nearestEnemy(src.x, src.y, cfg.range + stacks * 35);
     if (!target) return;
     const dmg = this.playerDamage(cfg.damage * stacks, target);
+    this.spawnImageEffect("chainSpark", (src.x + target.x) / 2, (src.y + target.y) / 2, Math.min(180, Math.max(72, Math.hypot(target.x - src.x, target.y - src.y))), 0.22);
     this.spawnHitSpark(target.x, target.y);
     this.spawnShockwave(target.x, target.y, target.radius * 1.4, cfg.color);
     this.floats.push(new FloatText(target.x, target.y - target.radius, "电弧 -" + Math.round(dmg), cfg.color));
@@ -1160,6 +1193,7 @@ const game = {
     if (!stacks || !cfg || !src) return 0;
     const range = cfg.range + stacks * 18, damage = cfg.breakDamage * stacks;
     let hits = 0;
+    this.spawnImageEffect("shieldBreak", src.x, src.y, Math.min(range * 1.35, 220), 0.34);
     this.spawnShockwave(src.x, src.y, range, cfg.color);
     this.floats.push(new FloatText(src.x, src.y - src.radius - 14, "破盾", cfg.color));
     for (const e of this.enemies) {
@@ -1177,6 +1211,7 @@ const game = {
     if (!stacks || !cfg || !src) return 0;
     const range = cfg.range + stacks * 22;
     let hits = 0;
+    this.spawnImageEffect("repairPulse", src.x, src.y, Math.min(range * 1.45, 240), 0.38);
     this.spawnShockwave(src.x, src.y, range, cfg.color);
     for (const e of this.enemies) {
       if (e.dead) continue;
@@ -1374,13 +1409,14 @@ const game = {
     }
     return repaired;
   },
-  // W2:无尽模式 BOSS 血量按已刷出过的 BOSS 场次数递增,不封顶,让长线存活不会一直打同样血量的 BOSS 车轮战
+  // W2:无尽模式 BOSS 血量按场次递增并封顶,避免长线车轮战变成无限血墙
   spawnBoss(defIndex) {
     const b = new Boss(defIndex);
     if (this.endless) {
-      const cfg = CONFIG.endless.boss, mult = (cfg.baseHpMult || 1) * (1 + this._endlessBossN * cfg.hpStep);
+      const cfg = CONFIG.endless.boss, mult = this.endlessBossHpMult();
       b.maxHp = Math.round(b.maxHp * mult); b.hp = b.maxHp;
       if (!this.endlessLite) this.applyEndlessBossAffix(b, this.pickEndlessBossAffix(cfg.affixes || []));   // GG:经典无尽没有词缀系统,普通BOSS车轮战
+      b._endlessDr = this.endlessBossDamageReduction();
     }
     this.enemies.push(b); this.boss = b; this.warningTimer = 2.2; this.showDialogue(this.bossDisplayName(b), b.def.taunt, 3.8); return b;
   },
@@ -1392,11 +1428,12 @@ const game = {
   bossAffixHUDText(b) {
     const a = b && b.affix;
     const invuln = b && b._invulnTimer > 0 ? "无敌屏障 " + b._invulnTimer.toFixed(1) + "s" : "";
-    if (!a) return invuln || (b && b._weakTimer > 0 ? "破甲窗口 " + b._weakTimer.toFixed(1) + "s" : "");
+    const dr = b && b._endlessDr > 0 ? "减伤 " + Math.round(b._endlessDr * 100) + "%" : "";
+    if (!a) return [dr, invuln, b && b._weakTimer > 0 ? "破甲窗口 " + b._weakTimer.toFixed(1) + "s" : ""].filter(Boolean).join(" · ");
     const cd = a.attack ? " · " + Math.max(0, b._affixTimer || 0).toFixed(1) + "s" : "";
     const weak = b._weakTimer > 0 ? " · 弱点" + b._weakTimer.toFixed(1) + "s" : "";
-    const shield = invuln ? " · " + invuln : "";
-    return a.name + " · " + (a.desc || "词缀") + shield + weak + cd;
+    const state = (dr ? " · " + dr : "") + (invuln ? " · " + invuln : "");
+    return a.name + " · " + (a.desc || "词缀") + state + weak + cd;
   },
   applyEndlessBossAffix(b, affix) {
     if (!b || !affix) return;
@@ -1433,6 +1470,7 @@ const game = {
   openBossWeakPoint(b, a) {
     b._weakTimer = (a.dur || 2.5) + this.bonusValue("weakScanner", "weakDuration");
     b._weakDamageMult = a.weakDamageMult || CONFIG.bossPhase.weakDamageMult || 0.25;
+    this.spawnImageEffect("weakpointMarker", b.x, b.y - 6, Math.max(52, b.radius * 0.75), 0.6);
     this.floats.push(new FloatText(b.x, b.y - b.radius - 22, "弱点暴露 +" + Math.round(b._weakDamageMult * 100) + "%", a.color));
     return true;
   },
@@ -1462,6 +1500,7 @@ const game = {
   onBossEnrage(b) { this.showDialogue(this.bossDisplayName(b), "狂暴!攻击频率大幅提升!", 3.0); this.addShake(6, 0.28); Sound.hit(); Haptics.bomb(); },
   onBossInvuln(b) {
     this.floats.push(new FloatText(b.x, b.y - b.radius - 28, "锁血屏障 " + Math.ceil(b._invulnTimer) + "s", "#74c0fc"));
+    this.spawnImageEffect("shieldHit", b.x, b.y, b.radius * 2.6, 0.38);
     this.spawnShockwave(b.x, b.y, b.radius * 2.5, "#74c0fc");
     this.addShake(4, 0.18); Sound.powerup();
   },
@@ -1508,6 +1547,7 @@ const game = {
       const active = g.phase === "active", t = active ? clamp(g.t / g.dur, 0, 1) : clamp(g.t / g.warn, 0, 1);
       ctx.save();
       ctx.globalAlpha = active ? 0.24 + 0.18 * Math.sin(g.t * 12) ** 2 : 0.16 + 0.18 * t;
+      if (ImageAssets.draw(ctx, ImageAssets.effect("gravityRing"), g.x, g.y, g.radius * (active ? 1.8 : 2 * t))) { ctx.restore(); continue; }
       ctx.strokeStyle = g.strength < 0 ? "#ff8787" : g.color;
       ctx.lineWidth = active ? 3 : 2;
       ctx.setLineDash(active ? [] : [8, 8]);
@@ -1520,6 +1560,9 @@ const game = {
       const half = l.width / 2;
       if (l.phase === "warn") {
         const a = 0.14 + 0.18 * Math.abs(Math.sin(l.t * 18));
+        ctx.save(); ctx.globalAlpha = Math.min(0.65, a * 2.4);
+        if (ImageAssets.drawRect(ctx, ImageAssets.effect("warningLaserLane"), l.x, CONFIG.HEIGHT / 2, l.width * 2.3, CONFIG.HEIGHT)) { ctx.restore(); continue; }
+        ctx.restore();
         ctx.fillStyle = "rgba(255,50,50," + a + ")"; ctx.fillRect(l.x - half, 0, l.width, CONFIG.HEIGHT);
         ctx.strokeStyle = "rgba(255,180,180,.75)"; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(l.x - half, 0); ctx.lineTo(l.x - half, CONFIG.HEIGHT); ctx.moveTo(l.x + half, 0); ctx.lineTo(l.x + half, CONFIG.HEIGHT); ctx.stroke();
@@ -1557,9 +1600,16 @@ const game = {
   burst(x, y, color, count, speed) { for (let i = 0; i < count; i++) { const a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random() * 0.7); this.particles.push(pools.particle.get(x, y, Math.cos(a) * s, Math.sin(a) * s, color)); } },
   // CC:打击感 —— 冲击波圆环(击杀反馈)+ 命中火花(不论是否致命,每次子弹命中都给一点回馈)
   spawnShockwave(x, y, maxR, color) { this.shockwaves.push(new Shockwave(x, y, maxR, color)); },
-  spawnHitSpark(x, y) { for (let i = 0; i < 3; i++) { const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 60; this.particles.push(pools.particle.get(x, y, Math.cos(a) * s, Math.sin(a) * s, "#fff9db")); } },
+  spawnImageEffect(key, x, y, size, life = 0.35) { this.imageEffects.push(new ImageEffect(x, y, key, size, life)); },
+  spawnHitSpark(x, y) {
+    this.spawnImageEffect("hitSpark", x, y, 42, 0.22);
+    for (let i = 0; i < 3; i++) { const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 60; this.particles.push(pools.particle.get(x, y, Math.cos(a) * s, Math.sin(a) * s, "#fff9db")); }
+  },
   // X4:护盾格挡反馈——比普通命中火花更"硬"、更冷色,提示"这下是盾挡的,不是肉扛的"
-  spawnShieldHitSpark(x, y) { for (let i = 0; i < 5; i++) { const a = Math.random() * Math.PI * 2, s = 90 + Math.random() * 90; this.particles.push(pools.particle.get(x, y, Math.cos(a) * s, Math.sin(a) * s, "#99e9f2")); } },
+  spawnShieldHitSpark(x, y) {
+    this.spawnImageEffect("shieldHit", x, y, 78, 0.28);
+    for (let i = 0; i < 5; i++) { const a = Math.random() * Math.PI * 2, s = 90 + Math.random() * 90; this.particles.push(pools.particle.get(x, y, Math.cos(a) * s, Math.sin(a) * s, "#99e9f2")); }
+  },
   // RR:引擎尾焰拖尾粒子 —— 比爆炸粒子小、寿命短,从对象池取完后覆盖 life/size,做出持续喷射的拖尾感
   spawnEngineFlame(x, y) {
     const p = pools.particle.get(x + (Math.random() - 0.5) * 4, y, (Math.random() - 0.5) * 20, 60 + Math.random() * 50, Math.random() < 0.5 ? "#ffe066" : "#ff922b");
@@ -1739,17 +1789,48 @@ const game = {
     for (const k of kinds) { if (r < (w[k] || 0)) return k; r -= w[k] || 0; }
     return kinds[kinds.length - 1];
   },
-  grantOverflowScore(color = "#ffd43b") {
-    const gain = Math.round((CONFIG.overflow.score || 0) * this.threatScoreMult());
-    if (gain <= 0 || !this.player) return;
-    this.score += gain;
-    this.floats.push(new FloatText(this.player.x, this.player.y - 62, "溢出 +" + gain, color));
+  grantOverflowScore(color = "#ffd43b", kind = "reward", label = "满额奖励") {
+    return this.queueOverflowReward(kind, color, label);
+  },
+  queueOverflowReward(kind, color = "#ffd43b", label = "满额奖励") {
+    if (!this.player) return null;
+    const o = CONFIG.overflow, batches = this._overflowBatch || (this._overflowBatch = {});
+    const b = batches[kind] || (batches[kind] = { count: 0, score: 0, color, label, detail: "", timer: 0 });
+    const gain = Math.round(((b.count > 0 ? o.extraScore : o.score) || 0) * this.threatScoreMult());
+    b.count++; b.score += gain; b.color = color; b.label = label; b.timer = o.batchWindow || 0.3;
+    if (gain > 0) this.score += gain;
+    return b;
+  },
+  updateOverflowRewards(dt) {
+    const batches = this._overflowBatch; if (!batches) return;
+    for (const kind of Object.keys(batches)) {
+      const b = batches[kind]; b.timer -= dt;
+      if (b.timer <= 0) this.flushOverflowReward(kind);
+    }
+  },
+  flushOverflowReward(kind) {
+    const batches = this._overflowBatch, b = batches && batches[kind];
+    if (!b) return;
+    if (this.player) {
+      const count = b.count > 1 ? " x" + b.count : "";
+      const detail = b.detail ? " " + b.detail : "";
+      const score = b.score > 0 ? " +" + b.score : "";
+      this.floats.push(new FloatText(this.player.x, this.player.y - 62, b.label + count + detail + score, b.color));
+    }
+    delete batches[kind];
   },
   collectPowerup(kind) {
     const p = this.player, o = CONFIG.overflow;
     if (kind === "power") {
       if (p.power >= CONFIG.player.maxPower && p.overcharge >= CONFIG.player.maxOvercharge) {
-        if (this.endless || !this.claimChipReward()) this.grantOverflowScore("#38d9a9");
+        const b = this.queueOverflowReward("power", "#38d9a9", "火力满额");
+        if (b && b.count === 1) { if (this.endless) this.activateNextChip(); else this.claimChipReward(false); }
+        if (b) {
+          const energy = Math.min(o.energyCap || 60, Math.max(0, b.count - 1) * (o.extraEnergy || 0));
+          const delta = energy - (b.energy || 0);
+          if (delta > 0) p.addEnergy(delta);
+          b.energy = energy; b.detail = energy > 0 ? "+" + Math.round(energy) + "能量" : "芯片强化";
+        }
       }
       else {
         const wasMax = p.power >= CONFIG.player.maxPower;
@@ -1757,18 +1838,48 @@ const game = {
         this.floats.push(new FloatText(p.x, p.y - 34, wasMax ? "过载 +" + p.overcharge : "火力 +1", wasMax ? "#74c0fc" : "#38d9a9"));
       }
     } else if (kind === "chip") {
-      if (this.endless || !this.claimChipReward()) this.grantOverflowScore("#4dabf7");
+      const b = this.queueOverflowReward("chip", "#4dabf7", "芯片满额");
+      if (b && b.count === 1) { if (this.endless) this.activateNextChip(); else this.claimChipReward(false); }
+      if (b) {
+        const energy = Math.min(o.energyCap || 60, Math.max(0, b.count - 1) * (o.extraEnergy || 0));
+        const delta = energy - (b.energy || 0);
+        if (delta > 0) p.addEnergy(delta);
+        b.energy = energy; b.detail = energy > 0 ? "+" + Math.round(energy) + "能量" : "芯片强化";
+      }
     } else if (kind === "bomb") {
-      if (p.bombs >= CONFIG.player.maxBombs) { p.addEnergy(o.bombEnergy); this.floats.push(new FloatText(p.x, p.y - 34, "能量 +" + o.bombEnergy, "#ffd43b")); this.addThreat(o.threatGain); this.grantOverflowScore("#ffd43b"); }
+      if (p.bombs >= CONFIG.player.maxBombs) {
+        const b = this.queueOverflowReward("bomb", "#ffd43b", "炸弹满额");
+        if (b && b.count === 1) this.addThreat(o.threatGain);
+        if (b) {
+          const energy = Math.min(o.energyCap || 60, (o.bombEnergy || 0) + (b.count - 1) * (o.extraEnergy || 0));
+          const delta = energy - (b.energy || 0);
+          if (delta > 0) p.addEnergy(delta);
+          b.energy = energy; b.detail = "+" + Math.round(energy) + "能量";
+        }
+      }
       else { p.addBomb(); this.floats.push(new FloatText(p.x, p.y - 34, "炸弹 +1", "#cc5de8")); }
     } else if (kind === "wing") {
       if (p.wings >= CONFIG.wingMax) {
-        if (this.endless) this.grantOverflowScore("#dee2e6");
-        else { this.activateChip(o.wingChip, "侧翼炮组"); this.grantOverflowScore("#dee2e6"); }
+        const b = this.queueOverflowReward("wing", "#dee2e6", "僚机满额");
+        if (b && b.count === 1 && !this.endless) this.activateChip(o.wingChip, "侧翼炮组");
+        if (b) {
+          const energy = this.endless ? Math.min(o.energyCap || 60, b.count * (o.extraEnergy || 0)) : 0;
+          const delta = energy - (b.energy || 0);
+          if (delta > 0) p.addEnergy(delta);
+          b.energy = energy; b.detail = energy > 0 ? "+" + Math.round(energy) + "能量" : "侧翼炮组";
+        }
       }
       else { p.addWing(); this.floats.push(new FloatText(p.x, p.y - 34, "僚机 +1", "#dee2e6")); }
     } else {
-      if (p.hp >= p.maxHp) { this.triggerMedicalReservoir(); p.grantShield(o.healShield, o.healShieldDur); this.floats.push(new FloatText(p.x, p.y - 34, "临时护盾 +" + o.healShield, "#74c0fc")); this.addThreat(o.threatGain); this.grantOverflowScore("#74c0fc"); this.triggerRepairPulse(p); }
+      if (p.hp >= p.maxHp) {
+        this.triggerMedicalReservoir();
+        const b = this.queueOverflowReward("heal", "#74c0fc", "满血护盾");
+        const shield = b ? Math.min(o.healShieldCap || o.healShield, (o.healShield || 0) + (b.count - 1) * (o.healShieldStep || 0)) : o.healShield;
+        const dur = b ? Math.min(o.healShieldDurCap || o.healShieldDur, (o.healShieldDur || 0) + (b.count - 1) * (o.healShieldDurStep || 0)) : o.healShieldDur;
+        p.grantShield(shield, dur);
+        if (b) b.detail = "+" + Math.round(shield) + "盾";
+        if (!b || b.count === 1) { this.addThreat(o.threatGain); this.triggerRepairPulse(p); }
+      }
       else { const before = p.hp; p.heal(CONFIG.powerup.healAmount); this.floats.push(new FloatText(p.x, p.y - 34, "HP +" + CONFIG.powerup.healAmount, "#ff8787")); if (p.hp > before) this.triggerRepairPulse(p); }
     }
   },
@@ -1784,9 +1895,12 @@ const game = {
     if (this._shakeT > 0) this._shakeT -= dt;
     if (this.dlgTimer > 0) this.dlgTimer -= dt;
     if (this._mapHighlightT > 0) this._mapHighlightT -= dt;
+    if (this._worldTransT < this.worldTransitionDur()) this._worldTransT += dt;
     if (this._levelTransT > 0 && this._levelTransT < 0.45) this._levelTransT += dt;
+    this.updateOverflowRewards(dt);
     this.particles.forEach(o => o.update(dt));
     pruneDead(this.particles, releaseDead.particle);   // DD:粒子归还对象池
+    this.imageEffects.forEach(o => o.update(dt)); pruneDead(this.imageEffects);
     this.floats.forEach(o => o.update(dt)); pruneDead(this.floats);
     this.shockwaves.forEach(o => o.update(dt)); pruneDead(this.shockwaves);
     this.specialWaves.forEach(o => o.update(dt)); pruneDead(this.specialWaves);
@@ -1930,6 +2044,14 @@ const game = {
       fn(); ctx.restore();
     } else fn();
   },
+  drawWorldBackground(ctx) {
+    const dur = this.worldTransitionDur();
+    if (this._worldTransT < dur && this._worldTransFrom !== this.world) {
+      const t = clamp(this._worldTransT / dur, 0, 1), a = t * t * (3 - 2 * t);
+      background.draw(ctx, this._worldTransFrom);
+      ctx.save(); ctx.globalAlpha = a; background.draw(ctx, this.world); ctx.restore();
+    } else background.draw(ctx, this.world);
+  },
   draw(ctx) {
     // N:屏幕震动(仅对局态;标题/地图/设置/机型选择/图鉴 sh=0 不会 save,故其提前 return 不失衡)
     // HH:paused 也要排除在外 —— 之前 _shakeT 在暂停时不递减(冻结),但这里没排除 paused,
@@ -1937,7 +2059,7 @@ const game = {
     const inGame = this.state !== "title" && this.state !== "settings" && this.state !== "map" && this.state !== "shipselect" && this.state !== "codex" && this.state !== "tutorial" && this.state !== "paused";
     const sh = (this._shakeT > 0 && inGame) ? this._shake : 0;
     if (sh > 0) { ctx.save(); ctx.translate((Math.random() * 2 - 1) * sh, (Math.random() * 2 - 1) * sh); }
-    background.draw(ctx, this.world); stars.draw(ctx);
+    this.drawWorldBackground(ctx); stars.draw(ctx);
     if (this.state === "title") { this._drawFaded(ctx, () => this.drawTitle(ctx)); return; }
     if (this.state === "settings") { this._drawFaded(ctx, () => this.drawSettings(ctx)); return; }
     if (this.state === "shipselect") { this._drawFaded(ctx, () => this.drawShipSelect(ctx)); return; }
@@ -1954,6 +2076,7 @@ const game = {
     this.homingShots.forEach(o => o.draw(ctx));
     this.missiles.forEach(o => o.draw(ctx));
     this.particles.forEach(o => o.draw(ctx));
+    this.imageEffects.forEach(o => o.draw(ctx));
     this.shockwaves.forEach(o => o.draw(ctx));
     this.specialWaves.forEach(o => o.draw(ctx));
     this.floats.forEach(o => o.draw(ctx));
@@ -2023,6 +2146,8 @@ const game = {
   drawChipCardIcon(ctx, card, x, y, r) {
     const key = card.key, col = card.color;
     UI.roundButton(ctx, x, y, r, col, { alpha: .86, stroke: UI.rgba(col, .9), lineWidth: 1.8 });
+    const img = card.type === "chip" ? ImageAssets.uiChip(key) : ImageAssets.uiBonus(key);
+    if (ImageAssets.draw(ctx, img, x, y, r * 1.55)) return;
     if (key.includes("missile") || key.includes("Payload") || key.includes("Warhead") || key.includes("cluster")) this.drawSecondaryWeaponIcon(ctx, x, y, r * .9, "missile", "#fff");
     else if (key.includes("laser") || key.includes("Lens")) this.drawSecondaryWeaponIcon(ctx, x, y, r * .9, "laser", "#fff");
     else if (key.includes("homing") || key.includes("swarm")) this.drawSecondaryWeaponIcon(ctx, x, y, r * .9, "homing", "#fff");
@@ -2257,30 +2382,51 @@ const game = {
   titleCodexHit(px, py) { const r = this.titleCodexRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
   titleHelpRect() { return { x: 16, y: 76, w: 92, h: 40 }; },
   titleHelpHit(px, py) { const r = this.titleHelpRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  drawTitleImageButton(ctx, r, assetKey, opts) {
+    const img = ImageAssets.title("button-" + assetKey);
+    if (!ImageAssets.drawRect(ctx, img, r.x + r.w / 2, r.y + r.h / 2, r.w, r.h)) return UI.button(ctx, r, opts);
+    ctx.save();
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.shadowColor = UI.rgba(opts.color || "#fff", .65); ctx.shadowBlur = 10;
+    ctx.fillStyle = "#fff"; ctx.font = "bold " + (opts.font || 24) + "px 'Segoe UI', sans-serif";
+    ctx.fillText(opts.label, r.x + r.w / 2, r.y + r.h / 2 - (opts.sub ? 5 : 0));
+    if (opts.sub) { ctx.shadowBlur = 0; ctx.fillStyle = "rgba(255,255,255,.78)"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText(opts.sub, r.x + r.w / 2, r.y + r.h / 2 + 18); }
+    ctx.restore();
+  },
+  drawTitleSmallButton(ctx, r, iconKey, fallbackLabel, text) {
+    const icon = ImageAssets.title("icon-" + iconKey);
+    UI.button(ctx, r, { label: icon ? text : fallbackLabel, color: "#adb5bd", font: 15, radius: 10 });
+    if (icon) ImageAssets.draw(ctx, icon, r.x + 21, r.y + r.h / 2, 20);
+  },
   drawTitle(ctx) {
     const cx = CONFIG.WIDTH / 2, t = this.titleT;
     ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ImageAssets.drawRect(ctx, ImageAssets.title("vignette"), cx, CONFIG.HEIGHT / 2, CONFIG.WIDTH, CONFIG.HEIGHT);
     ctx.textAlign = "center";
     // 标题:轻微呼吸缩放
     const s = 1 + Math.sin(t * 2) * 0.03;
+    ImageAssets.draw(ctx, ImageAssets.title("logoGlow"), cx, 172, 300);
     ctx.save(); ctx.translate(cx, 175); ctx.scale(s, s);
-    ctx.fillStyle = "#fff"; ctx.font = "bold 56px 'Segoe UI', sans-serif"; ctx.fillText("空中突袭", 0, 0); ctx.restore();
-    ctx.fillStyle = "#4dabf7"; ctx.font = "26px 'Segoe UI', sans-serif"; ctx.fillText("2 0 7 7 · 原创空战", cx, 220);
+    if (!ImageAssets.draw(ctx, ImageAssets.title("wordmark"), 0, -8, 300)) { ctx.fillStyle = "#fff"; ctx.font = "bold 56px 'Segoe UI', sans-serif"; ctx.fillText("空中突袭", 0, 0); }
+    ctx.restore();
+    if (!ImageAssets.draw(ctx, ImageAssets.title("subtitle"), cx, 218, 260)) { ctx.fillStyle = "#4dabf7"; ctx.font = "26px 'Segoe UI', sans-serif"; ctx.fillText("2 0 7 7 · 原创空战", cx, 220); }
     // 悬停的占位飞机(上下浮动)
     const py = 262 + Math.sin(t * 1.6) * 6;
-    ctx.fillStyle = "#4dabf7"; ctx.beginPath(); ctx.moveTo(cx, py - 16); ctx.lineTo(cx - 13, py + 12); ctx.lineTo(cx + 13, py + 12); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#a5d8ff"; ctx.fillRect(cx - 3, py - 5, 6, 13);
+    if (!ImageAssets.draw(ctx, ImageAssets.title("heroShip"), cx, py, 46)) {
+      ctx.fillStyle = "#4dabf7"; ctx.beginPath(); ctx.moveTo(cx, py - 16); ctx.lineTo(cx - 13, py + 12); ctx.lineTo(cx + 13, py + 12); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#a5d8ff"; ctx.fillRect(cx - 3, py - 5, 6, 13);
+    }
     // 设置(右上角)/ 图鉴(左上角)小图标按钮
-    UI.button(ctx, this.titleSettingsRect(), { label: "⚙ 设置", color: "#adb5bd", font: 15, radius: 10 });
-    UI.button(ctx, this.titleCodexRect(), { label: "📖 图鉴", color: "#adb5bd", font: 15, radius: 10 });
-    UI.button(ctx, this.titleHelpRect(), { label: "？帮助", color: "#adb5bd", font: 15, radius: 10 });
+    this.drawTitleSmallButton(ctx, this.titleSettingsRect(), "settings", "⚙ 设置", "设置");
+    this.drawTitleSmallButton(ctx, this.titleCodexRect(), "codex", "📖 图鉴", "图鉴");
+    this.drawTitleSmallButton(ctx, this.titleHelpRect(), "help", "？帮助", "帮助");
     // S:四个同尺寸大按钮 —— 开始 / 无尽 / 挑战码 / 机型选择
-    UI.button(ctx, this.titleStartRect(), { label: "关卡地图 MAP", color: "#38d9a9", active: true, font: 26, radius: 16 });
-    UI.button(ctx, this.titleEndlessRect(), { label: "无尽挑战 CHALLENGE", sub: "难度固定 · 普通", color: "#ff922b", active: true, font: 26, radius: 16 });
-    UI.button(ctx, this.titleChallengeRect(), { label: "挑战码 RIVAL", sub: "挑战码 / 每日", color: "#ffd43b", active: true, font: 25, radius: 16 });
-    UI.button(ctx, this.titleShipRect(), { label: "机型选择 SHIP", sub: this.ship.name, color: "#4dabf7", active: true, font: 24, radius: 16 });
+    this.drawTitleImageButton(ctx, this.titleStartRect(), "map", { label: "关卡地图 MAP", color: "#38d9a9", active: true, font: 26, radius: 16 });
+    this.drawTitleImageButton(ctx, this.titleEndlessRect(), "challenge", { label: "无尽挑战 CHALLENGE", sub: "难度固定 · 普通", color: "#ff922b", active: true, font: 26, radius: 16 });
+    this.drawTitleImageButton(ctx, this.titleChallengeRect(), "rival", { label: "挑战码 RIVAL", sub: "挑战码 / 每日", color: "#ffd43b", active: true, font: 25, radius: 16 });
+    this.drawTitleImageButton(ctx, this.titleShipRect(), "ship", { label: "机型选择 SHIP", sub: this.ship.name, color: "#4dabf7", active: true, font: 24, radius: 16 });
     // Q:排行榜按关卡区分,标题页无具体关卡上下文,故不再显示总榜;进入关卡结算/失败画面时显示该关排行
     ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("排行榜 · 按关卡分别记录,通关或失败后可见", cx, 700);
+    ImageAssets.drawRect(ctx, ImageAssets.title("footerGlow"), cx, 872, CONFIG.WIDTH, 176);
     ctx.textAlign = "left";
   },
 
@@ -2888,6 +3034,7 @@ const game = {
   },
   // X5:炸弹按钮的精致图标——深色渐变弹体(球面高光做立体感)+ 引信 + 跳动火花,取代原来纯文字"×N"
   drawBombIcon(ctx, x, y, r) {
+    if (ImageAssets.draw(ctx, ImageAssets.uiIcon("bomb"), x, y, r * 1.55)) return;
     const br = r * 0.5, cy = y + r * 0.08;
     ctx.save();
     const g = ctx.createRadialGradient(x - br * 0.35, cy - br * 0.35, br * 0.15, x, cy, br);
@@ -2921,6 +3068,7 @@ const game = {
   //   图鉴/机型选择页的深色玻璃底上直接用机型本色(够亮,不用再压暗)。每种图案都带机型色描边发光+一点轻微待机动画,
   //   呼应用户"继续优化图标"的要求(不是静态死板的线框,而是有一点"活"的细节)。
   drawSpecialIcon(ctx, x, y, r, type, color = "#2b1d00") {
+    if (ImageAssets.draw(ctx, ImageAssets.uiIcon("special-" + (type || "nuke")), x, y, r * 1.65)) return;
     const s = r * 0.5, t = this.titleT;
     ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round";
     ctx.shadowColor = color; ctx.shadowBlur = 6;
@@ -3009,6 +3157,7 @@ const game = {
     ctx.restore();
   },
   drawSecondaryWeaponIcon(ctx, x, y, r, type, color) {
+    if (ImageAssets.draw(ctx, ImageAssets.uiIcon("secondary-" + type), x, y, r * 1.65)) return;
     const s = r * 0.5;
     ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2; ctx.lineCap = "round"; ctx.lineJoin = "round";
     if (type === "homing") {
@@ -3052,6 +3201,7 @@ const game = {
   },
   // X6:火力等级图标——两道叠放的上箭头("升级/增幅"的通用视觉语言),配合 drawCountBadge 显示具体等级数字
   drawPowerIcon(ctx, x, y, r) {
+    if (ImageAssets.draw(ctx, ImageAssets.uiIcon("power-upgrade"), x, y, r * 1.45)) return;
     const s = r * 0.5;
     ctx.save(); ctx.fillStyle = "#38d9a9"; ctx.shadowColor = "#38d9a9"; ctx.shadowBlur = 4;
     for (let i = 0; i < 2; i++) {
@@ -3135,13 +3285,16 @@ const game = {
     const text = e.name + " " + Math.ceil(this._endlessEventTimer) + "s";
     const detail = this.endlessEventHUDDetail(e);
     const x = CONFIG.WIDTH / 2, y = this.boss ? 122 : 88;
+    const icon = ImageAssets.uiEvent(e.key), iconPad = icon ? 30 : 0;
     ctx.save();
     ctx.font = "bold 13px 'Segoe UI', sans-serif";
-    const w = Math.min(CONFIG.WIDTH - 64, Math.max(ctx.measureText(text).width, detail ? ctx.measureText(detail).width : 0) + 22), h = detail ? 40 : 24;
+    const w = Math.min(CONFIG.WIDTH - 64, Math.max(ctx.measureText(text).width, detail ? ctx.measureText(detail).width : 0) + 22 + iconPad), h = detail ? 40 : 24;
     ctx.fillStyle = "rgba(8, 16, 28, .74)"; UI.roundRect(ctx, x - w / 2, y - h + 4, w, h, 8); ctx.fill();
     ctx.strokeStyle = UI.rgba(e.color || "#ffd43b", .82); ctx.lineWidth = 1.2; UI.roundRect(ctx, x - w / 2, y - h + 4, w, h, 8); ctx.stroke();
-    ctx.textAlign = "center"; ctx.fillStyle = e.color || "#ffd43b"; ctx.fillText(text, x, y - (detail ? 18 : 4));
-    if (detail) { ctx.fillStyle = "#ced4da"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText(UI.wrapText(ctx, detail, w - 18, 1)[0] || detail, x, y - 3); }
+    const tx = icon ? x + iconPad / 2 : x;
+    if (icon) ImageAssets.draw(ctx, icon, x - w / 2 + 18, y - (detail ? 20 : 8), 22);
+    ctx.textAlign = "center"; ctx.fillStyle = e.color || "#ffd43b"; ctx.fillText(text, tx, y - (detail ? 18 : 4));
+    if (detail) { ctx.fillStyle = "#ced4da"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText(UI.wrapText(ctx, detail, w - 18 - iconPad, 1)[0] || detail, tx, y - 3); }
     ctx.restore();
   },
   endlessEventHUDDetail(e) {
@@ -3173,6 +3326,7 @@ const game = {
     ctx.restore();
   },
   drawChargeIcon(ctx, x, y, r, color = "#2b1d00") {
+    if (ImageAssets.draw(ctx, ImageAssets.uiIcon("charge-shot"), x, y, r * 1.65)) return;
     const s = r * 0.5, pulse = 1 + Math.sin(this.titleT * 7) * 0.06;
     ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round";
     ctx.shadowColor = color; ctx.shadowBlur = 6;

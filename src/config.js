@@ -88,7 +88,7 @@ const CONFIG = {
   powerup: { radius: 14, speed: 130, dropChance: 0.11, healAmount: 12, autoInterval: 5, magnetRadius: 40, magnetSpeed: 640, chipMinPower: 5, chipMinEndlessTime: 30, chipDraftInterval: 30, chipBossDraftDelay: 30, chipMinDraftGap: 30,
     weights:        { power: 0.47, heal: 0.22, bomb: 0.12, wing: 0.14, chip: 0.05 },
     endlessWeights: { power: 0.48, heal: 0.23, bomb: 0.04, wing: 0.13, chip: 0.12 } },
-  overflow: { healShield: 30, healShieldDur: 8, bombEnergy: 26, wingChip: "sideGuns", threatGain: 18, score: 250 },
+  overflow: { healShield: 30, healShieldDur: 8, bombEnergy: 26, wingChip: "sideGuns", threatGain: 18, score: 250, batchWindow: 0.3, extraScore: 80, extraEnergy: 8, energyCap: 60, healShieldStep: 8, healShieldCap: 60, healShieldDurStep: 0.6, healShieldDurCap: 12 },
   threat: {
     maxLevel: 5, perLevel: 80, scoreStep: 0.08, damageStep: 0.04,
     fullPowerPerSec: 2.4, comboPerSec: 2.0, noHitPerSec: 1.5, noHitDelay: 14,
@@ -296,10 +296,10 @@ const CONFIG = {
   // dmgRampTime/dmgRampMult:经典无尽关卡(endlessLite)敌弹伤害从 t=0 的 1 倍线性增长,到 dmgRampTime 秒时封顶为 dmgRampMult 倍
   // GG:dmgDoubleInterval 给无尽挑战(非 lite)用——伤害按 2^(t/此值) 指数增长,不封顶,每过这么多秒伤害翻一倍
   endless: {
-    hpMult: 0.7, maxEnemies: 14, diffKey: "normal", startingDrafts: 2, dmgRampTime: 300, dmgRampMult: 3, dmgDoubleInterval: 300, enemyHpBaseMult: 1.55, enemyHpRampTime: 240, enemyHpRampMult: 3 / 1.55, enemyHpLateTime: 80, enemyHpLateMult: 2.5,
+    hpMult: 0.7, maxEnemies: 10, diffKey: "normal", startingDrafts: 2, dmgRampTime: 300, dmgRampMult: 3, dmgDoubleInterval: 300, enemyHpBaseMult: 1.55, enemyHpBoostTime: 60, enemyHpBoostMult: 3, enemyHpDoubleInterval: 120, enemyHpFloorTime: 35, enemyHpFloor: 320, enemyHpFloorTargetTime: 200, enemyHpFloorTarget: 12000, enemyHpFloorDoubleInterval: 240, enemyHpFloorMax: 24000,
     worldInterval: 40, powerupChance: 0.09,
     eventInterval: 28, eventDuration: 16, eventClearScore: 700, eventCleanShield: 18, eventCleanShieldDur: 5,
-    spawn: { initialDelay: 1.0, intervalBase: 1.8, intervalDecay: 0.008, intervalMin: 0.8, countBase: 2, countStepSec: 15, countStepMax: 5 },
+    spawn: { initialDelay: 1.0, intervalBase: 1.8, intervalDecay: 0.008, intervalMin: 0.8, countBase: 2, countStepSec: 15, countStepMax: 3 },
     moves: ["sine", "zigzag", "dive", "straight", "swoop", "orbit"],
     pools: [
       { until: 20, enemies: ["small", "small", "medium"] },
@@ -339,7 +339,7 @@ const CONFIG = {
       { key: "harvestRush", name: "收割突袭", color: "#fcc419", sub: "收割机抢夺补给", routeBias: "风险", minTime: 210, enemyType: "harvester", enemyChance: 0.34, spawnBonus: 1, powerupChanceAdd: 0.06, scoreBonus: 0.13 },
     ],
     boss: {
-      firstDelay: 30, interval: 35, baseHpMult: 1.35, hpStep: 0.11,
+      firstDelay: 30, interval: 35, baseHpMult: 1, secondHpMult: 5, hpGrowthMult: 2, hpGrowthMax: 80, drStart: 0.20, drStep: 0.10, drMax: 0.50,
       affixes: [
         { key: "armored", name: "装甲", desc: "生命更高", color: "#74c0fc", hpMult: 0.18, scoreMult: 1.12 },
         { key: "rapid", name: "急袭", desc: "攻击更快", color: "#ff8787", fireMult: 0.82, scoreMult: 1.15 },
@@ -366,7 +366,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 80, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 81, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

@@ -156,6 +156,7 @@ class Player {
     if (!Settings.data.hideWings) for (let i = 0; i < this.wings; i++) {
       const wx = x + wingOffsetX(i), wy = y + 6;
       ctx.fillStyle = "#ffa94d"; ctx.fillRect(wx - 1.5, wy + 6, 3, 4 + Math.random() * 3);
+      if (ImageAssets.draw(ctx, ImageAssets.wingman(this.ship.key), wx, wy, 34)) continue;
       ctx.fillStyle = "#ced4da"; ctx.beginPath(); ctx.moveTo(wx, wy - 9); ctx.lineTo(wx - 7, wy + 7); ctx.lineTo(wx + 7, wy + 7); ctx.closePath(); ctx.fill();
     }
     // 主引擎尾焰(闪烁)
@@ -293,6 +294,13 @@ class EnemyBullet {
   // QQ:双色平涂改一个径向渐变(白热核心→暗红边缘),一次 fill 顺带比原来两次 fill 还省一点
   draw(ctx) {
     if (this.kind === "mine") {
+      if (this._armed) {
+        ctx.save(); ctx.globalAlpha = 0.35 + 0.25 * Math.sin(game.titleT * 18) ** 2;
+        ImageAssets.draw(ctx, ImageAssets.effect("mineWarningPulse"), this.x, this.y, (this.triggerRadius || this.radius * 3.5) * 2);
+        ctx.restore();
+      }
+      const mineImg = ImageAssets.effect(this._armed ? "mineArmed" : "floatingMine");
+      if (ImageAssets.draw(ctx, mineImg, this.x, this.y, this.radius * 2.9)) return;
       ctx.save(); ctx.globalAlpha = this._armed ? 0.75 + 0.25 * Math.sin(game.titleT * 24) ** 2 : 0.85;
       ctx.fillStyle = this._armed ? "#ffd43b" : "#ff922b"; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = "#212529"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(this.x - this.radius * 0.55, this.y); ctx.lineTo(this.x + this.radius * 0.55, this.y); ctx.moveTo(this.x, this.y - this.radius * 0.55); ctx.lineTo(this.x, this.y + this.radius * 0.55); ctx.stroke();
@@ -300,6 +308,9 @@ class EnemyBullet {
     }
     if (this.kind === "fire" || this.kind === "ice") {
       const fire = this.kind === "fire", a = this.maxLife ? clamp(this.life / this.maxLife, 0, 1) : 1;
+      ctx.save(); ctx.globalAlpha = 0.38 + a * 0.35;
+      if (ImageAssets.draw(ctx, ImageAssets.effect(fire ? "fireZone" : "iceZone"), this.x, this.y, this.radius * 2.65)) { ctx.restore(); return; }
+      ctx.restore();
       ctx.save(); ctx.globalAlpha = 0.18 + a * 0.34;
       const g = ctx.createRadialGradient(this.x, this.y, 4, this.x, this.y, this.radius);
       g.addColorStop(0, fire ? "rgba(255,236,153,.9)" : "rgba(255,255,255,.85)");
@@ -423,8 +434,9 @@ class Enemy {
     this.elite = elite || this.rollElite(); this.eliteCfg = this.elite ? CONFIG.elite[this.elite] : null;
     const hpMult = game.endless ? game.endlessEnemyHpMult() : 1;
     this.eliteShieldMax = 0; this.eliteShield = 0; this._eliteCd = 1.2 + game.rng(); this._eliteWarn = 0;
-    if (game.endless) this.hp = Math.max(1, Math.round(this.hp * hpMult));
+    if (game.endless) this.hp = Math.max(1, Math.round(this.hp * hpMult), game.endlessEnemyHpFloor());
     if (this.eliteCfg) { this.hp = Math.round(this.hp * (this.eliteCfg.hpMult || 1)); this.score = Math.round(this.score * (this.eliteCfg.scoreMult || 1)); }
+    if (game.endless) this.hp = Math.max(this.hp, game.endlessEnemyHpFloor());
     if (this.eliteCfg && this.eliteCfg.speedMult) this.speed *= this.eliteCfg.speedMult;
     this.eliteShieldMax = Math.round((t.shield || 0) * hpMult) + (this.eliteCfg && this.eliteCfg.shield ? this.eliteCfg.shield : 0);
     this.eliteShield = this.eliteShieldMax;
@@ -960,6 +972,7 @@ class Boss {
   }
   damage(d) {
     if (this._invulnTimer > 0) { this._flash = 0.04; return false; }
+    if (this._endlessDr > 0) d *= 1 - this._endlessDr;
     if (this.def.guardDR && game.bossEscortCount() > 0 && this._weakTimer <= 0) d *= 1 - this.def.guardDR;
     const threshold = this._invulnLeft > 0 ? this._invulnLeft / (this._invulnTotal + 1) : 0, nextHp = this.hp - d;
     if (threshold > 0 && this.hp / this.maxHp > threshold && nextHp / this.maxHp <= threshold) {
@@ -991,6 +1004,11 @@ class Boss {
         ctx.arc(x, y, r * (1.2 + (1 - hit) * 0.16), 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
+      }
+      if (this._weakTimer > 0) {
+        if (!ImageAssets.draw(ctx, ImageAssets.effect("weakpointMarker"), x, y - 6, Math.max(42, r * 0.72))) {
+          ctx.save(); ctx.strokeStyle = "#ffd43b"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y - 6, r * 0.22, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+        }
       }
       return;
     }
@@ -1045,6 +1063,8 @@ class PowerUp {
       ctx.beginPath(); ctx.arc(x, y, r + 7 + pulse * 3, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
     }
+    ctx.globalAlpha = 0.75; ImageAssets.draw(ctx, ImageAssets.effect("powerupGlow"), x, y, r * 3.1); ctx.globalAlpha = 1;
+    if (ImageAssets.draw(ctx, ImageAssets.uiPowerup(this.kind), x, y, r * 2.5)) { ctx.restore(); return; }
     ctx.shadowColor = bg; ctx.shadowBlur = 12 * pulse;
     const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, 2, x, y, r * 1.4);
     g.addColorStop(0, UI.shade(bg, 0.55)); g.addColorStop(0.65, bg); g.addColorStop(1, UI.shade(bg, -0.45));
@@ -1070,6 +1090,18 @@ class PowerUp {
       ctx.beginPath(); ctx.moveTo(x - 2, y - 8); ctx.lineTo(x - 11, y + 6); ctx.lineTo(x - 2, y + 3); ctx.closePath(); ctx.fill();
       ctx.beginPath(); ctx.moveTo(x + 2, y - 8); ctx.lineTo(x + 11, y + 6); ctx.lineTo(x + 2, y + 3); ctx.closePath(); ctx.fill();
     }
+  }
+}
+
+class ImageEffect {
+  constructor(x, y, key, size, life = 0.35) { this.x = x; this.y = y; this.key = key; this.size = size; this.life = life; this.maxLife = life; this.dead = false; }
+  update(dt) { this.life -= dt; if (this.life <= 0) this.dead = true; }
+  draw(ctx) {
+    const img = ImageAssets.effect(this.key);
+    if (!img) return;
+    ctx.save(); ctx.globalAlpha = clamp(this.life / this.maxLife, 0, 1);
+    ImageAssets.draw(ctx, img, this.x, this.y, this.size);
+    ctx.restore();
   }
 }
 
