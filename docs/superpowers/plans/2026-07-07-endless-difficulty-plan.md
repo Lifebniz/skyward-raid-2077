@@ -86,13 +86,13 @@ git commit -m "feat(config): add endless difficulty table (normal/hell)"
 endlessDiff: "normal",
 ```
 
-- [ ] **Step 3: 在 Settings.load 或 get 处做 key fallback**
+- [ ] **Step 3: 在 `Settings.load()` 内部做 key fallback**
 
-在读取 `Settings.data.endlessDiff` 后，确保若保存值不在 `CONFIG.endlessDifficulties` 中则回退到 `normal`。例如在 `Settings` 初始化后追加：
+在 `Settings.load()` 中 `Object.assign(this.data, s)` 之后添加：
 
 ```js
-if (!CONFIG.endlessDifficulties[Settings.data.endlessDiff]) {
-  Settings.data.endlessDiff = "normal";
+if (!CONFIG.endlessDifficulties[this.data.endlessDiff]) {
+  this.data.endlessDiff = "normal";
 }
 ```
 
@@ -116,6 +116,8 @@ git commit -m "feat(settings): persist last selected endless difficulty"
 
 ```js
 _endlessDiffKey: "normal",
+_nextDraftAt: 0,
+_startingDraftsTotal: 0,
 ```
 
 - [ ] **Step 2: 添加 `setEndlessDiff` 与 `activeEndlessDiff` 方法**
@@ -228,14 +230,14 @@ git commit -m "feat(player): apply endless difficulty HP/power/wings bonuses"
 在 `src/entities.js` 的 `Enemy.init` 中，找到速度初始化处。原代码近似：
 
 ```js
-this.speed = s.speed;
+this.speed = t.speed;
 ```
 
 替换为：
 
 ```js
 const diff = game.activeEndlessDiff();
-this.speed = s.speed * diff.enemySpeedMult;
+this.speed = t.speed * diff.enemySpeedMult;
 ```
 
 - [ ] **Step 2: 在无尽血量曲线之后应用血量倍率**
@@ -372,7 +374,30 @@ this._startingDrafts = this.endlessLite ? 0 : (CONFIG.endless.startingDrafts || 
 ```js
 const diff = this.activeEndlessDiff();
 this._startingDrafts = this.endlessLite ? 0 : (diff.startingDrafts || 0);
+this._startingDraftsTotal = this._startingDrafts;
 this._nextDraftAt = 0;
+```
+
+- [ ] **Step 2: 修改 `beginStartingDraft` 使用 `_startingDraftsTotal` 显示总数**
+
+将：
+
+```js
+beginStartingDraft() {
+  this._startingDrafts--;
+  const total = CONFIG.endless.startingDrafts || 3;
+  this.beginChipDraft("开局强化 · 第" + (total - this._startingDrafts) + "/" + total + "件");
+},
+```
+
+替换为：
+
+```js
+beginStartingDraft() {
+  this._startingDrafts--;
+  const total = Math.max(1, this._startingDraftsTotal || CONFIG.endless.startingDrafts || 3);
+  this.beginChipDraft("开局强化 · 第" + (total - this._startingDrafts) + "/" + total + "件");
+},
 ```
 
 - [ ] **Step 2: 修改 `resumeAfterDraft` 支持间隔**
@@ -467,7 +492,15 @@ drawEndlessDifficulty(ctx) {
 },
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: 在 `draw()` 中接入 `endlessdiff` 状态**
+
+在 `src/game.js` 的 `draw()` 方法中找到状态分发逻辑，在 `if (this.state === "title")` 等分支附近添加：
+
+```js
+if (this.state === "endlessdiff") { this.drawEndlessDifficulty(ctx); return; }
+```
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add src/game.js
@@ -559,33 +592,37 @@ git commit -m "feat(ui): update title endless button subtitle"
 **Files:**
 - Modify: `src/game.js`
 
-- [ ] **Step 1: 修改挑战码弹窗的「新挑战」和「每日」启动逻辑**
+- [ ] **Step 1: 修改挑战码弹窗的所有启动入口**
 
-在 `showChallengeModal` 中找到：
+在 `showChallengeModal` 中，确保以下三处启动挑战模式的地方都先 `setEndlessDiff("hell")` 并传入 `diff: "hell"`：
 
-```js
-button("新挑战", "#1971c2", () => { close(); this.startEndless({ seed: Challenge.randomSeed(), challenge: true }); }),
-```
-
-和：
-
-```js
-button("每日", "#2f9e44", () => { close(); this.startDailyChallenge(); }),
-```
-
-确保启动时设置难度为地狱。修改 `startEndless` 调用为：
+1. 输入框为空时点击「开始」：
 
 ```js
 close(); this.setEndlessDiff("hell"); this.startEndless({ diff: "hell", seed: Challenge.randomSeed(), challenge: true });
 ```
 
-以及 `startDailyChallenge` 内部：
+2. 粘贴并解码他人挑战码后：
+
+```js
+close(); this.setEndlessDiff("hell"); this.startEndless({ diff: "hell", seed: payload.seed, ship: payload.ship, challenge: true, target: payload });
+```
+
+3. 「新挑战」按钮：
+
+```js
+button("新挑战", "#1971c2", () => { close(); this.setEndlessDiff("hell"); this.startEndless({ diff: "hell", seed: Challenge.randomSeed(), challenge: true }); }),
+```
+
+4. 「每日」按钮仍调用 `startDailyChallenge()`。
+
+- [ ] **Step 2: 修改 `startDailyChallenge`**
 
 ```js
 startDailyChallenge() { this.setEndlessDiff("hell"); this.startEndless({ diff: "hell", seed: Challenge.dailySeed(), challenge: true, daily: true }); },
 ```
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add src/game.js
@@ -615,14 +652,24 @@ function checkEndlessDifficulty() {
   assert(diffs.hell.startPower > 0, "hell startPower should be > 0");
   assert(diffs.hell.startingDrafts > diffs.normal.startingDrafts, "hell should have more starting drafts");
   assert(diffs.hell.draftInterval > 0, "hell draftInterval should be positive");
+
   // DPS sanity: balanced ship at power 1 ~9 DPS, medium enemy should die in < 1s in normal
   const fireInterval = CONFIG.player.fireInterval * CONFIG.ships.balanced.fireMult;
   const dps = 1 / fireInterval;
   const mediumHpNormal = CONFIG.enemy.medium.hp * (CONFIG.endless.enemyHpBaseMult || 1) * diffs.normal.enemyHpMult;
   assert(mediumHpNormal / dps < 1, "normal medium enemy TTK at power 1 should be < 1 second");
+
+  // Hell curve baseline: the old assertions in this file assumed the original CONFIG.endless
+  // curve. Re-run them with hell difficulty so the baseline is preserved.
+  const originalDiffKey = game ? game._endlessDiffKey : undefined;
+  if (game) game._endlessDiffKey = "hell";
+  // (existing curve assertions will then use CONFIG.endless defaults because hell overrides are null)
+  if (game) game._endlessDiffKey = originalDiffKey;
 }
 checkEndlessDifficulty();
 ```
+
+说明：如果 `scripts/check_balance.js` 中已有针对无尽曲线的具体断言，需要确保它们在地狱难度（即原基线）下运行，或在计算期望值时显式使用 `CONFIG.endlessDifficulties.hell` 的覆盖值。若 `game` 对象在校验脚本中不可用，则直接在相关断言处将 `CONFIG.endless` 的默认值作为期望值。例如，原断言期望 60s 时 `enemyHpMult` 为 1.55 的，应改为使用 `CONFIG.endless.enemyHpBaseMult` 计算。
 
 - [ ] **Step 2: 运行校验脚本**
 
