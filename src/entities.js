@@ -984,7 +984,8 @@ class Boss {
   }
   startInvuln() {
     const inv = CONFIG.bossInvuln || {}, min = inv.minDuration || 5, max = inv.maxDuration || min;
-    this._invulnTimer = min + game.rng() * Math.max(0, max - min); this._invulnLeft--;
+    const fixed = game.endless && !game.endlessLite ? game.activeEndlessDiff().bossInvulnDuration : null;
+    this._invulnTimer = fixed != null ? fixed : min + game.rng() * Math.max(0, max - min); this._invulnLeft--;
     if (game.onBossInvuln) game.onBossInvuln(this);
   }
   draw(ctx) {

@@ -32,7 +32,7 @@ assert.strictEqual(CONFIG.player.maxPower, 8, "player max power should allow one
 assert.strictEqual(CONFIG.player.maxOvercharge, 8, "player overcharge cap should allow longer endless scaling");
 assert.strictEqual(CONFIG.wingMax, 5, "wing cap should allow stronger endless scaling");
 assert(CONFIG.weapon[CONFIG.player.maxPower], "maxPower should have a weapon pattern");
-assert.strictEqual(CONFIG.challenge.rulesVersion, 83, "challenge rules should bump for hell damage tuning");
+assert.strictEqual(CONFIG.challenge.rulesVersion, 84, "challenge rules should bump for hell boss tuning");
 assert(CONFIG.endlessDifficulties && CONFIG.endlessDifficulties.normal && CONFIG.endlessDifficulties.hell, "endless difficulties should define normal and hell");
 assert(CONFIG.endlessDifficulties.normal.enemyHpMult < CONFIG.endlessDifficulties.hell.enemyHpMult, "normal endless enemies should have less HP than hell");
 assert(CONFIG.endlessDifficulties.normal.bossHpMult < CONFIG.endlessDifficulties.hell.bossHpMult, "normal endless bosses should have less HP than hell");
@@ -40,6 +40,7 @@ assert(CONFIG.endlessDifficulties.normal.enemyHpDoubleInterval > CONFIG.endlessD
 assert(CONFIG.endlessDifficulties.normal.dmgDoubleInterval > CONFIG.endless.dmgDoubleInterval, "normal endless bullet damage curve should grow slower than hell");
 assert(CONFIG.endlessDifficulties.hell.playerHpMult > 1 && CONFIG.endlessDifficulties.hell.playerDmgMult > 1, "hell should grant strong player buffs");
 assert.strictEqual(CONFIG.endlessDifficulties.hell.playerDmgMult, 4, "hell player damage should be doubled again");
+assert.strictEqual(CONFIG.endlessDifficulties.hell.bossInvulnDuration, 2, "hell endless boss invulnerability should last 2s");
 assert(CONFIG.endlessDifficulties.hell.startWings > 0 && CONFIG.endlessDifficulties.hell.startPower > 0, "hell should grant starting wings and power");
 assert.strictEqual(CONFIG.endlessDifficulties.normal.playerDmgMult, 3, "normal should grant 3x player damage");
 assert.strictEqual(CONFIG.endlessDifficulties.normal.enemyHpMult, 0.45, "normal endless enemy HP should be lower");
@@ -81,9 +82,9 @@ assert.strictEqual(CONFIG.endless.boss.baseHpMult, 1, "first endless boss should
 assert.strictEqual(CONFIG.endless.boss.secondHpMult, 5, "second endless boss should be 5x base HP");
 assert.strictEqual(CONFIG.endless.boss.hpGrowthMult, 2, "later endless bosses should double from the second boss");
 assert.strictEqual(CONFIG.endless.boss.hpGrowthMax, 80, "late endless boss HP should cap after the 80x tier");
-assert.strictEqual(CONFIG.endless.boss.drStart, 0.20, "second endless boss should start at 20% DR");
-assert.strictEqual(CONFIG.endless.boss.drStep, 0.10, "endless boss DR should step by 10%");
-assert.strictEqual(CONFIG.endless.boss.drMax, 0.50, "endless boss DR should cap at 50%");
+assert.strictEqual(CONFIG.endless.boss.drStart, 0.10, "second endless boss should start at 10% DR");
+assert.strictEqual(CONFIG.endless.boss.drStep, 0.05, "endless boss DR should step by 5%");
+assert.strictEqual(CONFIG.endless.boss.drMax, 0.30, "endless boss DR should cap at 30%");
 between(CONFIG.bossPhase.weakDuration, 1.5, 4, "boss phase weak duration");
 between(CONFIG.bossPhase.weakDamageMult, 0.1, 0.45, "boss phase weak damage");
 between(CONFIG.bossInvuln.minCount, 2, 3, "boss invuln min count");
@@ -215,9 +216,9 @@ assert.deepStrictEqual([0, 1, 2, 3, 4, 5].map(n => game.endlessBossHpMult(n)), [
 game._endlessDiffKey = "normal";
 for (const n of [0, 1, 2, 3, 8]) approx(game.endlessBossDamageReduction(n), 0, 1e-9, `normal endless boss ${n} DR`);
 game._endlessDiffKey = "hell";
-for (const [n, dr] of [[0, 0], [1, 0.2], [2, 0.3], [3, 0.4], [4, 0.5], [8, 0.5]]) approx(game.endlessBossDamageReduction(n), dr, 1e-9, `endless boss ${n} DR`);
+for (const [n, dr] of [[0, 0], [1, 0.1], [2, 0.15], [3, 0.2], [4, 0.25], [8, 0.3]]) approx(game.endlessBossDamageReduction(n), dr, 1e-9, `endless boss ${n} DR`);
 const lateBossEffectiveHp = CONFIG.bosses[9].hp * game.endlessBossHpMult(8) / (1 - game.endlessBossDamageReduction(8));
-between(lateBossEffectiveHp / focusedDps.lateBossSustain + CONFIG.bossInvuln.minCount * CONFIG.bossInvuln.minDuration, 120, 180, "late boss expected sustain duration");
+between(lateBossEffectiveHp / focusedDps.lateBossSustain + CONFIG.bossInvuln.minCount * CONFIG.endlessDifficulties.hell.bossInvulnDuration, 90, 130, "late boss expected sustain duration");
 assert(!("hpStep" in CONFIG.endless.boss), "endless boss HP should not use the old linear growth");
 assert(!("hpStepMax" in CONFIG.endless.boss), "endless boss HP should not have a growth cap");
 game._endlessT = CONFIG.endless.dmgDoubleInterval || 300;
@@ -627,6 +628,11 @@ assert.strictEqual(lockBoss.damage(lockBoss.maxHp), false, "boss should lock HP 
 assert.strictEqual(lockBoss.hp, Math.round(lockBoss.maxHp / 3), "boss second lock should clamp HP to the second threshold");
 lockBoss._invulnTimer = 0;
 assert.strictEqual(lockBoss.damage(lockBoss.maxHp), true, "boss should die after all lock charges are spent");
+game.endless = true; game.endlessLite = false; game._endlessDiffKey = "hell";
+const hellLockBoss = new Boss(0);
+assert.strictEqual(hellLockBoss.damage(hellLockBoss.maxHp), false, "hell endless boss should lock HP at the first threshold");
+assert.strictEqual(hellLockBoss._invulnTimer, 2, "hell endless boss lock should last exactly 2s");
+game.endless = false;
 game.bonuses = {}; game.enemyBullets = [{ dead: false }]; game.lasers = [{ dead: false }]; game.powerups = []; game.floats = []; game.player = { power: CONFIG.powerup.chipMinPower };
 const phaseBoss = { isBoss: true, x: 100, y: 120, radius: 40, hp: 100, maxHp: 100, _fireTimer: 0, def: { name: "PhaseTest", colors: ["#fff", "#ffd43b"], enterY: 120 } };
 game.onBossPhaseChange(phaseBoss, 1);

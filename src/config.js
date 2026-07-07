@@ -310,7 +310,7 @@ const CONFIG = {
       enemyHpMult: 0.75, bossHpMult: 0.85, enemySpeedMult: 1.15,
       enemyHpBoostMult: 2.2, enemyHpDoubleInterval: 180,
       dmgRampMult: null, dmgDoubleInterval: null,
-      scoreMult: 1.5, fireMult: 1.0, dmgMult: 1.0, invuln: 1.2, startBombs: 3,
+      scoreMult: 1.5, fireMult: 1.0, dmgMult: 1.0, invuln: 1.2, startBombs: 3, bossInvulnDuration: 2,
     },
   },
   // F 无尽模式:玩家血量倍率更低、同屏敌人上限更小。T:难度统一固定,不跟随地图选择
@@ -360,7 +360,7 @@ const CONFIG = {
       { key: "harvestRush", name: "收割突袭", color: "#fcc419", sub: "收割机抢夺补给", routeBias: "风险", minTime: 210, enemyType: "harvester", enemyChance: 0.34, spawnBonus: 1, powerupChanceAdd: 0.06, scoreBonus: 0.13 },
     ],
     boss: {
-      firstDelay: 30, interval: 35, baseHpMult: 1, secondHpMult: 5, hpGrowthMult: 2, hpGrowthMax: 80, drStart: 0.20, drStep: 0.10, drMax: 0.50,
+      firstDelay: 30, interval: 35, baseHpMult: 1, secondHpMult: 5, hpGrowthMult: 2, hpGrowthMax: 80, drStart: 0.10, drStep: 0.05, drMax: 0.30,
       affixes: [
         { key: "armored", name: "装甲", desc: "生命更高", color: "#74c0fc", hpMult: 0.18, scoreMult: 1.12 },
         { key: "rapid", name: "急袭", desc: "攻击更快", color: "#ff8787", fireMult: 0.82, scoreMult: 1.15 },
@@ -387,7 +387,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 83, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 84, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
