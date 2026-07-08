@@ -22,7 +22,7 @@ class Player {
     this.slowTimer = 0; this.slowMult = 1;
     this.invulnTimer = 0; this._flameTimer = 0;   // RR:引擎尾焰粒子发射计时
     // X4:机型专属必杀状态——护盾(防御型)/隐身(侦查型)。攻击型必杀(全屏重伤)/平衡型必杀(冲击波)不需要常驻状态,现开现用。
-    this.shieldHp = 0; this.shieldMax = 0; this.shieldTimer = 0; this.stealthTimer = 0;
+    this.shieldHp = 0; this.shieldMax = 0; this.shieldTimer = 0; this.shieldHits = 0; this.stealthTimer = 0;
   }
   update(dt) {
     const c = CONFIG.player;
@@ -47,7 +47,7 @@ class Player {
       if (this.charge >= CONFIG.charge.max) game.releaseCharge();
     }
     if (this.stealthTimer > 0) this.stealthTimer -= dt;
-    if (this.shieldTimer > 0) { this.shieldTimer -= dt; if (this.shieldTimer <= 0) { this.shieldHp = 0; this.shieldMax = 0; } }
+    if (this.shieldTimer > 0) { this.shieldTimer -= dt; if (this.shieldTimer <= 0) { this.shieldHp = 0; this.shieldMax = 0; this.shieldHits = 0; } }
     this.addEnergy(CONFIG.special.passiveGainPerSec * dt);   // X3:必杀能量随时间缓慢自然回复,不完全依赖击杀
     // RR:引擎尾焰拖尾粒子(叠加在三角形闪烁尾焰之下,做出推进的动态感)
     this._flameTimer -= dt;
@@ -118,6 +118,8 @@ class Player {
       blocked = true;
       if (dmg <= this.shieldHp) { this.shieldHp -= dmg; dmg = 0; }
       else { dmg -= this.shieldHp; this.shieldHp = 0; this.shieldTimer = 0; }
+      if (this.shieldHits > 0 && --this.shieldHits <= 0) { this.shieldHp = 0; this.shieldTimer = 0; }
+      if (this.shieldHp <= 0) this.shieldHits = 0;
     }
     if (dmg > 0 && game.chipActive("capacitor") && this.overcharge > 0) {
       const block = Math.min(dmg, CONFIG.chips.capacitor.block);
@@ -138,10 +140,10 @@ class Player {
   }
   addPower() {
     if (this.power < CONFIG.player.maxPower) this.power++;
-    else { this.overcharge = clamp(this.overcharge + 1, 0, CONFIG.player.maxOvercharge); this.powerDamage++; }
+    else { this.overcharge = clamp(this.overcharge + 1, 0, CONFIG.player.maxOvercharge); this.powerDamage += CONFIG.overflow.powerDamageStep || 0.25; }
   }
   addBomb()    { this.bombs = clamp(this.bombs + 1, 0, CONFIG.player.maxBombs); }
-  addWing()    { if (this.wings < CONFIG.wingMax) this.wings++; else this.wingDamage++; }
+  addWing()    { if (this.wings < CONFIG.wingMax) this.wings++; else this.wingDamage += CONFIG.overflow.wingDamageStep || 0.25; }
   addEnergy(n) { this.energy = clamp(this.energy + n * (this.ship.energyMult || 1), 0, 100); }
   heal(n)      { this.hp = clamp(this.hp + n, 0, this.maxHp); }
   applySlow(mult, dur) {
@@ -152,6 +154,7 @@ class Player {
     this.shieldHp = Math.max(this.shieldHp, n);
     this.shieldMax = Math.max(this.shieldMax, n);
     this.shieldTimer = Math.max(this.shieldTimer, dur);
+    this.shieldHits = 0;
     game.spawnShockwave(this.x, this.y, this.radius * 2.2, "#74c0fc");
   }
   // X4:原来的机身绘制拆成 _drawBody,供隐身态(稳定半透明)和正常态共用,避免复制一遍

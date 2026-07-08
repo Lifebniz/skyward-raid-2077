@@ -1856,7 +1856,7 @@ const game = {
   useSpecialShield() {
     const s = CONFIG.special;
     this.player.heal(this.player.maxHp * s.healOnShield);
-    this.player.shieldHp = s.shieldHp; this.player.shieldMax = s.shieldHp; this.player.shieldTimer = s.shieldDur;
+    this.player.shieldHp = s.shieldHp; this.player.shieldMax = s.shieldHp; this.player.shieldTimer = s.shieldDur; this.player.shieldHits = s.shieldHits || 2;
     this.burst(this.player.x, this.player.y, "#38d9a9", 22, 220); this.spawnShockwave(this.player.x, this.player.y, this.player.radius * 2.4, "#38d9a9");
   },
   // 侦查型:长时间隐身免伤(见 Player.takeDamage / Player._drawStealthShimmer),不清场也不加防御,纯靠"躲开这一段"
@@ -1941,12 +1941,13 @@ const game = {
     return this.player.power >= CONFIG.powerup.chipMinPower;
   },
   chooseDrop() {
-    const w = this.endless ? CONFIG.powerup.endlessWeights : CONFIG.powerup.weights;
+    const w = this.endless ? CONFIG.powerup.endlessWeights : CONFIG.powerup.weights, p = this.player, fullMult = CONFIG.powerup.fullWeightMult || 0.2;
     const kinds = ["power", "heal", "bomb", "wing", "chip"].filter(k => this.canDrop(k));
-    const total = kinds.reduce((s, k) => s + (w[k] || 0), 0);
+    const weight = k => (w[k] || 0) * (p && ((k === "power" && p.power >= CONFIG.player.maxPower) || (k === "wing" && p.wings >= CONFIG.wingMax)) ? fullMult : 1);
+    const total = kinds.reduce((s, k) => s + weight(k), 0);
     if (total <= 0) return "heal";
     let r = this.rng() * total;
-    for (const k of kinds) { if (r < (w[k] || 0)) return k; r -= w[k] || 0; }
+    for (const k of kinds) { const wk = weight(k); if (r < wk) return k; r -= wk; }
     return kinds[kinds.length - 1];
   },
   grantOverflowScore(color = "#ffd43b", kind = "reward", label = "满额奖励") {

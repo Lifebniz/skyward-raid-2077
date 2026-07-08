@@ -86,7 +86,7 @@ const CONFIG = {
 
   // weights 普通掉落;endlessWeights 无尽掉落(炸弹更稀有)。火力满级后继续吃 power 会永久强化主炮/激光。
   // autoInterval:常规关卡(非无尽)每隔多久自动刷新一个道具(秒)。
-  powerup: { radius: 14, speed: 130, dropChance: 0.11, healAmount: 12, autoInterval: 5, magnetRadius: 40, magnetSpeed: 640, chipMinPower: 5, chipMinEndlessTime: 30, chipDraftInterval: 30, chipBossDraftDelay: 30, chipMinDraftGap: 30,
+  powerup: { radius: 14, speed: 130, dropChance: 0.11, healAmount: 12, autoInterval: 5, magnetRadius: 40, magnetSpeed: 640, chipMinPower: 5, chipMinEndlessTime: 30, chipDraftInterval: 30, chipBossDraftDelay: 30, chipMinDraftGap: 30, fullWeightMult: 0.2,
     weights:        { power: 0.47, heal: 0.22, bomb: 0.12, wing: 0.14, chip: 0.05 },
     endlessWeights: { power: 0.48, heal: 0.23, bomb: 0.04, wing: 0.13, chip: 0.12 } },
   // OO:道具图鉴用的展示文案 —— 图标/配色直接复用 drawPowerupToken(见 entities.js),和局内掉落物完全一致
@@ -98,7 +98,7 @@ const CONFIG = {
     wing:   { name: "僚机", desc: "获得 1 架侧翼僚机,叠加火力覆盖", color: "#495057", labelColor: "#ced4da" },
     chip:   { name: "芯片", desc: "拾取后触发一次芯片/强化抽取", color: "#4dabf7" },
   },
-  overflow: { healShield: 30, healShieldDur: 8, bombEnergy: 26, wingChip: "sideGuns", threatGain: 18, score: 250, batchWindow: 0.3, extraScore: 80, extraEnergy: 8, energyCap: 60, healShieldStep: 8, healShieldCap: 60, healShieldDurStep: 0.6, healShieldDurCap: 12 },
+  overflow: { healShield: 30, healShieldDur: 8, bombEnergy: 26, wingChip: "sideGuns", threatGain: 18, score: 250, batchWindow: 0.3, extraScore: 80, extraEnergy: 8, energyCap: 60, powerDamageStep: 0.25, wingDamageStep: 0.25, healShieldStep: 8, healShieldCap: 60, healShieldDurStep: 0.6, healShieldDurCap: 12 },
   threat: {
     maxLevel: 5, perLevel: 80, scoreStep: 0.08, damageStep: 0.04,
     fullPowerPerSec: 2.4, comboPerSec: 2.0, noHitPerSec: 1.5, noHitDelay: 14,
@@ -288,7 +288,7 @@ const CONFIG = {
       bodyShape: "bulk", lerpMult: 0.85, radiusMult: 1.15, dmgTakenMult: 0.8, energyMult: 1.0, comboTimeoutMult: 1.0, bombDmgMult: 1.25, specialCooldownMult: 1.0,
       weaponBias: { missileDamageBonus: 1, missileSplashMult: 1.18 },
       perkName: "钢铁装甲", perkDesc: "受到伤害 -20% · 导弹溅射更强",
-      specialType: "shield", specialName: "护盾展开", specialDesc: "立即回复部分生命,并展开可吸收伤害的能量护盾" },
+      specialType: "shield", specialName: "护盾展开", specialDesc: "立即回复部分生命,并展开最多抵挡2次伤害的能量护盾" },
     scout: { key: "scout", name: "侦查型", color: "#ffd43b", desc: "机动灵活·体积小", hpMult: 0.65, fireMult: 0.92, bombs: 1, wings: 0,
       bodyShape: "dart", lerpMult: 1.5, radiusMult: 0.78, dmgTakenMult: 1.0, energyMult: 1.15, comboTimeoutMult: 1.0, bombDmgMult: 1.0, specialCooldownMult: 0.75,
       weaponBias: { homingIntervalMult: 0.9, homingTurnBonus: 1.1, chargeRate: 1.1 },
@@ -301,7 +301,7 @@ const CONFIG = {
   //   (60秒能从0攒满,纯粹是保底,不会比正常边打边攒更快),避免"没打到东西的时候必杀完全不涨"的干等感
   // X4:机型专属必杀参数——shieldHp/shieldDur/healOnShield 给防御型;stealthDur 给侦查型;waveDamage/waveSpeed/waveWidthGrow 给平衡型
   special: { bossDamage: 110, gainPerKill: 3, gainBossKill: 25, passiveGainPerSec: 1.7, invuln: 0.8, cooldown: 15,
-    shieldHp: 60, shieldDur: 9, healOnShield: 0.3, stealthDur: 4.0, waveDamage: 45 },
+    shieldHp: 60, shieldDur: 9, shieldHits: 2, healOnShield: 0.3, stealthDur: 4.0, waveDamage: 45 },
   endlessDifficulties: {
     normal: {
       key: "normal", name: "常规演练", color: "#4dabf7",
@@ -314,7 +314,7 @@ const CONFIG = {
     },
     hell: {
       key: "hell", name: "绝境深潜", color: "#ff6b6b",
-      playerHpMult: 2, playerDmgMult: 2, startWings: 2, startPower: 2,
+      playerHpMult: 2, playerDmgMult: 1, startWings: 2, startPower: 2,
       startingDrafts: 3, draftInterval: 30,
       enemyHpMult: 0.65, bossHpMult: 5, enemySpeedMult: 1.15,
       enemyHpBoostMult: 1.80, enemyHpDoubleInterval: 240,
@@ -398,7 +398,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 89, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 90, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
