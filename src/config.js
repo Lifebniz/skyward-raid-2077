@@ -86,7 +86,7 @@ const CONFIG = {
 
   // weights 普通掉落;endlessWeights 无尽掉落(炸弹更稀有)。火力满级后继续吃 power 会永久强化主炮/激光。
   // autoInterval:常规关卡(非无尽)每隔多久自动刷新一个道具(秒)。
-  powerup: { radius: 14, speed: 130, dropChance: 0.11, healAmount: 12, autoInterval: 5, healDropInterval: 20, magnetRadius: 40, magnetSpeed: 640, chipMinPower: 5, chipMinEndlessTime: 30, chipDraftInterval: 30, chipBossDraftDelay: 30, chipMinDraftGap: 30, fullWeightMult: 0.2,
+  powerup: { radius: 14, speed: 130, dropChance: 0.11, healAmount: 12, autoInterval: 5, magnetRadius: 40, magnetSpeed: 640, chipMinPower: 5, chipMinEndlessTime: 30, chipDraftInterval: 30, chipBossDraftDelay: 30, chipMinDraftGap: 30, fullWeightMult: 0.2,
     weights:        { power: 0.47, heal: 0.22, bomb: 0.12, wing: 0.14, chip: 0.05 },
     endlessWeights: { power: 0.48, heal: 0.23, bomb: 0.04, wing: 0.13, chip: 0.12 } },
   // OO:道具图鉴用的展示文案 —— 图标/配色直接复用 drawPowerupToken(见 entities.js),和局内掉落物完全一致
@@ -327,7 +327,7 @@ const CONFIG = {
   // GG:dmgDoubleInterval 给无尽挑战(非 lite)用——伤害按 2^(t/此值) 指数增长,不封顶,每过这么多秒伤害翻一倍
   endless: {
     hpMult: 0.7, maxEnemies: 10, diffKey: "normal", startingDrafts: 2, dmgRampTime: 300, dmgRampMult: 3, dmgDoubleInterval: 300, enemyHpBaseMult: 1.15, enemyHpBoostTime: 60, enemyHpBoostMult: 1.8, enemyHpDoubleInterval: 240, enemyHpFloorTime: 35, enemyHpFloor: 170, enemyHpFloorTargetTime: 200, enemyHpFloorTarget: 5600, enemyHpFloorDoubleInterval: 240, enemyHpLateTime: 300, enemyHpLateDoubleInterval: 150, enemyHpFloorLateDoubleInterval: 180, enemyHpFloorMax: 22000,
-    dynamicHp: { startTime: 300, interval: 60, enemyLife: 3, enemyFailRatio: 0.9, enemyTargetLife: 2, enemyMinSamples: 10, bossTargetLife: 60, bossMinGap: 10, bossDamageReduction: 0.5, enemyDamageReduction: 0.2, score: 3000 },
+    dynamicHp: { startTime: 300, interval: 60, enemyLife: 3, enemyFailRatio: 0.9, enemyTargetLife: 2, enemyMinSamples: 10, bossTargetLife: 60, bossMinGap: 10, bossDamageReduction: 0.5, enemyDamageReduction: 0.05, score: 3000 },
     worldInterval: 40, powerupChance: 0.09,
     eventInterval: 28, eventDuration: 16, eventClearScore: 700, eventCleanShield: 18, eventCleanShieldDur: 5,
     spawn: { initialDelay: 1.0, intervalBase: 1.8, intervalDecay: 0.008, intervalMin: 0.8, countBase: 2, countStepSec: 15, countStepMax: 3 },
@@ -398,7 +398,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 92, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 95, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
