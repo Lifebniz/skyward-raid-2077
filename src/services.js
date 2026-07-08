@@ -53,7 +53,9 @@ const Sound = {
 const Music = {
   tracks: [
     { src: "assets/audio/above-the-sprawl.mp3", title: "Above the Sprawl" },
-    { src: "assets/audio/skyward-raid-bgm-02.m4a", title: "Skyward Raid BGM 02" },
+    { src: "assets/audio/skyward-raid-bgm-02.m4a", title: "Cloudbreak Pursuit" },
+    { src: "assets/audio/after-the-scramble.mp3", title: "After the Scramble" },
+    { src: "assets/audio/skyward-breach.mp3", title: "Skyward Breach" },
   ],
   index: 0, playing: false, enabled: true, volume: 0.8, gain: 0.55, fade: 2.2, track: null,
   playPending: false, autoplayBlocked: false,
