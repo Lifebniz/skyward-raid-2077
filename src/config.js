@@ -98,7 +98,7 @@ const CONFIG = {
     wing:   { name: "僚机", desc: "获得 1 架侧翼僚机,叠加火力覆盖", color: "#495057", labelColor: "#ced4da" },
     chip:   { name: "芯片", desc: "拾取后触发一次芯片/强化抽取", color: "#4dabf7" },
   },
-  overflow: { healShield: 30, healShieldDur: 8, bombEnergy: 26, wingChip: "sideGuns", threatGain: 18, score: 250, batchWindow: 0.3, extraScore: 80, extraEnergy: 8, energyCap: 60, powerDamageStep: 0.25, wingDamageStep: 0.25, healShieldStep: 8, healShieldCap: 60, healShieldDurStep: 0.6, healShieldDurCap: 12 },
+  overflow: { healShield: 30, healShieldDur: 8, bombEnergy: 26, wingChip: "sideGuns", threatGain: 18, score: 250, batchWindow: 0.3, extraScore: 80, extraEnergy: 8, energyCap: 60, powerDamageStep: 1, wingDamageStep: 0.25, healShieldStep: 8, healShieldCap: 60, healShieldDurStep: 0.6, healShieldDurCap: 12 },
   threat: {
     maxLevel: 5, perLevel: 80, scoreStep: 0.08, damageStep: 0.04,
     fullPowerPerSec: 2.4, comboPerSec: 2.0, noHitPerSec: 1.5, noHitDelay: 14,
@@ -398,7 +398,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 95, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 96, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
