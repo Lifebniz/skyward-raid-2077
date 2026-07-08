@@ -15,7 +15,10 @@ const game = {
   _itemSpawnTimer: 0,   // Q:常规关卡(非无尽)每隔 CONFIG.powerup.autoInterval 秒自动刷新一个道具
   _overflowBatch: {},
   _bombsUsedThisLevel: 0,   // OO:本关用了几个炸弹(给"轻装上阵"成就用)
-  _shipIdx: 0, _shipDragStartX: 0, _shipDragging: false,   // R:首页机型选择(左右滑动)
+  // R:机型选择——弧形展台轮播。_shipScroll 是连续的槽位坐标(可为小数,拖动时随手指走);
+  // _shipIdx 是当前吸附到的整数机型下标,松手/点击后 _shipScroll 缓动追向 _shipScrollTarget 直至吸附完成。
+  _shipIdx: 0, _shipScroll: 0, _shipScrollTarget: 0, _shipSnapping: false,
+  _shipDragStartX: 0, _shipDragStartScroll: 0, _shipDragging: false, _shipDragMoved: false,
   _hpTrailRatio: 1,   // AA:血条"残影"—— 掉血后缓慢跟随下降,做视觉反馈
   _lastState: "title", _stateFadeT: 1,   // BB:菜单/覆盖层统一淡入(状态一变就重置为0,0.3秒淡到1)
   _settleAnimT: 0,   // BB:结算类数字滚动动画计时
@@ -85,25 +88,70 @@ const game = {
   endlessBossDamageReductionBoost() { return this.endlessDynamicStarted() ? ((CONFIG.endless.dynamicHp || {}).bossDamageReduction || 0) : 0; },
   worldTransitionDur() { return 1.4; },
   setWorld(world, fade = false) { if (this.world === world) return; this._worldTransFrom = this.world; this._worldTransT = fade ? 0 : this.worldTransitionDur(); this.world = world; },
-  // R:首页机型选择(左右滑动的卡片页,关卡地图的机型选项保留不变)
+  // R:机型选择——弧形展台轮播(下方展示区可丝滑拖动/点侧边机型跳转,松手后缓动吸附到最近机型;上方是选中机型的介绍)
   shipSelectOrder() { return CONFIG.shipOrder; },
-  toShipSelect() { this.state = "shipselect"; const order = this.shipSelectOrder(), i = order.indexOf(this.ship.key); this._shipIdx = i >= 0 ? i : 0; },
-  shipSelectBackRect() { return { x: 20, y: 28, w: 90, h: 36 }; },
-  shipSelectArrowRect(dir) { const y = 150 + 210 / 2 - 24; return dir < 0 ? { x: 26, y, w: 56, h: 48 } : { x: CONFIG.WIDTH - 82, y, w: 56, h: 48 }; },   // 与卡片(cardY150/cardH210)垂直居中对齐
-  shipSelectConfirmRect() { return { x: CONFIG.WIDTH / 2 - 130, y: CONFIG.HEIGHT - 100, w: 260, h: 54 }; },
-  shipSelectPointerDown(px, py) {
-    const inR = (r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h, order = this.shipSelectOrder();
-    if (inR(this.shipSelectBackRect())) { this.toTitle(); return; }
-    if (inR(this.shipSelectArrowRect(-1))) { this._shipIdx = (this._shipIdx - 1 + order.length) % order.length; return; }
-    if (inR(this.shipSelectArrowRect(1))) { this._shipIdx = (this._shipIdx + 1) % order.length; return; }
-    if (inR(this.shipSelectConfirmRect())) { this.setShip(order[this._shipIdx]); return; }
-    this._shipDragStartX = px; this._shipDragging = true;
+  toShipSelect() {
+    this.state = "shipselect";
+    const order = this.shipSelectOrder(), i = order.indexOf(this.ship.key);
+    this._shipIdx = i >= 0 ? i : 0; this._shipScroll = this._shipIdx; this._shipScrollTarget = this._shipIdx;
+    this._shipDragging = false; this._shipDragMoved = false; this._shipSnapping = false;
   },
-  // 松手时按滑动距离切换机型(左滑下一个 / 右滑上一个)
-  shipSelectSwipe(px) {
-    const order = this.shipSelectOrder(), dx = px - this._shipDragStartX;
-    if (dx < -40) this._shipIdx = (this._shipIdx + 1) % order.length;
-    else if (dx > 40) this._shipIdx = (this._shipIdx - 1 + order.length) % order.length;
+  shipSelectBackRect() { return { x: 20, y: 28, w: 90, h: 36 }; },
+  // GG:所有区块的位置都从这两个矩形派生,保证"画出来的"和"点得到的"永远对得上,也不会再有下方按钮/提示语重叠的问题
+  shipInfoPanelRect() { return { x: 30, y: 92, w: CONFIG.WIDTH - 60, h: 452 }; },
+  shipCaseRect() { const p = this.shipInfoPanelRect(); return { x: p.x, y: p.y + p.h + 18, w: p.w, h: 210 }; },
+  shipCarouselBaseY() { const c = this.shipCaseRect(); return c.y + c.h * 0.52; },   // 展示框内机型的基准高度(留出框内底部给圆点指示器)
+  shipCarouselSpacing() { return 138; },    // 每个槽位在水平方向的间距(像素),让侧边机型和展示框边缘/箭头留出余量
+  shipCarouselMaxSlots() { return 1; },     // 中心两侧各渲染/可点击的槽位数
+  shipSelectArrowRect(dir) {
+    const c = this.shipCaseRect(), y = this.shipCarouselBaseY() - 24;
+    return dir < 0 ? { x: c.x + 10, y, w: 46, h: 48 } : { x: c.x + c.w - 56, y, w: 46, h: 48 };
+  },
+  shipSelectConfirmRect() { const c = this.shipCaseRect(); return { x: CONFIG.WIDTH / 2 - 130, y: c.y + c.h + 26, w: 260, h: 54 }; },
+  // 命中弧形展台里两侧的待选机型(中心槽位[d=0]走确认按钮,这里不响应),返回相对当前吸附槽位的偏移量
+  shipCarouselHitSlot(px, py) {
+    const cx = CONFIG.WIDTH / 2, baseY = this.shipCarouselBaseY(), spacing = this.shipCarouselSpacing(), maxSlots = this.shipCarouselMaxSlots();
+    const frac = this._shipScroll - Math.round(this._shipScroll);
+    for (let d = -maxSlots; d <= maxSlots; d++) {
+      if (d === 0) continue;
+      const offset = d - frac, absO = Math.abs(offset);
+      if (absO > maxSlots + 0.5) continue;
+      const scale = clamp(1 - absO * 0.32, 0.36, 1);
+      const x = cx + offset * spacing, y = baseY - absO * absO * 10;
+      const hw = 48 * scale, hh = 64 * scale;
+      if (px >= x - hw && px <= x + hw && py >= y - hh && py <= y + hh) return d;
+    }
+    return null;
+  },
+  // 统一入口:目标槽位可以超出 [0,n) (比如连续点右箭头),缓动动画走最近的连续路径,不会绕远路
+  beginShipSnap(target) {
+    const order = this.shipSelectOrder(), n = order.length;
+    this._shipScrollTarget = target;
+    this._shipIdx = ((Math.round(target) % n) + n) % n;
+    this._shipSnapping = true; this._shipDragging = false;
+  },
+  shipSelectPointerDown(px, py) {
+    const inR = (r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+    if (inR(this.shipSelectBackRect())) { this.toTitle(); return; }
+    if (inR(this.shipSelectArrowRect(-1))) { this.beginShipSnap(Math.round(this._shipScroll) - 1); return; }
+    if (inR(this.shipSelectArrowRect(1))) { this.beginShipSnap(Math.round(this._shipScroll) + 1); return; }
+    if (inR(this.shipSelectConfirmRect())) { this.setShip(this.shipSelectOrder()[this._shipIdx]); return; }
+    const slot = this.shipCarouselHitSlot(px, py);
+    if (slot != null) { this.beginShipSnap(Math.round(this._shipScroll) + slot); return; }
+    this._shipDragStartX = px; this._shipDragStartScroll = this._shipScroll; this._shipDragging = true; this._shipDragMoved = false; this._shipSnapping = false;
+  },
+  // 拖动时展台随手指丝滑跟随(连续坐标,不做离散阈值判断)
+  shipSelectPointerMove(px) {
+    if (!this._shipDragging) return;
+    const dx = px - this._shipDragStartX;
+    if (Math.abs(dx) > 4) this._shipDragMoved = true;
+    this._shipScroll = this._shipDragStartScroll - dx / this.shipCarouselSpacing();
+  },
+  // 松手:吸附到离当前滚动位置最近的机型,交给 update(dt) 里的缓动追上去
+  shipSelectPointerUp() {
+    if (!this._shipDragging) return;
+    this._shipDragging = false;
+    this.beginShipSnap(Math.round(this._shipScroll));
   },
 
   // ── Z:首页图鉴(关卡预览网格 + BOSS轮播 + OO:成就标签页,独立于机型选择页的拖拽状态)──
@@ -2033,6 +2081,12 @@ const game = {
     // BB:菜单/覆盖层统一淡入 —— 状态一变就从 0 开始,0.3 秒淡到 1(暂停态也照常推进,让暂停面板正常淡入)
     if (this.state !== this._lastState) { this._lastState = this.state; this._stateFadeT = 0; this._settleAnimT = 0; }
     this._stateFadeT += dt; this._settleAnimT += dt;
+    // R:机型展台缓动——阻尼追向吸附目标,帧率无关;足够接近就直接对齐,避免无限趋近
+    if (this._shipSnapping) {
+      const diff = this._shipScrollTarget - this._shipScroll;
+      if (Math.abs(diff) < 0.002) { this._shipScroll = this._shipScrollTarget; this._shipSnapping = false; }
+      else this._shipScroll += diff * Math.min(1, dt * 10);
+    }
     if (this.state === "paused") return;          // 暂停:冻结一切(逻辑/粒子/计时器)
     if (this.flashTimer > 0) this.flashTimer -= dt;
     if (this.bannerTimer > 0) this.bannerTimer -= dt;
@@ -2612,63 +2666,73 @@ const game = {
     ctx.textAlign = "center";
     ctx.fillStyle = "#fff"; ctx.font = "bold 30px 'Segoe UI', sans-serif"; ctx.fillText("选择机型", cx, 66);
     UI.button(ctx, this.shipSelectBackRect(), { label: "‹ 首页", color: "#adb5bd", font: 15, radius: 10 });
-    UI.button(ctx, this.shipSelectArrowRect(-1), { label: "‹", color: "#495057", font: 26, radius: 12 });
-    UI.button(ctx, this.shipSelectArrowRect(1), { label: "›", color: "#495057", font: 26, radius: 12 });
 
-    // 机体卡片(QQ:玻璃质感面板 + 真实机身剪影,与游戏内造型一致)
-    const cardW = 300, cardH = 210, cardX = cx - cardW / 2, cardY = 150;
-    UI.panel(ctx, cardX, cardY, cardW, cardH, 18, { accent: sp.color, lineWidth: 2.5 });
-    drawShipBody(ctx, cx, cardY + 92, sp);
-    ctx.fillStyle = sp.color; ctx.font = "bold 26px 'Segoe UI', sans-serif"; ctx.fillText(sp.name, cx, cardY + 156);
-    ctx.fillStyle = "#dee2e6"; ctx.font = "15px 'Segoe UI', sans-serif"; ctx.fillText(sp.desc, cx, cardY + 182);
-
-    // 圆点指示器(对应机型颜色)
-    order.forEach((k, i) => {
-      const dx = cx + (i - (order.length - 1) / 2) * 22, dy = cardY + cardH + 26;
-      ctx.beginPath(); ctx.arc(dx, dy, i === this._shipIdx ? 6 : 4.5, 0, Math.PI * 2);
-      ctx.fillStyle = i === this._shipIdx ? sp.color : "rgba(255,255,255,.3)"; ctx.fill();
-    });
+    // ── 介绍面板放上面:代号/角色标签/简介/性能条/被动/机型技能(机身模型挪到下方展示框,不占这里空间) ──
+    const info = this.shipInfoPanelRect();
+    UI.panel(ctx, info.x, info.y, info.w, info.h, 18, { accent: sp.color, lineWidth: 2.5 });
+    ctx.fillStyle = sp.color; ctx.font = "bold 27px 'Segoe UI', sans-serif"; ctx.fillText(sp.name, cx, info.y + 36);
+    // GG:新代号(穹界震吼等)是氛围向的机体昵称,原本的"平衡型/攻击型…"分类特点改画成名字下方的小徽章,一眼看出这是什么定位
+    const roleLabel = sp.role || "";
+    if (roleLabel) {
+      ctx.font = "bold 12px 'Segoe UI', sans-serif";
+      const padX = 12, pillH = 21, pillW = ctx.measureText(roleLabel).width + padX * 2, pillY = info.y + 48;
+      UI.roundRect(ctx, cx - pillW / 2, pillY, pillW, pillH, pillH / 2);
+      ctx.fillStyle = UI.rgba(sp.color, .16); ctx.fill();
+      UI.roundRect(ctx, cx - pillW / 2, pillY, pillW, pillH, pillH / 2);
+      ctx.strokeStyle = UI.rgba(sp.color, .6); ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = sp.color; ctx.textBaseline = "middle"; ctx.fillText(roleLabel, cx, pillY + pillH / 2 + 1); ctx.textBaseline = "alphabetic";
+    }
+    ctx.fillStyle = "#dee2e6"; ctx.font = "15px 'Segoe UI', sans-serif"; ctx.fillText(sp.desc, cx, info.y + 96);
 
     // X6:性能改用直观的进度条(而不是裸数字),被动/机型技能各配一枚精致图案图标——整体向"现代游戏图鉴"风格靠拢
-    const statX = cx - 150, statW = 300, statY = cardY + cardH + 56;
+    // GG:小节标题统一加左侧强调色竖条 + 顶部分隔线(取代之前光秃秃的灰字),让介绍页读起来更"设计过"而不是硬堆文字
+    const statX = cx - 150, statW = 300;
     ctx.textAlign = "left";
-    ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("性能", statX, statY);
+    const sectionHeader = (label, y) => {
+      const lineGrad = ctx.createLinearGradient(statX, 0, statX + statW, 0);
+      lineGrad.addColorStop(0, "rgba(255,255,255,.16)"); lineGrad.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.strokeStyle = lineGrad; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(statX, y - 18); ctx.lineTo(statX + statW, y - 18); ctx.stroke();
+      ctx.fillStyle = sp.color; ctx.fillRect(statX, y - 11, 3, 13);
+      ctx.fillStyle = "#adb5bd"; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.fillText(label, statX + 10, y);
+    };
+    const statY = info.y + 124;
+    sectionHeader("性能", statY);
     // 三条性能条:生命值/射速(越低越快,取反归一化)/机动,统一映射到有对比区分度的区间而不是简单 0-100%
     const stats = [
       { label: "生命值", ratio: clamp((sp.hpMult - 0.5) / 1.1, 0, 1), value: Math.round(sp.hpMult * 100) + "%", color: "#ff6b6b" },
       { label: "射速", ratio: 1 - clamp((sp.fireMult - 0.7) / 0.6, 0, 1), value: "×" + sp.fireMult.toFixed(2), color: "#4dabf7" },
       { label: "机动", ratio: clamp(((sp.lerpMult || 1) - 0.7) / 0.9, 0, 1), value: Math.round((sp.lerpMult || 1) * 100) + "%", color: "#38d9a9" },
     ];
-    let sy = statY + 16;
+    let sy = statY + 22;
     stats.forEach(st => {
       ctx.fillStyle = "#adb5bd"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText(st.label, statX, sy);
       ctx.textAlign = "right"; ctx.fillStyle = "#dee2e6"; ctx.fillText(st.value, statX + statW, sy); ctx.textAlign = "left";
       UI.bar(ctx, statX, sy + 6, statW, 8, st.ratio, UI.shade(st.color, -0.15), st.color, {});
-      sy += 32;
+      sy += 31;
     });
 
     // 被动技能:图标框(专属图案)+ 名称/描述
-    sy += 14;
-    ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("被动技能", statX, sy);
-    const perkBoxY = sy + 14, boxSize = 44;
+    sy += 22;
+    sectionHeader("被动技能", sy);
+    const perkBoxY = sy + 10, boxSize = 44;
     UI.panel(ctx, statX, perkBoxY, boxSize, boxSize, 12, { accent: sp.color });
     this.drawPassiveIcon(ctx, statX + boxSize / 2, perkBoxY + boxSize / 2, boxSize * 0.75, key, sp.color);
     const textX = statX + boxSize + 12, textW = statX + statW - textX;
     ctx.fillStyle = sp.color; ctx.font = "bold 15px 'Segoe UI', sans-serif"; ctx.fillText(sp.perkName || "—", textX, perkBoxY + 18);
     ctx.fillStyle = "#38d9a9"; ctx.font = "12px 'Segoe UI', sans-serif";
     UI.wrapText(ctx, sp.perkDesc || "", textW).forEach((line, i) => ctx.fillText(line, textX, perkBoxY + 38 + i * 15));
-    sy = perkBoxY + 62;
+    sy = perkBoxY + 58;
 
     const equip = [];
     if (sp.bombs > 0) equip.push("初始炸弹 +" + sp.bombs);
     if (sp.wings > 0) equip.push("初始僚机 +" + sp.wings);
     if (equip.length) { ctx.fillStyle = "#dee2e6"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText(equip.join("  ·  "), statX, sy); }
-    sy += 26;
+    sy += 24;
 
     // X5:"必杀技"改名"机型技能"——四个机型效果都不一样了,单独一段说明,别让玩家以为是同一个东西
     // X6:图标直接复用 HUD 里那枚同款 drawSpecialIcon(用户要求"技能放上游戏内技能图案"),而不是另画一套专属图鉴图标
-    ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("机型技能", statX, sy);
-    const skillBoxY = sy + 14;
+    sectionHeader("机型技能", sy);
+    const skillBoxY = sy + 10;
     UI.panel(ctx, statX, skillBoxY, boxSize, boxSize, 12, { accent: "#ffd43b" });
     this.drawSpecialIcon(ctx, statX + boxSize / 2, skillBoxY + boxSize / 2, boxSize * 0.75, sp.specialType || "nuke", sp.color);
     const skillTextX = statX + boxSize + 12, skillTextW = statX + statW - skillTextX;
@@ -2676,9 +2740,80 @@ const game = {
     ctx.fillStyle = "#dee2e6"; ctx.font = "12px 'Segoe UI', sans-serif";
     UI.wrapText(ctx, sp.specialDesc || "", skillTextW).forEach((line, i) => ctx.fillText(line, skillTextX, skillBoxY + 38 + i * 15));
 
+    // ── 下方:独立的玻璃展示框(和上面介绍面板同一视觉语言),框内是可丝滑拖动的弧形展台轮播 ──
+    const box = this.shipCaseRect(), baseY = this.shipCarouselBaseY(), spacing = this.shipCarouselSpacing(), maxSlots = this.shipCarouselMaxSlots();
+    const frac = this._shipScroll - Math.round(this._shipScroll);
+    UI.panel(ctx, box.x, box.y, box.w, box.h, 20, { accent: sp.color, lineWidth: 2, top: "rgba(255,255,255,.05)", bottom: "rgba(0,0,0,.1)" });
+    ctx.save(); UI.roundRect(ctx, box.x, box.y, box.w, box.h, 20); ctx.clip();   // 展台里的光效/机型不越出展示框边界
+
+    // 展台底座:缓慢自转的全息虚线圈 + 玻璃反光弧圈(左右淡出,不是一整圈硬边框)+ 中心主题色聚光,叠出"科幻展厅"的纵深感
+    const platformY = baseY + 30;
+    ctx.save(); ctx.translate(cx, platformY); ctx.rotate(this.titleT * 0.12);
+    ctx.setLineDash([3, 8]); ctx.strokeStyle = UI.rgba(sp.color, .22); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.ellipse(0, 0, spacing * (maxSlots + 0.85), 26, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]); ctx.restore();
+    const ringGrad = ctx.createLinearGradient(cx - spacing * (maxSlots + 0.7), 0, cx + spacing * (maxSlots + 0.7), 0);
+    ringGrad.addColorStop(0, "rgba(255,255,255,0)"); ringGrad.addColorStop(0.5, "rgba(255,255,255,.22)"); ringGrad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.strokeStyle = ringGrad; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(cx, platformY, spacing * (maxSlots + 0.65), 20, 0, 0, Math.PI * 2); ctx.stroke();
+    const glow = ctx.createRadialGradient(cx, baseY, 4, cx, baseY, 140);
+    glow.addColorStop(0, UI.rgba(sp.color, .3)); glow.addColorStop(1, UI.rgba(sp.color, 0));
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.ellipse(cx, baseY + 6, 160, 66, 0, 0, Math.PI * 2); ctx.fill();
+
+    // 按离中心的远近从远到近绘制,保证中间选中的机型始终盖在两侧待选机型之上
+    const slots = []; for (let d = -maxSlots; d <= maxSlots; d++) slots.push(d);
+    slots.sort((a, b) => Math.abs(b - frac) - Math.abs(a - frac));
+    for (const d of slots) {
+      const idx = ((this._shipIdx + d) % order.length + order.length) % order.length;
+      const shipCfg = CONFIG.ships[order[idx]];
+      const offset = d - frac, absO = Math.abs(offset);
+      if (absO > maxSlots + 0.5) continue;
+      const isCenter = absO < 0.02;
+      const scale = clamp(1 - absO * 0.34, 0.34, 1) * (isCenter ? 1.85 : 1);   // 中心机型额外放大突出重点
+      // OO:轻微呼吸悬浮(按机型错开相位,避免所有机型整齐划一地同步起伏,减少"生硬"的机械感)
+      const bob = Math.sin(this.titleT * 1.4 + idx * 1.7) * (isCenter ? 4 : 2.4);
+      const x = cx + offset * spacing, y = baseY - absO * absO * 12 + bob;
+      // 展台地面投影(贴地椭圆阴影),让机型看起来"站"在展台上而不是悬浮贴图
+      ctx.save(); ctx.globalAlpha = clamp(0.5 - absO * 0.22, 0.08, 0.5) * (isCenter ? 1 : 0.8);
+      ctx.fillStyle = "#000"; ctx.beginPath(); ctx.ellipse(x, platformY + 4, 30 * scale, 8 * scale, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.save(); ctx.globalAlpha = clamp(1 - absO * 0.42, 0.22, 1); ctx.translate(x, y);
+      ctx.rotate(clamp(offset, -1, 1) * 0.1);   // 侧边机型带一点转台角度,而不是和中心完全平行的死板剪影
+      ctx.scale(scale, scale);
+      drawShipBody(ctx, 0, 0, shipCfg);
+      ctx.restore();
+    }
+    ctx.restore();   // 结束展示框裁剪
+
+    // 四角科技支架 + 右上角"序号/总数"——比单纯的圆角边框更有"科幻展示柜"的仪表感
+    ctx.save(); ctx.strokeStyle = UI.rgba(sp.color, .55); ctx.lineWidth = 2; ctx.lineCap = "round";
+    const cs = 15, corners = [[box.x + 7, box.y + 7, 1, 1], [box.x + box.w - 7, box.y + 7, -1, 1], [box.x + 7, box.y + box.h - 7, 1, -1], [box.x + box.w - 7, box.y + box.h - 7, -1, -1]];
+    for (const [x0, y0, sx, sy] of corners) { ctx.beginPath(); ctx.moveTo(x0, y0 + cs * sy); ctx.lineTo(x0, y0); ctx.lineTo(x0 + cs * sx, y0); ctx.stroke(); }
+    ctx.restore();
+    ctx.textAlign = "right"; ctx.fillStyle = "rgba(255,255,255,.45)"; ctx.font = "12px 'Segoe UI', sans-serif";
+    ctx.fillText(String(this._shipIdx + 1).padStart(2, "0") + " / " + String(order.length).padStart(2, "0"), box.x + box.w - 16, box.y + 24);
+
+    UI.button(ctx, this.shipSelectArrowRect(-1), { label: "‹", color: "#495057", font: 26, radius: 12 });
+    UI.button(ctx, this.shipSelectArrowRect(1), { label: "›", color: "#495057", font: 26, radius: 12 });
+
+    // 圆点指示器(印在展示框底部,对应机型颜色)
     ctx.textAlign = "center";
-    UI.button(ctx, this.shipSelectConfirmRect(), { label: selected ? "✓ 使用中" : "选择 USE", color: selected ? "#38d9a9" : "#4dabf7", active: true, font: 20, radius: 14 });
-    ctx.fillStyle = "#4a90d9"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText("左右滑动或点击箭头切换机型", cx, CONFIG.HEIGHT - 32);
+    order.forEach((k, i) => {
+      const dx = cx + (i - (order.length - 1) / 2) * 22, dy = box.y + box.h - 20;
+      ctx.beginPath(); ctx.arc(dx, dy, i === this._shipIdx ? 6 : 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = i === this._shipIdx ? sp.color : "rgba(255,255,255,.3)"; ctx.fill();
+    });
+
+    // 未选中时给确认按钮加呼吸光晕,像个轻声召唤的行动点,不用玩家猜下一步该点哪
+    const confirmRect = this.shipSelectConfirmRect();
+    if (!selected) {
+      const pulse = 0.5 + Math.sin(this.titleT * 3) * 0.5, gcx = confirmRect.x + confirmRect.w / 2, gcy = confirmRect.y + confirmRect.h / 2;
+      const cg = ctx.createRadialGradient(gcx, gcy, 12, gcx, gcy, confirmRect.w * 0.75);
+      cg.addColorStop(0, UI.rgba("#4dabf7", .18 + pulse * .16)); cg.addColorStop(1, UI.rgba("#4dabf7", 0));
+      ctx.fillStyle = cg; ctx.beginPath(); ctx.ellipse(gcx, gcy, confirmRect.w * 0.75, confirmRect.h * 1.5, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    UI.button(ctx, confirmRect, { label: selected ? "✓ 使用中" : "选择 USE", color: selected ? "#38d9a9" : "#4dabf7", active: true, font: 20, radius: 14 });
+    ctx.fillStyle = "#4a90d9"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText("左右滑动或点击两侧机型切换", cx, confirmRect.y + confirmRect.h + 28);
     ctx.textAlign = "left";
   },
 
