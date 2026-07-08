@@ -140,7 +140,7 @@ class Player {
   }
   addPower() {
     if (this.power < CONFIG.player.maxPower) this.power++;
-    else { this.overcharge = clamp(this.overcharge + 1, 0, CONFIG.player.maxOvercharge); this.powerDamage += CONFIG.overflow.powerDamageStep || 0.25; }
+    else { this.overcharge = clamp(this.overcharge + 1, 0, CONFIG.player.maxOvercharge); this.powerDamage += CONFIG.overflow.powerDamageStep || 1; }
   }
   addBomb()    { this.bombs = clamp(this.bombs + 1, 0, CONFIG.player.maxBombs); }
   addWing()    { if (this.wings < CONFIG.wingMax) this.wings++; else this.wingDamage += CONFIG.overflow.wingDamageStep || 0.25; }
