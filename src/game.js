@@ -198,7 +198,7 @@ const game = {
     this.resetDepthSystems();
     this.flashTimer = 0; this.warningTimer = 0; this._recorded = false;
     this.farming = false; this._reached = false; this._farmTimer = 0; this._farmWaveN = 0; this.settleResult = null;
-    this._itemSpawnTimer = this.itemAutoInterval(); this._healDropTimer = CONFIG.powerup.healDropInterval || 20; this._overflowBatch = {}; this._hpTrailRatio = 1; this._bombsUsedThisLevel = 0;
+    this._itemSpawnTimer = this.itemAutoInterval(); this._overflowBatch = {}; this._hpTrailRatio = 1; this._bombsUsedThisLevel = 0;
     director.begin(LEVELS[i].script);
     input.targetX = CONFIG.player.startX; input.targetY = CONFIG.player.startY;
     Sound.start(); Music.play(); this.banner("STAGE " + LEVELS[i].id, CONFIG.worldIntro[(LEVELS[i].world - 1) % CONFIG.worldIntro.length]);
@@ -229,7 +229,7 @@ const game = {
     this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.imageEffects = []; this.floats = []; this.lasers = []; this.gravityPulses = []; this.shockwaves = []; this.specialWaves = [];
     this.score = 0; this.combo = 0; this.comboTimer = 0; this.maxCombo = 0;
     this.resetDepthSystems();
-    this.flashTimer = 0; this.warningTimer = 0; this._hpTrailRatio = 1; this._healDropTimer = CONFIG.powerup.healDropInterval || 20; this._overflowBatch = {};
+    this.flashTimer = 0; this.warningTimer = 0; this._hpTrailRatio = 1; this._overflowBatch = {};
     this._endlessT = 0; this._endlessSpawnT = CONFIG.endless.spawn.initialDelay; this._endlessBossT = CONFIG.endless.boss.firstDelay; this._endlessBossN = 0;
     this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = CONFIG.endless.eventInterval * 0.65; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventStartKills = 0; this._endlessEventStartEliteKills = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessBossAffixesSeen = []; this._endlessRecentBossAffixes = [];
     this.resetEndlessTelemetry();
@@ -279,6 +279,10 @@ const game = {
   endlessSpawnCount(t) {
     const s = CONFIG.endless.spawn;
     return s.countBase + Math.min(s.countStepMax, Math.floor(t / s.countStepSec));
+  },
+  endlessSpawnWaveCount(t) {
+    const total = this.endlessSpawnCount(t) + this.endlessEventValue("spawnBonus", 0);
+    return Math.max(1, Math.round(total * (this.boss && !this.boss.dead ? 0.5 : 1)));
   },
   activeEndlessEvent() { return this.endless && this._endlessEventTimer > 0 ? this._endlessEvent : null; },
   activeEventRouteBias() {
@@ -400,7 +404,7 @@ const game = {
     if (this._endlessSpawnT <= 0 && this.enemies.length < CONFIG.endless.maxEnemies) {
       const t = this._endlessT;
       this._endlessSpawnT = this.endlessSpawnInterval(t);
-      const n = Math.min(this.endlessSpawnCount(t) + this.endlessEventValue("spawnBonus", 0), CONFIG.endless.maxEnemies - this.enemies.length);   // 出怪量保留上限,后期淘汰交给血量和伤害曲线
+      const n = Math.min(this.endlessSpawnWaveCount(t), CONFIG.endless.maxEnemies - this.enemies.length);   // 出怪量保留上限,BOSS 在场时波次减半
       const pool = this.endlessPool(t), moves = CONFIG.endless.moves;
       for (let i = 0; i < n; i++) {
         const eventType = this.endlessEventValue("enemyType", null), eventChance = this.endlessEventValue("enemyChance", 0);
@@ -790,7 +794,7 @@ const game = {
       : base;
     let mult = Math.max(base, late);
     if (this.endlessDynamicHpActive() && e.enemyHpLateTime != null && this._endlessT > e.enemyHpLateTime) mult *= Math.pow(2, (this._endlessT - e.enemyHpLateTime) / (e.enemyHpLateDoubleInterval || e.enemyHpDoubleInterval || 120));
-    return mult * (1 + this.endlessEventValue("enemyHpMult", 0));
+    return mult * (1 + this.endlessEventValue("enemyHpMult", 0)) * 0.5;
   },
   endlessEnemyHpFloor() {
     if (!this.endless) return 0;
@@ -811,7 +815,7 @@ const game = {
     }
     if (this.endlessDynamicHpActive() && e.enemyHpLateTime != null && this._endlessT > e.enemyHpLateTime) floor *= Math.pow(2, (this._endlessT - e.enemyHpLateTime) / (e.enemyHpFloorLateDoubleInterval || e.enemyHpFloorDoubleInterval || 180));
     const capped = Math.min(e.enemyHpFloorMax || floor, floor), adaptive = this._endlessAdaptiveHp && this._endlessAdaptiveHp.enemyFloor || 0;
-    return Math.round(Math.max(capped, adaptive));
+    return Math.round(Math.max(capped, adaptive) * 0.5);
   },
   endlessBossHpMult(n = this._endlessBossN) {
     const cfg = CONFIG.endless.boss || {};
@@ -1462,11 +1466,6 @@ const game = {
   spawnMissile(x, y, overcharge) { this.missiles.push(pools.missile.get(x, y, overcharge)); },
   spawnPlayerLaser(x, y, overcharge, damageMult = 1, widthMult = 1) { this.playerLasers.push(pools.playerLaser.get(x, y, overcharge, damageMult, widthMult)); },
   spawnPowerUp(x, kind) { this.powerups.push(new PowerUp(x, -20, kind)); },
-  updateFixedHealDrop(dt) {
-    const interval = CONFIG.powerup.healDropInterval || 20;
-    this._healDropTimer -= dt;
-    if (this._healDropTimer <= 0) { this._healDropTimer += interval; this.spawnPowerUp(30 + this.rng() * (CONFIG.WIDTH - 60), "heal"); }
-  },
   nearestPowerup(x, y, maxDist = Infinity) {
     let best = null, bestD = maxDist * maxDist;
     for (const p of this.powerups) {
@@ -2065,7 +2064,6 @@ const game = {
       this._itemSpawnTimer -= dt;
       if (this._itemSpawnTimer <= 0) { this._itemSpawnTimer = this.itemAutoInterval(); this.spawnPowerUp(30 + this.rng() * (CONFIG.WIDTH - 60), this.chooseDrop()); }
     }
-    this.updateFixedHealDrop(dt);
     if (this.farming) {
       if (this.score >= this._clearScore * CONFIG.scoring.farmScoreCapMult) { this.settle(); }   // 达刷分总分上限 → 强制结算
       else { this._farmTimer -= dt; if (this._farmTimer <= 0 && this.enemies.length < CONFIG.scoring.farmMaxEnemies) { this._farmTimer = CONFIG.scoring.farmInterval; this.spawnFarmWave(); } }
