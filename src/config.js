@@ -316,18 +316,18 @@ const CONFIG = {
       key: "hell", name: "绝境深潜", color: "#ff6b6b",
       playerHpMult: 2, playerDmgMult: 4, startWings: 2, startPower: 2,
       startingDrafts: 3, draftInterval: 30,
-      enemyHpMult: 0.65, bossHpMult: 0.85, enemySpeedMult: 1.15,
+      enemyHpMult: 0.65, bossHpMult: 5, enemySpeedMult: 1.15,
       enemyHpBoostMult: 1.80, enemyHpDoubleInterval: 240,
       dmgRampMult: null, dmgDoubleInterval: null,
-      scoreMult: 1.5, fireMult: 1.0, dmgMult: 1.0, invuln: 1.2, startBombs: 3, bossInvulnDuration: 2,
+      scoreMult: 1.5, fireMult: 1.0, dmgMult: 1.0, invuln: 1.2, startBombs: 3, bossInvulnDuration: 5, bossBulletMult: 1.25,
     },
   },
   // F 无尽模式:玩家血量倍率更低、同屏敌人上限更小。T:难度统一固定,不跟随地图选择
   // dmgRampTime/dmgRampMult:经典无尽关卡(endlessLite)敌弹伤害从 t=0 的 1 倍线性增长,到 dmgRampTime 秒时封顶为 dmgRampMult 倍
   // GG:dmgDoubleInterval 给无尽挑战(非 lite)用——伤害按 2^(t/此值) 指数增长,不封顶,每过这么多秒伤害翻一倍
   endless: {
-    hpMult: 0.7, maxEnemies: 10, diffKey: "normal", startingDrafts: 2, dmgRampTime: 300, dmgRampMult: 3, dmgDoubleInterval: 300, enemyHpBaseMult: 1.15, enemyHpBoostTime: 60, enemyHpBoostMult: 1.8, enemyHpDoubleInterval: 240, enemyHpFloorTime: 35, enemyHpFloor: 170, enemyHpFloorTargetTime: 200, enemyHpFloorTarget: 5600, enemyHpFloorDoubleInterval: 240, enemyHpLateTime: 420, enemyHpLateDoubleInterval: 150, enemyHpFloorLateDoubleInterval: 180, enemyHpFloorMax: 22000,
-    dynamicHp: { startTime: 420, interval: 60, enemyLife: 3, enemyFailRatio: 0.9, enemyTargetLife: 2, enemyMinSamples: 10, bossTargetLife: 60, bossMinGap: 10, score: 3000 },
+    hpMult: 0.7, maxEnemies: 10, diffKey: "normal", startingDrafts: 2, dmgRampTime: 300, dmgRampMult: 3, dmgDoubleInterval: 300, enemyHpBaseMult: 1.15, enemyHpBoostTime: 60, enemyHpBoostMult: 1.8, enemyHpDoubleInterval: 240, enemyHpFloorTime: 35, enemyHpFloor: 170, enemyHpFloorTargetTime: 200, enemyHpFloorTarget: 5600, enemyHpFloorDoubleInterval: 240, enemyHpLateTime: 300, enemyHpLateDoubleInterval: 150, enemyHpFloorLateDoubleInterval: 180, enemyHpFloorMax: 22000,
+    dynamicHp: { startTime: 300, interval: 60, enemyLife: 3, enemyFailRatio: 0.9, enemyTargetLife: 2, enemyMinSamples: 10, bossTargetLife: 60, bossMinGap: 10, bossDamageReduction: 0.5, enemyDamageReduction: 0.2, score: 3000 },
     worldInterval: 40, powerupChance: 0.09,
     eventInterval: 28, eventDuration: 16, eventClearScore: 700, eventCleanShield: 18, eventCleanShieldDur: 5,
     spawn: { initialDelay: 1.0, intervalBase: 1.8, intervalDecay: 0.008, intervalMin: 0.8, countBase: 2, countStepSec: 15, countStepMax: 3 },
@@ -378,6 +378,7 @@ const CONFIG = {
         { key: "barrage", name: "弹幕", desc: "周期环形弹幕", color: "#ff922b", attack: "ring", every: 6.2, count: 14, speed: 230, damageMult: 0.78, scoreMult: 1.16 },
         { key: "escort", name: "护卫", desc: "周期投放精英僚机", color: "#51cf66", attack: "escort", every: 7.5, enemy: "gunner", elite: "charger", maxAdds: 4, scoreMult: 1.14 },
         { key: "aceEscort", name: "王牌", desc: "周期投放狂暴精英重炮机", color: "#ff6b6b", attack: "escort", every: 8.0, enemy: "gunner", elite: "berserker", maxAdds: 3, scoreMult: 1.18 },
+        { key: "eliteCommand", name: "统御", desc: "周期召唤高空精英机", color: "#ff6b6b", attack: "escort", every: 6.5, enemy: "gunner", elite: "berserker", maxAdds: 3, hpPct: 0.2, holdTop: true, scoreMult: 1.22 },
         { key: "ewar", name: "电子战", desc: "周期投放扰频精英机", color: "#15aabf", attack: "escort", every: 8.2, enemy: "jammer", elite: "jammer", maxAdds: 3, scoreMult: 1.18 },
         { key: "shieldEscort", name: "盾卫", desc: "周期投放护盾运输机", color: "#74c0fc", attack: "escort", every: 8.8, enemy: "shieldCarrier", maxAdds: 3, scoreMult: 1.17 },
         { key: "phantomEscort", name: "幻影", desc: "周期投放高速幻影僚机", color: "#22d3ee", attack: "escort", every: 7.0, enemy: "phantom", maxAdds: 4, scoreMult: 1.16 },
@@ -397,7 +398,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 87, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 88, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
