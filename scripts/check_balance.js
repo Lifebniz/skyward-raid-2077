@@ -28,7 +28,7 @@ const approx = (value, target, eps, label) => assert(Math.abs(value - target) <=
 const focusedDps = { earlyFull: 88, fourPick: 153, strongRoute: 1075, nearCap: 2700, lateBossSustain: 3000 };
 
 assert(CONFIG && CONFIG.player && CONFIG.endless, "CONFIG did not load");
-assert.strictEqual(CONFIG.challenge.rulesVersion, 81, "challenge rules should bump for enemy durability and boss locks");
+assert.strictEqual(CONFIG.challenge.rulesVersion, 82, "challenge rules should bump for adaptive endless durability");
 
 between(CONFIG.powerup.chipMinEndlessTime, 15, 30, "first endless draft delay");
 between(CONFIG.powerup.chipDraftInterval, 15, 30, "endless draft interval");
@@ -52,7 +52,10 @@ assert.strictEqual(CONFIG.endless.enemyHpFloorTime, 35, "endless enemies should 
 assert.strictEqual(CONFIG.endless.enemyHpFloor, 320, "opening enemy HP floor should survive early focused fire");
 assert.strictEqual(CONFIG.endless.enemyHpFloorTargetTime, 200, "endless enemies should enter ten-thousand HP territory around 200s");
 assert.strictEqual(CONFIG.endless.enemyHpFloorTarget, 12000, "200s enemy HP floor should match strong-route TTK target");
-assert.strictEqual(CONFIG.endless.enemyHpFloorMax, 24000, "late enemy HP floor should cap before becoming impossible");
+assert.strictEqual(CONFIG.endless.enemyHpFloorMax, 48000, "late enemy HP floor should leave room for post-7m pressure");
+assert.strictEqual(CONFIG.endless.enemyHpLateTime, 420, "endless adaptive pressure should start after 7 minutes");
+assert.strictEqual(CONFIG.endless.dynamicHp.startTime, 420, "dynamic HP calibration should start after 7 minutes");
+assert.strictEqual(CONFIG.endless.dynamicHp.interval, 60, "dynamic HP calibration should run once per minute");
 between(CONFIG.endless.dmgRampMult, 1.5, 3.5, "endless damage ramp");
 between(CONFIG.endless.boss.firstDelay, 20, 45, "first boss delay");
 between(CONFIG.endless.boss.interval, 25, 55, "boss interval");
@@ -164,6 +167,10 @@ between(game.endlessEnemyHpFloor() / focusedDps.strongRoute, 9, 14, "200s enemy 
 game._endlessT = 420;
 between(game.endlessEnemyHpFloor(), 22000, CONFIG.endless.enemyHpFloorMax, "420s enemy floor");
 between(game.endlessEnemyHpFloor() / focusedDps.nearCap, 7, 10, "420s enemy floor TTK for near-cap focused fire");
+const hpMult420 = game.endlessEnemyHpMult(), floor420 = game.endlessEnemyHpFloor();
+game._endlessT = 480;
+assert(game.endlessEnemyHpMult() > hpMult420 * 1.45, "post-7m enemy HP multiplier should steepen");
+assert(game.endlessEnemyHpFloor() > floor420 * 1.25, "post-7m enemy HP floor should steepen");
 between(CONFIG.endless.spawn.countStepMax, 3, 10, "endless spawn count cap");
 const cappedSpawnCount = CONFIG.endless.spawn.countBase + CONFIG.endless.spawn.countStepMax;
 assert.strictEqual(game.endlessSpawnCount(9999), cappedSpawnCount, "endless spawn count should cap for readability and performance");
@@ -172,6 +179,17 @@ assert.deepStrictEqual([0, 1, 2, 3, 4, 5].map(n => game.endlessBossHpMult(n)), [
 for (const [n, dr] of [[0, 0], [1, 0.2], [2, 0.3], [3, 0.4], [4, 0.5], [8, 0.5]]) approx(game.endlessBossDamageReduction(n), dr, 1e-9, `endless boss ${n} DR`);
 const lateBossEffectiveHp = CONFIG.bosses[9].hp * game.endlessBossHpMult(8) / (1 - game.endlessBossDamageReduction(8));
 between(lateBossEffectiveHp / focusedDps.lateBossSustain + CONFIG.bossInvuln.minCount * CONFIG.bossInvuln.minDuration, 120, 180, "late boss expected sustain duration");
+game.resetEndlessAdaptiveHp(); game._endlessT = 430; game._endlessBossT = -5;
+game.recordEndlessBossDeath({ _endlessSpawnT: 400, maxHp: 60000, _endlessDr: 0, _endlessEffectiveHp: 60000 });
+assert.strictEqual(game._endlessBossT, CONFIG.endless.dynamicHp.bossMinGap, "short-lived bosses should leave a minimum gap");
+assert.strictEqual(game.endlessBossHpFloor(0), 120000, "next boss should target at least 60s effective HP");
+game.player = { x: 220, y: 620 }; game.score = 0; game._endlessStats = { events: 0, eventClears: 0, eventScore: 0 };
+game._endlessAdaptiveHp.next = 480; game._endlessT = 480;
+for (let i = 0; i < 10; i++) game._endlessAdaptiveHp.enemyLives.push({ t: 480, life: 2 });
+game._endlessAdaptiveHp.damage.push({ t: 480, d: 60000 });
+game.updateEndlessDynamicHp();
+assert(game._endlessAdaptiveHp.enemyFloor >= 2000, "fast-cleared enemies should get a DPS-based 2s HP floor");
+assert(game.score >= CONFIG.endless.dynamicHp.score, "dynamic HP calibration should pay a high score bonus");
 assert(!("hpStep" in CONFIG.endless.boss), "endless boss HP should not use the old linear growth");
 assert(!("hpStepMax" in CONFIG.endless.boss), "endless boss HP should not have a growth cap");
 game._endlessT = CONFIG.endless.dmgDoubleInterval || 300;

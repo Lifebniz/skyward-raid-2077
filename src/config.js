@@ -296,7 +296,8 @@ const CONFIG = {
   // dmgRampTime/dmgRampMult:经典无尽关卡(endlessLite)敌弹伤害从 t=0 的 1 倍线性增长,到 dmgRampTime 秒时封顶为 dmgRampMult 倍
   // GG:dmgDoubleInterval 给无尽挑战(非 lite)用——伤害按 2^(t/此值) 指数增长,不封顶,每过这么多秒伤害翻一倍
   endless: {
-    hpMult: 0.7, maxEnemies: 10, diffKey: "normal", startingDrafts: 2, dmgRampTime: 300, dmgRampMult: 3, dmgDoubleInterval: 300, enemyHpBaseMult: 1.55, enemyHpBoostTime: 60, enemyHpBoostMult: 3, enemyHpDoubleInterval: 120, enemyHpFloorTime: 35, enemyHpFloor: 320, enemyHpFloorTargetTime: 200, enemyHpFloorTarget: 12000, enemyHpFloorDoubleInterval: 240, enemyHpFloorMax: 24000,
+    hpMult: 0.7, maxEnemies: 10, diffKey: "normal", startingDrafts: 2, dmgRampTime: 300, dmgRampMult: 3, dmgDoubleInterval: 300, enemyHpBaseMult: 1.55, enemyHpBoostTime: 60, enemyHpBoostMult: 3, enemyHpDoubleInterval: 120, enemyHpFloorTime: 35, enemyHpFloor: 320, enemyHpFloorTargetTime: 200, enemyHpFloorTarget: 12000, enemyHpFloorDoubleInterval: 240, enemyHpLateTime: 420, enemyHpLateDoubleInterval: 90, enemyHpFloorLateDoubleInterval: 150, enemyHpFloorMax: 48000,
+    dynamicHp: { startTime: 420, interval: 60, enemyLife: 3, enemyFailRatio: 0.9, enemyTargetLife: 2, enemyMinSamples: 10, bossTargetLife: 60, bossMinGap: 10, score: 3000 },
     worldInterval: 40, powerupChance: 0.09,
     eventInterval: 28, eventDuration: 16, eventClearScore: 700, eventCleanShield: 18, eventCleanShieldDur: 5,
     spawn: { initialDelay: 1.0, intervalBase: 1.8, intervalDecay: 0.008, intervalMin: 0.8, countBase: 2, countStepSec: 15, countStepMax: 3 },
@@ -366,7 +367,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 81, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 82, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
