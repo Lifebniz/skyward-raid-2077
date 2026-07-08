@@ -107,9 +107,9 @@ const CONFIG = {
   },
   chipOrder: ["laserFocus", "homingSwarm", "missileBarrage", "chargeCore", "capacitor", "sideGuns", "volatileCore"],
   chips: {
-    laserFocus: { name: "聚焦激光", desc: "激光更窄,伤害更高", color: "#cc5de8", duration: 15, laserWidthMult: 0.72, laserDamageBonus: 2, laserDurationBonus: 0.08, pickBuff: { label: "能量 +6", energy: 6 } },
-    homingSwarm: { name: "蜂群追踪", desc: "追踪弹更多,锁定更远", color: "#4dabf7", duration: 14, intervalMult: 0.72, extraCount: 1, targetRange: 430, damageBonus: 2, pickBuff: { label: "护盾 +6", shield: 6, dur: 3 } },
-    missileBarrage: { name: "导弹齐射", desc: "导弹更多,爆炸范围扩大", color: "#ff922b", duration: 14, intervalMult: 0.78, extraCount: 1, damageBonus: 2, splashMult: 1.28, pickBuff: { label: "清弹 140", clearBullets: 140 } },
+    laserFocus: { name: "聚焦激光", desc: "激光更窄,伤害更高", color: "#cc5de8", duration: 15, laserWidthMult: 0.72, laserDamageBonus: 3, laserDurationBonus: 0.08, pickBuff: { label: "能量 +6", energy: 6 } },
+    homingSwarm: { name: "蜂群追踪", desc: "追踪弹更多,锁定更远", color: "#4dabf7", duration: 14, intervalMult: 0.72, extraCount: 1, targetRange: 430, damageBonus: 3, pickBuff: { label: "护盾 +6", shield: 6, dur: 3 } },
+    missileBarrage: { name: "导弹齐射", desc: "导弹更多,爆炸范围扩大", color: "#ff922b", duration: 14, intervalMult: 0.78, extraCount: 1, damageBonus: 3, splashMult: 1.28, pickBuff: { label: "清弹 140", clearBullets: 140 } },
     chargeCore: { name: "蓄能核心", desc: "蓄力更快,冷却更短", color: "#ffd43b", duration: 13, chargeRate: 1.55, cooldownMult: 0.60, boostBonus: 4, pickBuff: { label: "能量 +10", energy: 10 } },
     capacitor: { name: "电容护盾", desc: "过载层可抵消伤害", color: "#74c0fc", duration: 16, block: 24, pickBuff: { label: "护盾 +12", shield: 12, dur: 4 } },
     sideGuns: { name: "侧翼炮组", desc: "主炮附加斜向火力", color: "#ffd43b", duration: 14, angle: 24, pickBuff: { label: "能量 +6", energy: 6 } },
@@ -314,7 +314,7 @@ const CONFIG = {
     },
     hell: {
       key: "hell", name: "绝境深潜", color: "#ff6b6b",
-      playerHpMult: 2, playerDmgMult: 1, startWings: 2, startPower: 2,
+      playerHpMult: 2, playerDmgMult: 3, startWings: 2, startPower: 2,
       startingDrafts: 3, draftInterval: 30,
       enemyHpMult: 0.65, bossHpMult: 5, enemySpeedMult: 1.15,
       enemyHpBoostMult: 1.80, enemyHpDoubleInterval: 240,
@@ -398,7 +398,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 91, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 92, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
@@ -437,3 +437,4 @@ const TUTORIAL_PAGES = [
   { icon: "⚠", title: "BOSS 机制", lines: ["BOSS 血量过低会触发狂暴,攻击变快变猛", "镭射攻击有红色预警,亮起后千万别站在里面", "首页"+ "「📖 图鉴」" + "可以查看所有 BOSS 的详细信息"] },
   { icon: "🛩", title: "机型 & 世界", lines: ["不同机型有独特的被动技能和专属机型技能,首页可左右滑动查看", "关卡地图也能换机型,和首页共用同一个选择", "已开放 5 个世界共 15 关,难度逐步升级"] },
 ];
+
