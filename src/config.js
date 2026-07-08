@@ -296,7 +296,7 @@ const CONFIG = {
       specialType: "stealth", specialName: "光学迷彩", specialDesc: "短暂隐身,期间免疫所有伤害" },
   },
   // A:僚机上限。B:必杀(能量攒满 + 冷却结束才可释放,offensive 全屏重伤;对 BOSS 伤害减半)
-  wingMax: 5,
+  wingMax: 6,
   // X3:cooldown 10→15(必杀强度没变,拉长间隔避免刷太快);新增 passiveGainPerSec —— 除了击杀攒能量,不管有没有击杀都按秒缓慢回能
   //   (60秒能从0攒满,纯粹是保底,不会比正常边打边攒更快),避免"没打到东西的时候必杀完全不涨"的干等感
   // X4:机型专属必杀参数——shieldHp/shieldDur/healOnShield 给防御型;stealthDur 给侦查型;waveDamage/waveSpeed/waveWidthGrow 给平衡型
