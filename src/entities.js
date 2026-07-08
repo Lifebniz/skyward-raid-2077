@@ -436,7 +436,7 @@ class Enemy {
     const diff = game.activeEndlessDiff();
     this.type = type; this.isBoss = false; this.x = x; this.y = t.fromBottom ? CONFIG.HEIGHT + t.radius + yOffset : -t.radius - yOffset;
     this.baseX = x; this.baseY = this.y; this.radius = t.radius; this.hp = t.hp; this.speed = t.speed * diff.enemySpeedMult; this.score = t.score; this.color = t.color; this.cfg = t;
-    this._fireTimer = 0.6 + game.rng() * 0.6; this.dead = false;
+    this._fireTimer = 0.6 + game.rng() * 0.6; this.dead = false; this._endlessSpawnT = game.endless ? game._endlessT : null;
     this.elite = elite || this.rollElite(); this.eliteCfg = this.elite ? CONFIG.elite[this.elite] : null;
     const hpMult = game.endless ? game.endlessEnemyHpMult() : 1;
     this.eliteShieldMax = 0; this.eliteShield = 0; this._eliteCd = 1.2 + game.rng(); this._eliteWarn = 0;
@@ -662,19 +662,21 @@ class Enemy {
     this._flash = 0.08;
   }
   damage(d, source = "") {
+    let dealt = 0;
     if (this.guardShield > 0) {
       const used = Math.min(this.guardShield, d);
-      this.guardShield -= used; d -= used; this._flash = 0.06;
-      if (this.guardShield > 0) return false;
+      this.guardShield -= used; d -= used; dealt += used; this._flash = 0.06;
+      if (this.guardShield > 0) { game.recordEndlessPlayerDamage(dealt); return false; }
     }
     if (this.eliteShield > 0) {
       const mult = 1 + game.bonusValue("shieldBreaker", "shieldDamageMult");
       const used = Math.min(this.eliteShield, d * mult);
-      this.eliteShield -= used; d -= used / mult; this._flash = 0.06;
+      this.eliteShield -= used; d -= used / mult; dealt += used; this._flash = 0.06;
       if (this.eliteShield <= 0) game.triggerShieldBreak(this);
-      if (this.eliteShield > 0) return false;
+      if (this.eliteShield > 0) { game.recordEndlessPlayerDamage(dealt); return false; }
     }
-    this.hp -= d; this._flash = 0.06; if (this.hp <= 0) { this.dead = true; return true; }
+    dealt += Math.max(0, Math.min(this.hp, d));
+    this.hp -= d; game.recordEndlessPlayerDamage(dealt); this._flash = 0.06; if (this.hp <= 0) { this.dead = true; return true; }
     if (source === "bullet") this.reflectShot();
     return false;
   }
@@ -978,13 +980,14 @@ class Boss {
   }
   damage(d) {
     if (this._invulnTimer > 0) { this._flash = 0.04; return false; }
+    const before = this.hp;
     if (this._endlessDr > 0) d *= 1 - this._endlessDr;
     if (this.def.guardDR && game.bossEscortCount() > 0 && this._weakTimer <= 0) d *= 1 - this.def.guardDR;
     const threshold = this._invulnLeft > 0 ? this._invulnLeft / (this._invulnTotal + 1) : 0, nextHp = this.hp - d;
     if (threshold > 0 && this.hp / this.maxHp > threshold && nextHp / this.maxHp <= threshold) {
-      this.hp = Math.max(1, Math.round(this.maxHp * threshold)); this._flash = 0.09; this.startInvuln(); return false;
+      this.hp = Math.max(1, Math.round(this.maxHp * threshold)); game.recordEndlessPlayerDamage(Math.max(0, before - this.hp)); this._flash = 0.09; this.startInvuln(); return false;
     }
-    this.hp = nextHp; this._flash = 0.09; if (this.hp <= 0) { this.dead = true; return true; } return false;
+    this.hp = nextHp; game.recordEndlessPlayerDamage(Math.max(0, before - Math.max(0, this.hp))); this._flash = 0.09; if (this.hp <= 0) { this.dead = true; return true; } return false;
   }
   startInvuln() {
     const inv = CONFIG.bossInvuln || {}, min = inv.minDuration || 5, max = inv.maxDuration || min;
