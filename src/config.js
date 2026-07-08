@@ -89,6 +89,15 @@ const CONFIG = {
   powerup: { radius: 14, speed: 130, dropChance: 0.11, healAmount: 12, autoInterval: 5, magnetRadius: 40, magnetSpeed: 640, chipMinPower: 5, chipMinEndlessTime: 30, chipDraftInterval: 30, chipBossDraftDelay: 30, chipMinDraftGap: 30,
     weights:        { power: 0.47, heal: 0.22, bomb: 0.12, wing: 0.14, chip: 0.05 },
     endlessWeights: { power: 0.48, heal: 0.23, bomb: 0.04, wing: 0.13, chip: 0.12 } },
+  // OO:道具图鉴用的展示文案 —— 图标/配色直接复用 drawPowerupToken(见 entities.js),和局内掉落物完全一致
+  powerupOrder: ["power", "heal", "bomb", "wing", "chip"],
+  powerupInfo: {
+    power:  { name: "火力", desc: "主炮火力等级 +1;满级后转化为过载层数,提升蓄力激光威力", color: "#2f9e44" },
+    heal:   { name: "医疗", desc: "立即回复少量生命值", color: "#e03131" },
+    bomb:   { name: "炸弹", desc: "获得 1 枚炸弹,可清屏并重创 BOSS", color: "#5f3dc4" },
+    wing:   { name: "僚机", desc: "获得 1 架侧翼僚机,叠加火力覆盖", color: "#495057", labelColor: "#ced4da" },
+    chip:   { name: "芯片", desc: "拾取后触发一次芯片/强化抽取", color: "#4dabf7" },
+  },
   overflow: { healShield: 30, healShieldDur: 8, bombEnergy: 26, wingChip: "sideGuns", threatGain: 18, score: 250, batchWindow: 0.3, extraScore: 80, extraEnergy: 8, energyCap: 60, healShieldStep: 8, healShieldCap: 60, healShieldDurStep: 0.6, healShieldDurCap: 12 },
   threat: {
     maxLevel: 5, perLevel: 80, scoreStep: 0.08, damageStep: 0.04,
@@ -295,7 +304,7 @@ const CONFIG = {
     shieldHp: 60, shieldDur: 9, healOnShield: 0.3, stealthDur: 4.0, waveDamage: 45 },
   endlessDifficulties: {
     normal: {
-      key: "normal", name: "普通 NORMAL", color: "#4dabf7",
+      key: "normal", name: "常规演练", color: "#4dabf7",
       playerHpMult: 1, playerDmgMult: 3, startWings: 0, startPower: 0,
       startingDrafts: 2, draftInterval: 30,
       enemyHpMult: 0.40, bossHpMult: 0.52, enemySpeedMult: 1,
@@ -304,7 +313,7 @@ const CONFIG = {
       scoreMult: 1.0, fireMult: 1.0, dmgMult: 1.0, invuln: 1.2, startBombs: 3,
     },
     hell: {
-      key: "hell", name: "地狱 HELL", color: "#ff6b6b",
+      key: "hell", name: "绝境深潜", color: "#ff6b6b",
       playerHpMult: 2, playerDmgMult: 4, startWings: 2, startPower: 2,
       startingDrafts: 3, draftInterval: 30,
       enemyHpMult: 0.65, bossHpMult: 0.85, enemySpeedMult: 1.15,
