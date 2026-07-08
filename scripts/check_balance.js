@@ -35,7 +35,7 @@ assert.strictEqual(CONFIG.player.maxPower, 8, "player max power should allow one
 assert.strictEqual(CONFIG.player.maxOvercharge, 8, "player overcharge cap should allow longer endless scaling");
 assert.strictEqual(CONFIG.wingMax, 6, "wing cap should stay even for symmetric wingmen");
 assert(CONFIG.weapon[CONFIG.player.maxPower], "maxPower should have a weapon pattern");
-assert.strictEqual(CONFIG.challenge.rulesVersion, 90, "challenge rules should bump for pickup growth nerfs");
+assert.strictEqual(CONFIG.challenge.rulesVersion, 91, "challenge rules should bump for fixed heal drops");
 assert(CONFIG.endlessDifficulties && CONFIG.endlessDifficulties.normal && CONFIG.endlessDifficulties.hell, "endless difficulties should define normal and hell");
 assert(CONFIG.endlessDifficulties.normal.enemyHpMult < CONFIG.endlessDifficulties.hell.enemyHpMult, "normal endless enemies should have less HP than hell");
 assert(CONFIG.endlessDifficulties.normal.bossHpMult < CONFIG.endlessDifficulties.hell.bossHpMult, "normal endless bosses should have less HP than hell");
@@ -50,6 +50,7 @@ assert(CONFIG.endlessDifficulties.hell.startWings > 0 && CONFIG.endlessDifficult
 assert.strictEqual(CONFIG.endlessDifficulties.normal.playerDmgMult, 3, "normal should grant 3x player damage");
 assert.strictEqual(CONFIG.endlessDifficulties.normal.enemyHpMult, 0.40, "normal endless enemy HP should be lower");
 assert.strictEqual(CONFIG.powerup.fullWeightMult, 0.2, "full attack drops should be heavily downweighted");
+assert.strictEqual(CONFIG.powerup.healDropInterval, 20, "heal packs should get a fixed 20s extra drop");
 assert.strictEqual(CONFIG.overflow.powerDamageStep, 0.25, "overflow power damage should be heavily reduced");
 assert.strictEqual(CONFIG.overflow.wingDamageStep, 0.25, "overflow wing damage should be heavily reduced");
 assert.strictEqual(CONFIG.special.shieldHits, 2, "defender shield should only block two hits");
@@ -480,6 +481,13 @@ game.player = { power: CONFIG.player.maxPower, wings: CONFIG.wingMax - 1 }; game
 assert.strictEqual(game.chooseDrop(), "wing", "wing drops should remain common before max wings");
 game.player = { power: CONFIG.player.maxPower, wings: CONFIG.wingMax }; game._rng = () => 0.8;
 assert.strictEqual(game.chooseDrop(), "bomb", "max wings should heavily reduce further wing drops");
+game.powerups = []; game._healDropTimer = CONFIG.powerup.healDropInterval; game._rng = () => 0.5;
+game.updateFixedHealDrop(CONFIG.powerup.healDropInterval - 1);
+assert.strictEqual(game.powerups.length, 0, "fixed heal drop should wait for the full interval");
+game.updateFixedHealDrop(1);
+assert.strictEqual(game.powerups.length, 1, "fixed heal drop should spawn one heal pack every interval");
+assert.strictEqual(game.powerups[0].kind, "heal", "fixed heal drop should always be a heal pack");
+approx(game._healDropTimer, CONFIG.powerup.healDropInterval, 1e-9, "fixed heal drop timer should reset");
 game.endless = true; game.player = { power: CONFIG.powerup.chipMinPower };
 game.drawChipChoices();
 assert(game._chipChoices.some(id => id.startsWith("bonus:")), "endless draft should include one permanent bonus option");

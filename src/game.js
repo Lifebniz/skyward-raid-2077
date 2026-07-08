@@ -198,7 +198,7 @@ const game = {
     this.resetDepthSystems();
     this.flashTimer = 0; this.warningTimer = 0; this._recorded = false;
     this.farming = false; this._reached = false; this._farmTimer = 0; this._farmWaveN = 0; this.settleResult = null;
-    this._itemSpawnTimer = this.itemAutoInterval(); this._overflowBatch = {}; this._hpTrailRatio = 1; this._bombsUsedThisLevel = 0;
+    this._itemSpawnTimer = this.itemAutoInterval(); this._healDropTimer = CONFIG.powerup.healDropInterval || 20; this._overflowBatch = {}; this._hpTrailRatio = 1; this._bombsUsedThisLevel = 0;
     director.begin(LEVELS[i].script);
     input.targetX = CONFIG.player.startX; input.targetY = CONFIG.player.startY;
     Sound.start(); Music.play(); this.banner("STAGE " + LEVELS[i].id, CONFIG.worldIntro[(LEVELS[i].world - 1) % CONFIG.worldIntro.length]);
@@ -229,7 +229,7 @@ const game = {
     this.playerBullets = []; this.homingShots = []; this.missiles = []; this.playerLasers = []; this.enemyBullets = []; this.enemies = []; this.powerups = []; this.particles = []; this.imageEffects = []; this.floats = []; this.lasers = []; this.gravityPulses = []; this.shockwaves = []; this.specialWaves = [];
     this.score = 0; this.combo = 0; this.comboTimer = 0; this.maxCombo = 0;
     this.resetDepthSystems();
-    this.flashTimer = 0; this.warningTimer = 0; this._hpTrailRatio = 1; this._overflowBatch = {};
+    this.flashTimer = 0; this.warningTimer = 0; this._hpTrailRatio = 1; this._healDropTimer = CONFIG.powerup.healDropInterval || 20; this._overflowBatch = {};
     this._endlessT = 0; this._endlessSpawnT = CONFIG.endless.spawn.initialDelay; this._endlessBossT = CONFIG.endless.boss.firstDelay; this._endlessBossN = 0;
     this._endlessEvent = null; this._endlessEventTimer = 0; this._endlessEventT = CONFIG.endless.eventInterval * 0.65; this._endlessHazardT = 0; this._endlessEventStartHits = 0; this._endlessEventStartKills = 0; this._endlessEventStartEliteKills = 0; this._endlessEventsSeen = []; this._endlessRecentEvents = []; this._endlessBossAffixesSeen = []; this._endlessRecentBossAffixes = [];
     this.resetEndlessTelemetry();
@@ -1462,6 +1462,11 @@ const game = {
   spawnMissile(x, y, overcharge) { this.missiles.push(pools.missile.get(x, y, overcharge)); },
   spawnPlayerLaser(x, y, overcharge, damageMult = 1, widthMult = 1) { this.playerLasers.push(pools.playerLaser.get(x, y, overcharge, damageMult, widthMult)); },
   spawnPowerUp(x, kind) { this.powerups.push(new PowerUp(x, -20, kind)); },
+  updateFixedHealDrop(dt) {
+    const interval = CONFIG.powerup.healDropInterval || 20;
+    this._healDropTimer -= dt;
+    if (this._healDropTimer <= 0) { this._healDropTimer += interval; this.spawnPowerUp(30 + this.rng() * (CONFIG.WIDTH - 60), "heal"); }
+  },
   nearestPowerup(x, y, maxDist = Infinity) {
     let best = null, bestD = maxDist * maxDist;
     for (const p of this.powerups) {
@@ -2060,6 +2065,7 @@ const game = {
       this._itemSpawnTimer -= dt;
       if (this._itemSpawnTimer <= 0) { this._itemSpawnTimer = this.itemAutoInterval(); this.spawnPowerUp(30 + this.rng() * (CONFIG.WIDTH - 60), this.chooseDrop()); }
     }
+    this.updateFixedHealDrop(dt);
     if (this.farming) {
       if (this.score >= this._clearScore * CONFIG.scoring.farmScoreCapMult) { this.settle(); }   // 达刷分总分上限 → 强制结算
       else { this._farmTimer -= dt; if (this._farmTimer <= 0 && this.enemies.length < CONFIG.scoring.farmMaxEnemies) { this._farmTimer = CONFIG.scoring.farmInterval; this.spawnFarmWave(); } }

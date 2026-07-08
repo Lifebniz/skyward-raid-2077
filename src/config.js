@@ -86,7 +86,7 @@ const CONFIG = {
 
   // weights 普通掉落;endlessWeights 无尽掉落(炸弹更稀有)。火力满级后继续吃 power 会永久强化主炮/激光。
   // autoInterval:常规关卡(非无尽)每隔多久自动刷新一个道具(秒)。
-  powerup: { radius: 14, speed: 130, dropChance: 0.11, healAmount: 12, autoInterval: 5, magnetRadius: 40, magnetSpeed: 640, chipMinPower: 5, chipMinEndlessTime: 30, chipDraftInterval: 30, chipBossDraftDelay: 30, chipMinDraftGap: 30, fullWeightMult: 0.2,
+  powerup: { radius: 14, speed: 130, dropChance: 0.11, healAmount: 12, autoInterval: 5, healDropInterval: 20, magnetRadius: 40, magnetSpeed: 640, chipMinPower: 5, chipMinEndlessTime: 30, chipDraftInterval: 30, chipBossDraftDelay: 30, chipMinDraftGap: 30, fullWeightMult: 0.2,
     weights:        { power: 0.47, heal: 0.22, bomb: 0.12, wing: 0.14, chip: 0.05 },
     endlessWeights: { power: 0.48, heal: 0.23, bomb: 0.04, wing: 0.13, chip: 0.12 } },
   // OO:道具图鉴用的展示文案 —— 图标/配色直接复用 drawPowerupToken(见 entities.js),和局内掉落物完全一致
@@ -398,7 +398,7 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 90, splits: [30, 60, 120] },
+  challenge: { rulesVersion: 91, splits: [30, 60, 120] },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 
