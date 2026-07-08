@@ -100,6 +100,7 @@ canvas.addEventListener("pointermove", (e) => {
   if (game.state === "settings" && game._sliderDrag === "music") { game.setMusicVolumeFromX(p.x); return; }
   if (game.state === "map" && game._mapDragging) { game.mapPointerMove(p.x, p.y); return; }
   if (game.state === "codex" && game._codexUpgradeDragging) { game.codexUpgradePointerMove(p.y); return; }
+  if (game.state === "shipselect" && game._shipDragging) { game.shipSelectPointerMove(p.x); return; }
   // YY:忽略非移动手指发来的坐标——否则点技能/炸弹/暂停按钮的那根手指稍微一动就会把飞机的移动目标改成按钮位置
   if (e.pointerId !== input.movePointerId) return;
   if (input.joystickActive) { updateJoystick(p.x, p.y); return; }
@@ -109,7 +110,7 @@ canvas.addEventListener("pointerup", (e) => {
   if (e.pointerId === input.chargePointerId) { game.releaseCharge(); input.chargePointerId = null; }
   if (e.pointerId === input.movePointerId) { input.dragging = false; resetJoystick(); input.movePointerId = null; }   // YY:只有移动手指抬起才停止跟随
   game._sliderDrag = false;
-  if (game.state === "shipselect" && game._shipDragging) { const p = toLogic(e.clientX, e.clientY); game.shipSelectSwipe(p.x); }
+  if (game.state === "shipselect" && game._shipDragging) game.shipSelectPointerUp();
   if (game.state === "codex" && game._codexDragging) { const p = toLogic(e.clientX, e.clientY); game.codexSwipe(p.x); }
   if (game.state === "tutorial" && game._tutorialDragging) { const p = toLogic(e.clientX, e.clientY); game.tutorialSwipe(p.x); }
   if (game.state === "map" && game._mapDragging) { const p = toLogic(e.clientX, e.clientY); game.mapPointerUp(p.x, p.y); }
