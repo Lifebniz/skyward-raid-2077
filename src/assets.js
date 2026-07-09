@@ -283,6 +283,27 @@ const ImageAssets = {
     ctx.restore();
     return true;
   },
+  // GG:等比"contain"绘制——图片按最长边缩放塞进 maxW×maxH 的框内,不拉伸变形(区别于 drawRect 的拉伸铺满)
+  drawContain(ctx, img, x, y, maxW, maxH) {
+    if (!img) return false;
+    const box = this.bounds(img) || { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
+    const scale = Math.min(maxW / box.w, maxH / box.h);
+    const w = box.w * scale, h = box.h * scale;
+    ctx.drawImage(img, box.x, box.y, box.w, box.h, x - w / 2, y - h / 2, w, h);
+    return true;
+  },
+  // GG6:按统一目标宽度绘制(不看各图自身高宽比)——几张 logo 素材裁完透明边后的"内容高度"并不一样,
+  //   之前用 drawContain 会让矮图形先撑满高度再决定宽度,同一批按钮里视觉宽度各不相同(无尽挑战偏大/好友挑战偏小)。
+  //   统一按目标宽度缩放才能让"这一排按钮里的图看起来一样大",maxH 只是兜底防止极端比例的图撑爆版面。
+  drawFitWidth(ctx, img, x, y, targetW, maxH) {
+    if (!img) return false;
+    const box = this.bounds(img) || { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
+    let scale = targetW / box.w;
+    if (maxH) scale = Math.min(scale, maxH / box.h);
+    const w = box.w * scale, h = box.h * scale;
+    ctx.drawImage(img, box.x, box.y, box.w, box.h, x - w / 2, y - h / 2, w, h);
+    return true;
+  },
   drawScrolling(ctx, img, scroll, alpha = 1) {
     if (!img) return false;
     const W = CONFIG.WIDTH, H = CONFIG.HEIGHT, scale = Math.max(W / img.naturalWidth, H / img.naturalHeight);

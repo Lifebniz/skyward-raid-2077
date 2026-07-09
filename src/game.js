@@ -9,6 +9,8 @@ const game = {
   score: 0, combo: 0, comboTimer: 0, maxCombo: 0,
   threat: 0, chips: {}, bonuses: {}, _chipCursor: 0, _chipChoices: [], _chipRerolls: 0, _bonusRerolls: 0, _nextChipDraftAt: 0, _bonusKillN: 0, _noHitT: 0, _fieldRepairT: 0, _repairLoopT: 0, _emergencyBarrierCd: 0, _lastStandCd: 0, _leechCd: 0, _startingDrafts: 0, _startingDraftsTotal: 0, _inStartingDraft: false, _chipStats: {}, _bonusStats: {}, _bonusHpGain: {}, _maxThreatLevel: 0,
   flashTimer: 0, _morphFlashTimer: 0, bannerText: "", bannerSub: "", bannerTimer: 0, warningTimer: 0, titleT: 0, _sliderDrag: false,
+  // GG6:首页四个插图按钮的悬停/按下缩放反馈——_titleBtnScale 是按 assetKey 存的当前缩放值,每帧在 update() 里阻尼追向目标值
+  _titleHoverKey: null, _titlePressKey: null, _titleBtnScale: {},
   dlgName: "", dlgText: "", dlgTimer: 0,   // P:BOSS 台词
   topScores: [], _recorded: false,
   farming: false, _reached: false, _farmTimer: 0, _farmWaveN: 0, _clearScore: 0, settleResult: null, _resetArmed: false, _settingsReturnState: "title",
@@ -16,6 +18,7 @@ const game = {
   _overflowBatch: {},
   _bombsUsedThisLevel: 0,   // OO:本关用了几个炸弹(给"轻装上阵"成就用)
   _cannonCritsThisRun: 0, _morphSwitchesThisRun: 0,   // MO5:单局大炮会心暴击/形态切换次数(给"曜迁裁决"成就 + 无尽结算战报用)
+  _cannonHitStopCd: 0,   // MO9:大炮命中反馈(冲击环+hitStop)节流冷却,见 resolveCollisions
   // R:机型选择——弧形展台轮播。_shipScroll 是连续的槽位坐标(可为小数,拖动时随手指走);
   // _shipIdx 是当前吸附到的整数机型下标,松手/点击后 _shipScroll 缓动追向 _shipScrollTarget 直至吸附完成。
   _shipIdx: 0, _shipScroll: 0, _shipScrollTarget: 0, _shipSnapping: false,
@@ -58,7 +61,7 @@ const game = {
   },
   rng() { return this._rng ? this._rng() : Math.random(); },
   pick(list) { return list[(this.rng() * list.length) | 0]; },
-  toTitle() { this.state = "title"; Music.play(); },
+  toTitle() { this.state = "title"; Music.play(); this._titleHoverKey = null; this._titlePressKey = null; },
   // MM2:进图自动缓动滚动到"当前最新解锁关卡"所在战区——isUnlocked 对已解锁链条上的每一关都成立,取最大下标就是玩家的推进前沿,
   //   通关到第四、五战区的老玩家不用再每次手动往下拖
   toMap() {
@@ -624,7 +627,9 @@ const game = {
     for (const split of splits) { if (this._endlessT >= split.t) target = split; else break; }
     return target;
   },
-  endlessChallengeRect() { return { x: CONFIG.WIDTH / 2 - 150, y: 650, w: 300, h: 48 }; },
+  // GG4:y 不再写死 650——结算文案是变长内容(有无 RIVAL 目标/事件/分段等决定行数),写死的位置在内容多时会被无尽榜压穿;
+  //   改成 drawEndlessOver 里按实际排完版的内容底部动态算好存进 this._endlessChallengeY 再读,没画过(如刚进结算第一帧前)才退回默认值
+  endlessChallengeRect() { return { x: CONFIG.WIDTH / 2 - 150, y: this._endlessChallengeY || 650, w: 300, h: 48 }; },
   endlessChallengeHit(px, py) { const r = this.endlessChallengeRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
   copyEndlessChallenge() {
     const r = this.endlessResult;
@@ -2182,7 +2187,14 @@ const game = {
       if (Math.abs(diff) < 0.5) { this._mapScrollY = this._mapScrollTarget; this._mapScrollTarget = null; }
       else this._mapScrollY += diff * Math.min(1, dt * 6);
     }
+    // GG6:首页四个插图按钮——悬停放大/按下缩小,同一套阻尼缓动(不是瞬间跳变,避免"机械感")
+    for (const k of this.titleButtonKeys) {
+      const target = this._titlePressKey === k ? 0.93 : (this._titleHoverKey === k ? 1.08 : 1);
+      const cur = this._titleBtnScale[k] != null ? this._titleBtnScale[k] : 1;
+      this._titleBtnScale[k] = cur + (target - cur) * Math.min(1, dt * 12);
+    }
     if (this.state === "paused") return;          // 暂停:冻结一切(逻辑/粒子/计时器)
+    if (this._cannonHitStopCd > 0) this._cannonHitStopCd -= dt;   // MO9:大炮命中反馈节流冷却
     if (this.flashTimer > 0) this.flashTimer -= dt;
     if (this._morphFlashTimer > 0) this._morphFlashTimer -= dt;
     if (this.bannerTimer > 0) this.bannerTimer -= dt;
@@ -2260,7 +2272,9 @@ const game = {
         if (this.mainBulletArmorPierces(e) && (!e._armorPierceFx || e._armorPierceFx <= 0)) { e._armorPierceFx = 0.35; this.floats.push(new FloatText(e.x, e.y - e.radius - 10, "破甲", CONFIG.bonuses.armorPiercer.color)); }
         let dmg = this.playerDamage(this.mainBulletDamage(e, b.source), e);
         // MO:同一敌机每吃满 critEvery 发大炮炮弹,这一发追加 critMult 倍巨额暴击
-        if (b.source === "cannon") {
+        // MO9:BOSS无敌屏障期间 e.damage() 会直接空转不掉血(见 Boss.damage),这种"打了等于没打"的命中不该计入暴击层数,
+        //   不然玩家会看到"会心暴击!"弹字但血条纹丝不动,一头雾水——屏障期间整段命中反馈(计数/暴击/冲击环/hitStop)全部跳过
+        if (b.source === "cannon" && !(e._invulnTimer > 0)) {
           const m = this.player.ship.morph;
           e._cannonHits = (e._cannonHits || 0) + 1;
           const isCrit = m && e._cannonHits % (m.critEvery || 5) === 0;
@@ -2271,10 +2285,16 @@ const game = {
             // MO5:单局大炮会心暴击计数——给"曜迁裁决"成就 + 无尽结算战报用
             this._cannonCritsThisRun = (this._cannonCritsThisRun || 0) + 1;
             if (this._cannonCritsThisRun >= 10) Achievements.unlock("morph_reckoning");
+            this.spawnShockwave(e.x, e.y, e.radius * 2.2, "#ffd43b");   // 会心暴击视觉不节流,这个"大招时刻"要总是看得见
           }
-          // MO4:贯穿重炮打穿一排敌机不该只有小火花——每次命中加一圈小型冲击环 + 极短 hit-stop,暴击那一发放大一档,做出"重炮"的分量感
-          this.spawnShockwave(e.x, e.y, isCrit ? e.radius * 2.2 : e.radius * 1.3, isCrit ? "#ffd43b" : "#99e9f2");
-          this.hitStop(isCrit ? 0.05 : 0.02);
+          // MO4:贯穿重炮打穿一排敌机不该只有小火花——命中加一圈小型冲击环 + 极短 hit-stop,做出"重炮"的分量感。
+          // MO9:BUG修复("一卡一卡")——多发化后一炮可能同时贯穿命中好几个目标,冲击环/hitStop 按次触发、没做频率限制,
+          //   密集命中挤在相邻几帧里就变成连续冻结的卡顿感。改成节流:冷却结束才触发一次,冷却内的普通命中只留基础受击火花。
+          if (this._cannonHitStopCd <= 0) {
+            if (!isCrit) this.spawnShockwave(e.x, e.y, e.radius * 1.3, "#99e9f2");
+            this.hitStop(isCrit ? 0.05 : 0.02);
+            this._cannonHitStopCd = 0.09;
+          }
         }
         if (e.damage(dmg, "bullet")) this.onEnemyKilled(e);
         if (b.pierce > 0) { b.pierce--; continue; }
@@ -2671,14 +2691,20 @@ const game = {
     const timeline = (r.timeline || []).map(m => m.t + "s " + m.score + "分/" + m.kills + "杀/" + (m.elite || 0) + "精英/HP" + m.hp + "%" + (m.jam ? "/干扰" + m.jam + "s" : "")).join(" · ");
     if (timeline && !compactResult) { ctx.fillText(fitLine("节点 " + timeline, 356), cx, infoY); infoY += 22; }
     const boardY = infoY > 418 ? infoY + 16 : 434;
+    let boardBottom = boardY;
     if (!compactResult) {
       ctx.fillStyle = "#adb5bd"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("── 无尽榜 ──", cx, boardY);
       let hl = false;
       const rows = r.challengeCode && boardY > 520 ? 2 : top.length;
       top.slice(0, rows).forEach((e, i) => { const me = !hl && e.score === r.final; if (me) hl = true; ctx.fillStyle = me ? "#ffd43b" : "#dee2e6"; ctx.font = (me ? "bold " : "") + "17px 'Segoe UI', sans-serif"; ctx.fillText((i + 1) + ".   " + e.score + "   " + e.date + (me ? "  ◄" : ""), cx, boardY + 30 + i * 28); });
+      boardBottom = boardY + 30 + Math.max(0, rows - 1) * 28 + 20;
     }
+    // GG4:挑战码按钮 y 按实际内容底部动态算,不低于原默认位置 650,同时封顶在画布内(留出下方"返回首页"提示的空间)
+    const challengeY = Math.min(CONFIG.HEIGHT - 130, Math.max(650, boardBottom + 20));
+    this._endlessChallengeY = challengeY;
     if (r.challengeCode) UI.button(ctx, this.endlessChallengeRect(), { label: "复制挑战码 RIVAL", color: "#ffd43b", active: true, font: 20, radius: 14 });
-    ctx.fillStyle = "#4a90d9"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("点击空白返回首页", cx, 724);
+    const footerY = Math.min(CONFIG.HEIGHT - 20, (r.challengeCode ? challengeY + 74 : Math.max(724, boardBottom + 30)));
+    ctx.fillStyle = "#4a90d9"; ctx.font = "18px 'Segoe UI', sans-serif"; ctx.fillText("点击空白返回首页", cx, footerY);
     ctx.textAlign = "left";
   },
 
@@ -2692,44 +2718,90 @@ const game = {
     UI.button(ctx, this.pauseMenuRect(1), { label: "⚙ 设置 SETTINGS", color: "#4dabf7", font: 19 });
     UI.button(ctx, this.pauseMenuRect(2), { label: "返回首页 HOME", color: "#adb5bd", font: 21 });
     if (this.endless) UI.button(ctx, this.pauseMenuRect(3), { label: "直接结算 SETTLE", color: "#ffd43b", font: 19 });
-    // OO:自动使用机型技能/自动使用激光 —— 默认均不勾选,和设置页的"开 ON / 关 OFF"开关同一套视觉
-    const t0 = this.pauseToggleRect(0), t1 = this.pauseToggleRect(1);
+    // OO:自动使用机型技能/自动使用激光/GG3:隐藏僚机(原来只在设置页,暂停页看不到,挪一份到这里同步)—— 默认均不勾选,和设置页的"开 ON / 关 OFF"开关同一套视觉
+    const t0 = this.pauseToggleRect(0), t1 = this.pauseToggleRect(1), t2 = this.pauseToggleRect(2);
     ctx.textAlign = "left"; ctx.fillStyle = "#adb5bd"; ctx.font = "16px 'Segoe UI', sans-serif";
     ctx.fillText("自动使用机型技能", cx - 140, t0.y + t0.h / 2 + 6);
     ctx.fillText("自动使用激光", cx - 140, t1.y + t1.h / 2 + 6);
+    ctx.fillText("隐藏僚机", cx - 140, t2.y + t2.h / 2 + 6);
     UI.button(ctx, t0, { label: this.autoSpecial ? "开" : "关", color: this.autoSpecial ? "#38d9a9" : "#868e96", active: this.autoSpecial, font: 16, radius: 10 });
     UI.button(ctx, t1, { label: this.autoLaser ? "开" : "关", color: this.autoLaser ? "#38d9a9" : "#868e96", active: this.autoLaser, font: 16, radius: 10 });
+    UI.button(ctx, t2, { label: Settings.data.hideWings ? "开" : "关", color: Settings.data.hideWings ? "#38d9a9" : "#868e96", active: Settings.data.hideWings, font: 16, radius: 10 });
     ctx.textAlign = "left";
   },
 
-  // ── 标题界面 ──(S:开始/无尽/挑战码/机型四个大按钮同宽同高,竖向排列)
-  titleStartRect() { const w = 300, h = 58, x = (CONFIG.WIDTH - w) / 2, y = 376; return { x, y, w, h }; },
+  // ── 标题界面 ──(S:开始/无尽/挑战码/机型四个大按钮同宽同高,竖向排列;GG3:插图化,说明文字挪到卡片下方;
+  //   GG6:去掉卡片边框,插图直接悬浮展示,按统一宽度绘制保证四张视觉大小一致)
+  titleButtonKeys: ["map", "challenge", "rival", "ship"],
+  titleButtonPitch: 96, titleButtonH: 72, titleButtonY0: 382, titleButtonImgW: 218,
+  titleStartRect() { const w = 300, h = this.titleButtonH, x = (CONFIG.WIDTH - w) / 2, y = this.titleButtonY0; return { x, y, w, h }; },
   titleStartHit(px, py) { const r = this.titleStartRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
-  titleEndlessRect() { const w = 300, h = 58, x = (CONFIG.WIDTH - w) / 2, y = 448; return { x, y, w, h }; },
+  titleEndlessRect() { const w = 300, h = this.titleButtonH, x = (CONFIG.WIDTH - w) / 2, y = this.titleButtonY0 + this.titleButtonPitch; return { x, y, w, h }; },
   titleEndlessHit(px, py) { const r = this.titleEndlessRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
   endlessDiffPanelRect() { return { x: (CONFIG.WIDTH - 340) / 2, y: 280, w: 340, h: 420 }; },
   endlessDiffNormalRect() { const w = 300, h = 80, x = (CONFIG.WIDTH - w) / 2, y = 360; return { x, y, w, h }; },
   endlessDiffHellRect() { const w = 300, h = 80, x = (CONFIG.WIDTH - w) / 2, y = 460; return { x, y, w, h }; },
   endlessDiffOutsidePanelRect() { return { x: 0, y: 0, w: CONFIG.WIDTH, h: CONFIG.HEIGHT }; },
-  titleChallengeRect() { const w = 300, h = 58, x = (CONFIG.WIDTH - w) / 2, y = 520; return { x, y, w, h }; },
+  titleChallengeRect() { const w = 300, h = this.titleButtonH, x = (CONFIG.WIDTH - w) / 2, y = this.titleButtonY0 + this.titleButtonPitch * 2; return { x, y, w, h }; },
   titleChallengeHit(px, py) { const r = this.titleChallengeRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
-  titleShipRect() { const w = 300, h = 58, x = (CONFIG.WIDTH - w) / 2, y = 592; return { x, y, w, h }; },
+  titleShipRect() { const w = 300, h = this.titleButtonH, x = (CONFIG.WIDTH - w) / 2, y = this.titleButtonY0 + this.titleButtonPitch * 3; return { x, y, w, h }; },
   titleShipHit(px, py) { const r = this.titleShipRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  // GG6:统一入口——供 input.js 做"按下先高亮不动作,松开时若还在同一个按钮上才触发"的按压反馈用,
+  //   同时也给 pointermove 的桌面悬停高亮复用,避免四个按钮的命中判断到处重复写
+  titleButtonKeyAt(px, py) {
+    if (this.titleStartHit(px, py)) return "map";
+    if (this.titleEndlessHit(px, py)) return "challenge";
+    if (this.titleChallengeHit(px, py)) return "rival";
+    if (this.titleShipHit(px, py)) return "ship";
+    return null;
+  },
+  activateTitleButton(key) {
+    if (key === "map") this.toMap();
+    else if (key === "challenge") this.state = "endlessdiff";
+    else if (key === "rival") this.openChallengePrompt();
+    else if (key === "ship") this.toShipSelect();
+  },
   titleSettingsRect() { return { x: CONFIG.WIDTH - 108, y: 30, w: 92, h: 40 }; },
   titleSettingsHit(px, py) { const r = this.titleSettingsRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
   titleCodexRect() { return { x: 16, y: 30, w: 92, h: 40 }; },
   titleCodexHit(px, py) { const r = this.titleCodexRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
   titleHelpRect() { return { x: 16, y: 76, w: 92, h: 40 }; },
   titleHelpHit(px, py) { const r = this.titleHelpRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  // GG6:插图直接作为按钮主体——不再画玻璃卡片/边框,插图自带中英文字样,按统一宽度(titleButtonImgW)绘制,
+  //   保证四张视觉大小一致(之前用各自的等比 contain 会让矮图形先撑满高度,视觉宽度就跟着各不相同)。
+  //   悬停/按下时按 _titleBtnScale 缩放,阻尼缓动不做机械式瞬变(见 update() 里的追赶逻辑)。
+  //   插图缺失时整个方法退回最初版本的实心卡片按钮兜底,保证任何情况下资源都有得看、有得点。
   drawTitleImageButton(ctx, r, assetKey, opts) {
+    const o = opts || {};
     const img = ImageAssets.title("button-" + assetKey);
-    if (!ImageAssets.drawRect(ctx, img, r.x + r.w / 2, r.y + r.h / 2, r.w, r.h)) return UI.button(ctx, r, opts);
-    ctx.save();
-    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.shadowColor = UI.rgba(opts.color || "#fff", .65); ctx.shadowBlur = 10;
-    ctx.fillStyle = "#fff"; ctx.font = "bold " + (opts.font || 24) + "px 'Segoe UI', sans-serif";
-    ctx.fillText(opts.label, r.x + r.w / 2, r.y + r.h / 2 - (opts.sub ? 5 : 0));
-    if (opts.sub) { ctx.shadowBlur = 0; ctx.fillStyle = "rgba(255,255,255,.78)"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText(opts.sub, r.x + r.w / 2, r.y + r.h / 2 + 18); }
+    const scale = (this._titleBtnScale && this._titleBtnScale[assetKey]) || 1;
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(scale, scale); ctx.translate(-cx, -cy);
+    if (img) {
+      ctx.save(); ctx.shadowColor = UI.rgba(o.color || "#4dabf7", .5); ctx.shadowBlur = 14;
+      ImageAssets.drawFitWidth(ctx, img, cx, cy, this.titleButtonImgW, r.h - 4);
+      ctx.restore();
+    } else {
+      UI.button(ctx, r, o);   // GG6:资源可兜底——图片缺失时退回最早的实心卡片按钮样式
+    }
     ctx.restore();
+  },
+  // GG3:卡片下方的说明行——原先叠在按钮里的 opts.sub 挪到这里,和插图分开,避免文字压在插图上显脏
+  drawTitleButtonCaption(ctx, r, sub) {
+    if (!sub) return;
+    ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(222,226,230,.8)"; ctx.font = "12px 'Segoe UI', sans-serif";
+    ctx.fillText(sub, r.x + r.w / 2, r.y + r.h + 15);
+    ctx.restore();
+  },
+  // GG9:各分页标题贴图化的公共小工具——复用首页同一套 title-button-* 素材(等比按宽度居中绘制),
+  //   素材缺失时退回原来的纯文字标题,资源可兜底
+  drawSectionTitle(ctx, assetKey, cx, cy, opts) {
+    const o = opts || {};
+    const img = ImageAssets.title("button-" + assetKey);
+    if (img) { ImageAssets.drawFitWidth(ctx, img, cx, cy, o.w || 240, o.h || 70); return; }
+    ctx.fillStyle = o.color || "#fff"; ctx.font = "bold " + (o.font || 30) + "px 'Segoe UI', sans-serif";
+    ctx.fillText(o.fallback, cx, cy + (o.fallbackBaselineAdj != null ? o.fallbackBaselineAdj : 10));
   },
   drawTitleSmallButton(ctx, r, iconKey, fallbackLabel, text) {
     const icon = ImageAssets.title("icon-" + iconKey);
@@ -2773,13 +2845,17 @@ const game = {
     this.drawTitleSmallButton(ctx, this.titleSettingsRect(), "settings", "⚙ 设置", "设置");
     this.drawTitleSmallButton(ctx, this.titleCodexRect(), "codex", "📖 图鉴", "图鉴");
     this.drawTitleSmallButton(ctx, this.titleHelpRect(), "help", "？帮助", "帮助");
-    // S:四个同尺寸大按钮 —— 开始 / 无尽 / 挑战码 / 机型选择
-    this.drawTitleImageButton(ctx, this.titleStartRect(), "map", { label: "关卡地图 MAP", color: "#38d9a9", active: true, font: 26, radius: 16 });
-    this.drawTitleImageButton(ctx, this.titleEndlessRect(), "challenge", { label: "无尽挑战 CHALLENGE", sub: "常规演练 / 绝境深潜", color: "#ff922b", active: true, font: 26, radius: 16 });
-    this.drawTitleImageButton(ctx, this.titleChallengeRect(), "rival", { label: "挑战码 RIVAL", sub: "挑战码 / 每日", color: "#ffd43b", active: true, font: 25, radius: 16 });
-    this.drawTitleImageButton(ctx, this.titleShipRect(), "ship", { label: "机型选择 SHIP", sub: this.ship.name + (this.ship.specialType === "morph" ? " · 试用款" : ""), color: "#4dabf7", active: true, font: 24, radius: 16 });
+    // S:四个同尺寸大按钮 —— 开始 / 无尽 / 挑战码 / 机型选择(GG3:插图化,说明文字挪到卡片下方)
+    const rMap = this.titleStartRect(), rEndless = this.titleEndlessRect(), rChallenge = this.titleChallengeRect(), rShip = this.titleShipRect();
+    this.drawTitleImageButton(ctx, rMap, "map", { label: "关卡地图 MAP", color: "#38d9a9", active: true, font: 24, radius: 16 });
+    this.drawTitleImageButton(ctx, rEndless, "challenge", { label: "无尽挑战 CHALLENGE", color: "#ff922b", active: true, font: 24, radius: 16 });
+    this.drawTitleButtonCaption(ctx, rEndless, "常规演练 / 绝境深潜");
+    this.drawTitleImageButton(ctx, rChallenge, "rival", { label: "挑战码 RIVAL", color: "#ffd43b", active: true, font: 24, radius: 16 });
+    this.drawTitleButtonCaption(ctx, rChallenge, "挑战码 / 每日");
+    this.drawTitleImageButton(ctx, rShip, "ship", { label: "机型选择 SHIP", color: "#4dabf7", active: true, font: 24, radius: 16 });
+    this.drawTitleButtonCaption(ctx, rShip, this.ship.name + (this.ship.specialType === "morph" ? " · 试用款" : ""));
     // Q:排行榜按关卡区分,标题页无具体关卡上下文,故不再显示总榜;进入关卡结算/失败画面时显示该关排行
-    ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("排行榜 · 按关卡分别记录,通关或失败后可见", cx, 700);
+    ctx.fillStyle = "#868e96"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("排行榜 · 按关卡分别记录,通关或失败后可见", cx, 792);
     ImageAssets.drawRect(ctx, ImageAssets.title("footerGlow"), cx, 872, CONFIG.WIDTH, 176);
     ctx.textAlign = "left";
   },
@@ -2806,7 +2882,8 @@ const game = {
     const cx = CONFIG.WIDTH / 2, order = this.shipSelectOrder(), key = order[this._shipIdx], sp = CONFIG.ships[key], selected = this.ship.key === key;
     ctx.fillStyle = "rgba(0,0,0,.62)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
     ctx.textAlign = "center";
-    ctx.fillStyle = "#fff"; ctx.font = "bold 30px 'Segoe UI', sans-serif"; ctx.fillText("选择机型", cx, 66);
+    // GG9:标题贴图化——复用首页"机型选择 SHIP"同款 logo
+    this.drawSectionTitle(ctx, "ship", cx, 50, { w: 210, h: 64, fallback: "选择机型", fallbackBaselineAdj: 16 });
     UI.button(ctx, this.shipSelectBackRect(), { label: "‹ 首页", color: "#adb5bd", font: 15, radius: 10 });
 
     // ── 介绍面板放上面:代号/角色标签/简介/性能条/被动/机型技能(机身模型挪到下方展示框,不占这里空间) ──
@@ -2932,8 +3009,12 @@ const game = {
     // 按离中心的远近从远到近绘制,保证中间选中的机型始终盖在两侧待选机型之上
     const slots = []; for (let d = -maxSlots; d <= maxSlots; d++) slots.push(d);
     slots.sort((a, b) => Math.abs(b - frac) - Math.abs(a - frac));
+    // GG5:BUG修复——idx 之前按吸附完成的 _shipIdx 算,但视觉偏移(offset = d - frac)是按连续变化的 _shipScroll 算;
+    //   拖动过程中 _shipIdx 不动而 frac 在 Math.round(_shipScroll) 跨整数时会跳变,两者一旦不同步就会出现"槽位对不上号"——
+    //   本该显示 A 机型的展台位置(视觉上）临时显示成了 B 机型。改成两者统一用当前拖动到的连续位置算,永远同步。
+    const dragCenter = ((Math.round(this._shipScroll) % order.length) + order.length) % order.length;
     for (const d of slots) {
-      const idx = ((this._shipIdx + d) % order.length + order.length) % order.length;
+      const idx = ((dragCenter + d) % order.length + order.length) % order.length;
       const shipCfg = CONFIG.ships[order[idx]];
       const offset = d - frac, absO = Math.abs(offset);
       if (absO > maxSlots + 0.5) continue;
@@ -3166,7 +3247,10 @@ const game = {
   },
   // WW:基准 y 从 324 改成 360 —— 324 时世界1的战区名(band.y+18=292)比视口裁剪线(mapViewportRect().top=296)还靠上,
   //   每次绘制都会被 ctx.clip() 切掉,标题永远显示不出来;360 让 band.y(310)留出安全余量,不再被裁剪线咬到。
-  mapWorldBandRect(world) { const y = 360 + (world - 1) * 146; return { x: 10, y: y - 50, w: CONFIG.WIDTH - 20, h: 122 }; },
+  // GG8:BUG修复——战区名文字之前贴在 band 顶部(band.y+18),而第一列关卡节点(x=120,每个世界都固定占用这一列)
+  //   圆心 y 和节点行基准 y 相同、半径 38,节点顶边(y-38)只比文字基线(band.y+18=y-32)低 6px,文字和圆有肉眼可见的重叠。
+  //   把 band 顶边再上移 8px(h 同步加 8,底边不变)、文字改贴在新顶边往下 10px 处,文字底部和节点顶边之间留出稳定的空隙。
+  mapWorldBandRect(world) { const y = 360 + (world - 1) * 146; return { x: 10, y: y - 58, w: CONFIG.WIDTH - 20, h: 130 }; },
   // GG:机型增加到 5 个后按钮固定宽度 102 会把整排撑出屏幕(实测左右各溢出 13px);
   //   改成按可用宽度动态收缩按钮宽度(上限仍是 102,和原来 3/4 个按钮时的观感完全一致),不够放就整体缩小而不是溢出裁切
   mapRowRect(i, y, count = 3) {
@@ -3289,17 +3373,28 @@ const game = {
       ctx.fillStyle = vg; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
     }
     ctx.textAlign = "center";
-    ctx.fillStyle = "#fff"; ctx.font = "bold 30px 'Segoe UI', sans-serif"; ctx.fillText("关卡地图", cx, 60);
+    // GG9:标题贴图化——复用首页"关卡地图 MAP"同款 logo
+    this.drawSectionTitle(ctx, "map", cx, 54, { w: 230, h: 70, fallback: "关卡地图", fallbackBaselineAdj: 6 });
     // 返回(现代按钮)
     UI.button(ctx, this.mapBackRect(), { label: "‹ 首页", color: "#adb5bd", font: 15, radius: 10 });
+    // GG8:难度/机型选择优化——原来把说明文字塞进每个按钮下方(尤其机型 5 个选项挤在一排,11px 小字挤得很难认),
+    //   现在按钮只留名字(更大更清楚),选中项的说明挪到区块标题同一行、单独用一行 wrapText 截断显示,不会撑爆按钮高度
     // 难度选择
-    const dk = ["easy", "normal", "hard"];
-    ctx.fillStyle = "#868e96"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.textAlign = "left"; ctx.fillText("难度", this.mapDiffRect(0).x + 2, 108); ctx.textAlign = "center";
-    for (let i = 0; i < 3; i++) { const d = CONFIG.difficulties[dk[i]], sel = this.diff.key === dk[i]; UI.button(ctx, this.mapDiffRect(i), { label: d.name.split(" ")[0], sub: sel ? d.desc : "", color: d.color, active: sel, font: 17 }); }
+    const dk = ["easy", "normal", "hard"], diffX0 = this.mapDiffRect(0).x;
+    ctx.font = "12px 'Segoe UI', sans-serif"; ctx.textAlign = "left";
+    ctx.fillStyle = "#868e96"; ctx.fillText("难度", diffX0 + 2, 108);
+    ctx.fillStyle = this.diff.color; ctx.font = "11px 'Segoe UI', sans-serif";
+    ctx.fillText(UI.wrapText(ctx, this.diff.desc, CONFIG.WIDTH - diffX0 - 50, 1)[0], diffX0 + 32, 108);
+    ctx.textAlign = "center";
+    for (let i = 0; i < 3; i++) { const d = CONFIG.difficulties[dk[i]], sel = this.diff.key === dk[i]; UI.button(ctx, this.mapDiffRect(i), { label: d.name.split(" ")[0], color: d.color, active: sel, font: 17 }); }
     // 机型选择
-    const sk = CONFIG.shipOrder;
-    ctx.fillStyle = "#868e96"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.textAlign = "left"; ctx.fillText("机型", this.mapShipRect(0).x + 2, 182); ctx.textAlign = "center";
-    for (let i = 0; i < sk.length; i++) { const sp = CONFIG.ships[sk[i]], sel = this.ship.key === sk[i]; UI.button(ctx, this.mapShipRect(i), { label: sp.name, sub: sel ? sp.desc : "", color: sp.color, active: sel, font: 15 }); }
+    const sk = CONFIG.shipOrder, shipX0 = this.mapShipRect(0).x;
+    ctx.textAlign = "left"; ctx.font = "12px 'Segoe UI', sans-serif";
+    ctx.fillStyle = "#868e96"; ctx.fillText("机型", shipX0 + 2, 182);
+    ctx.fillStyle = this.ship.color; ctx.font = "11px 'Segoe UI', sans-serif";
+    ctx.fillText(UI.wrapText(ctx, this.ship.name + " · " + this.ship.desc, CONFIG.WIDTH - shipX0 - 50, 1)[0], shipX0 + 32, 182);
+    ctx.textAlign = "center";
+    for (let i = 0; i < sk.length; i++) { const sp = CONFIG.ships[sk[i]], sel = this.ship.key === sk[i]; UI.button(ctx, this.mapShipRect(i), { label: sp.name, color: sp.color, active: sel, font: 15 }); }
     ctx.fillStyle = "#868e96"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.fillText("选难度 + 机型 → 点亮关卡开始 · 通关解锁下一关", cx, 268);
 
     // MM:节点区域可纵向滚动(为世界数增多做准备)—— 裁剪到视口并按 _mapScrollY 平移,头部的标题/选难度/选机型不受影响
@@ -3319,7 +3414,7 @@ const game = {
       ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(255,255,255,.12)"; UI.roundRect(ctx, band.x, band.y, band.w, band.h, 16); ctx.stroke();
       if (danger) { UI.roundRect(ctx, band.x, band.y, band.w, band.h, 16); ctx.fillStyle = "rgba(150,15,15,.22)"; ctx.fill(); }
       ctx.textAlign = "left"; ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.font = "12px 'Segoe UI', sans-serif";
-      ctx.fillText(CONFIG.worldIntro[(w - 1) % CONFIG.worldIntro.length], band.x + 16, band.y + 18);
+      ctx.fillText(CONFIG.worldIntro[(w - 1) % CONFIG.worldIntro.length], band.x + 16, band.y + 10);   // GG8:贴 band 新顶边,和下方节点圆之间留出空隙
       ctx.textAlign = "right"; ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.font = "bold 64px 'Segoe UI', sans-serif";
       ctx.fillText(roman[(w - 1) % roman.length], band.x + band.w - 8, band.y + band.h - 14);
       ctx.textAlign = "center";
@@ -3990,6 +4085,22 @@ const game = {
       const affixText = this.bossAffixHUDText(this.boss);
       if (affixText) { ctx.fillStyle = (this.boss.affix && this.boss.affix.color) || "#adb5bd"; ctx.font = "bold 12px 'Segoe UI', sans-serif"; ctx.fillText(affixText, CONFIG.WIDTH - 20, by + bh + 15); }
       ctx.textAlign = "left";
+      // MO9:大炮命中次数指示——Boss 是独立类,没有走 Enemy.drawCannonHitPips 那套机身上方小圆点(BOSS体型大,叠在机身上不够醒目),
+      //   改在血条左下角单独画一排,凑满 critEvery 发就变金色脉动,配合上面"屏障期间不计数"的修复,能更准地判断下一发是不是暴击
+      if (this.player.ship.specialType === "morph") {
+        const morph = this.player.ship.morph, every = morph.critEvery || 5;
+        const hits = this.boss._cannonHits || 0, n = hits % every || (hits > 0 ? every : 0);
+        const full = n === every && hits > 0, py = by + bh + 15;
+        ctx.font = "bold 11px 'Segoe UI', sans-serif"; ctx.fillStyle = "#adb5bd"; ctx.fillText("大炮命中", bx, py + 4);
+        const dotsX0 = bx + 56, gap = 11;
+        for (let i = 0; i < every; i++) {
+          const lit = i < n, pulse = full ? 0.7 + Math.sin(this.titleT * 12) * 0.3 : 1;
+          ctx.globalAlpha = lit ? pulse : 0.3;
+          ctx.fillStyle = full ? "#ffd43b" : (lit ? "#99e9f2" : "rgba(255,255,255,.4)");
+          ctx.beginPath(); ctx.arc(dotsX0 + i * gap, py, full && lit ? 4 : 3, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
     }
 
     // AA:HUD 圆形按钮统一走玻璃质感 roundButton
