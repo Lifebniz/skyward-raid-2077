@@ -57,17 +57,25 @@ const Multiplayer = {
     widget.querySelector("[data-mp-clear]").addEventListener("click", () => { this._ui.code.value = ""; });
     widget.querySelector("[data-mp-close]").addEventListener("click", () => this.disconnect());
   },
-  // GG2:收起态的信标球可以竖直拖动 + 松手吸附回左/右边缘——用 pointer 事件 + setPointerCapture 实现 1:1 跟手拖拽,
+  // GG7:收起态的信标球可以在整个舞台内自由拖到任意位置(不再是拖动时按左右半屏实时二值吸附),
+  //   松手后才用一段短缓动"吸附"回最近的那条边;拖动全程外观和平时一模一样(呼吸动画/描边都不变,
+  //   见 style.css 里去掉的 .mp-dragging 样式覆盖),用 pointer 事件 + setPointerCapture 实现 1:1 跟手拖拽。
   //   位置(边+竖直百分比)存进 Settings 持久化,下次进游戏还在玩家上次放的位置。拖动和"点开面板"用位移阈值区分开,
   //   避免正常点击被误判成一次没有产生位移的拖拽(或者反过来,轻微手抖点击被误判成拖拽从而吞掉展开动作)。
   initDragPeek() {
     const peek = this._ui.peek, widget = this._ui.widget, stage = document.getElementById("stage");
     widget.dataset.side = Settings.data.mpSide || "right";
     widget.style.top = clamp(Settings.data.mpTop != null ? Settings.data.mpTop : 8, 3, 92) + "%";
-    let dragging = false, moved = false, stageRect = null, startX = 0, startY = 0;
+    let dragging = false, moved = false, stageRect = null, startX = 0, startY = 0, grabDX = 0, grabDY = 0, snapRAF = null;
+    // GG7:贴边留白量和原来 margin -14px 的"贴边露半个头"手感保持一致,吸附动画结束的落点和 CSS 静止态像素级对齐,不会有一下跳变
+    const restLeft = (side, stageW, peekW) => side === "left" ? -14 : stageW - peekW + 14;
+    const cancelSnap = () => { if (snapRAF) { cancelAnimationFrame(snapRAF); snapRAF = null; } };
     peek.addEventListener("pointerdown", (e) => {
+      cancelSnap();
       dragging = true; moved = false; startX = e.clientX; startY = e.clientY;
       stageRect = stage.getBoundingClientRect();
+      const peekRect = peek.getBoundingClientRect();
+      grabDX = startX - peekRect.left; grabDY = startY - peekRect.top;   // 记住抓取点相对图标左上角的偏移,拖动时不会"跳"到指尖
       try { peek.setPointerCapture(e.pointerId); } catch (err) {}
     });
     peek.addEventListener("pointermove", (e) => {
@@ -76,19 +84,38 @@ const Multiplayer = {
         // GG2:离按下点超过 6px 才判定为拖拽,过滤掉点击自带的手抖位移
         if (Math.hypot(e.clientX - startX, e.clientY - startY) < 6) return;
         moved = true; widget.classList.add("mp-dragging");
+        peek.style.margin = "0";        // GG7:自由拖动改用行内绝对定位 1:1 跟手,先清零贴边外边距,避免和坐标叠加错位
+        widget.style.right = "auto";
       }
-      const topPct = (e.clientY - stageRect.top) / stageRect.height * 100;
-      widget.style.top = clamp(topPct, 3, 92) + "%";
-      widget.dataset.side = (e.clientX - stageRect.left) < stageRect.width / 2 ? "left" : "right";
+      const pw = peek.offsetWidth;
+      const leftPx = clamp(e.clientX - stageRect.left - grabDX, -pw * 0.4, stageRect.width - pw * 0.6);
+      const topPct = clamp((e.clientY - stageRect.top - grabDY) / stageRect.height * 100, 3, 92);
+      widget.style.left = leftPx + "px";
+      widget.style.top = topPct + "%";
     });
     const endDrag = () => {
       if (!dragging) return;
       dragging = false;
       if (moved) {
         widget.classList.remove("mp-dragging");
-        Settings.data.mpSide = widget.dataset.side;
+        const stageW = stageRect.width, pw = peek.offsetWidth;
+        const fromLeft = parseFloat(widget.style.left) || 0;
+        const side = (fromLeft + pw / 2) < stageW / 2 ? "left" : "right";
+        const toLeft = restLeft(side, stageW, pw);
+        Settings.data.mpSide = side;
         Settings.data.mpTop = parseFloat(widget.style.top) || 8;
         Settings.save();
+        // GG7:松手后缓动吸附回最近的边(不是瞬间跳变),落点和 CSS 静止态完全对齐后再把行内定位交还给 CSS 的 data-side 布局
+        const t0 = performance.now(), dur = 240;
+        const step = (now) => {
+          const t = Math.min(1, (now - t0) / dur), ease = 1 - Math.pow(1 - t, 3);
+          widget.style.left = (fromLeft + (toLeft - fromLeft) * ease) + "px";
+          if (t < 1) { snapRAF = requestAnimationFrame(step); return; }
+          snapRAF = null;
+          widget.dataset.side = side;
+          widget.style.left = ""; widget.style.right = ""; peek.style.margin = "";
+        };
+        snapRAF = requestAnimationFrame(step);
       } else {
         this.setCollapsed(false);   // 没有产生位移——当成一次正常点击,展开面板
       }

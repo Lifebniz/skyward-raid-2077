@@ -66,7 +66,18 @@ class Player {
       this._fireTimer = this.fireInterval * game.mainGunCooldownMult() * (morph ? morph.fireIntervalMult : 1);
       this._fireIntervalCur = this._fireTimer;   // MO3:大炮形态充能弧用——记下这一发的完整循环时长,供 draw() 算充能进度
       const pattern = CONFIG.weapon[clamp(this.power, 1, c.maxPower)];
-      if (morph) { game.spawnPlayerBullet(this.x, this.y - this.radius, 0, -(morph.bulletSpeed || c.bulletSpeed), "cannon"); this._recoilT = 0.1; }   // MO6:单发重炮的后坐力顿挫,见 _drawBody
+      // MO7:大炮形态炮弹数随火力配置——(主炮路数 + 僚机数)/2 向上取整,主炮/僚机越多这一炮打得越密;
+      // MO8:多发时按普通形态主炮弹幕的角度(pattern 里的 deg/ox)发射,而不是全部笔直向前——
+      //   循环取用 pattern 的口位,炮弹数超过主炮路数时就重复用同一组角度再打一轮
+      if (morph) {
+        const speed = morph.bulletSpeed || c.bulletSpeed;
+        const cannonCount = Math.ceil((pattern.length + this.wings) / 2);
+        for (let i = 0; i < cannonCount; i++) {
+          const s = pattern[i % pattern.length], rad = s.deg * DEG;
+          game.spawnPlayerBullet(this.x + s.ox, this.y - this.radius, Math.sin(rad) * speed, -Math.cos(rad) * speed, "cannon");
+        }
+        this._recoilT = 0.1;   // MO6:单发重炮的后坐力顿挫,见 _drawBody
+      }
       else for (const s of pattern) { const rad = s.deg * DEG; game.spawnPlayerBullet(this.x + s.ox, this.y - this.radius, Math.sin(rad) * c.bulletSpeed, -Math.cos(rad) * c.bulletSpeed); }
       for (let i = 0; i < this.wings; i++) game.spawnPlayerBullet(this.x + wingOffsetX(i), this.y + 4, 0, -c.bulletSpeed, "wing");   // 僚机直射(任意数量排布)
       const side = game.bonusStacks("sideCannons"), sideCfg = CONFIG.bonuses.sideCannons;

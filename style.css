@@ -41,14 +41,17 @@ html, body {
     animation: mp-peek-breathe 2.6s ease-in-out infinite;
     transition: margin-right .18s ease;
   }
-  .mp-peek:hover, .mp-peek:active { margin-right: 0; }
+  /* GG7:去掉 :active——拖动时鼠标/触点一直按着,:active 会一直匹配,导致拖动途中外边距跟着悬停规则跳变,
+     和 1:1 跟手的绝对定位叠加就会跟手指对不上。拖动时的位置完全交给 JS 行内样式控制,这里只保留鼠标真正悬停(不按)的场景 */
+  .mp-peek:hover { margin-right: 0; }
   .mp-peek.mp-on { background: radial-gradient(circle at 35% 32%, #79e6c8, rgba(56,217,169,.55) 60%, rgba(20,50,45,.6) 100%); }
   .mp-peek.mp-busy { background: radial-gradient(circle at 35% 32%, #ffe38a, rgba(255,212,59,.55) 60%, rgba(60,50,15,.6) 100%); }
   /* GG2:贴左边缘时把露出的方向换成向左出血(margin-left 负值),悬停/拖动同样收平;
      拖动中额外加一圈高亮描边,给玩家"这个可以抓着走"的反馈 */
   .mp-widget[data-side="left"] .mp-peek { margin-right: 0; margin-left: -14px; }
-  .mp-widget[data-side="left"] .mp-peek:hover, .mp-widget[data-side="left"] .mp-peek:active { margin-left: 0; }
-  .mp-widget.mp-dragging .mp-peek { animation: none; box-shadow: 0 0 0 2px rgba(255,255,255,.55) inset, 0 6px 20px rgba(0,0,0,.5), 0 0 22px rgba(77,171,247,.9); }
+  .mp-widget[data-side="left"] .mp-peek:hover { margin-left: 0; }
+  /* GG7:拖动时图标保持和平时一模一样的样式(呼吸动画、发光描边都不变)——之前拖动会关掉呼吸动画、换一圈高亮描边,
+     现在按用户要求去掉这个"拖动态"外观,只有位置在动,图标本身看起来和松手前完全一样 */
   .mp-peek-icon { font-size: 17px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
   .mp-peek-dot {
     position: absolute; top: 2px; right: 3px;

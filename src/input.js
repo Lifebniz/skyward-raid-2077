@@ -44,7 +44,16 @@ function toggleMute() {
 canvas.addEventListener("pointerdown", (e) => {
   Sound.resume(); Music.resume(true);
   const p = toLogic(e.clientX, e.clientY);
-  if (game.state === "title") { if (game.titleSettingsHit(p.x, p.y)) { game._resetArmed = false; game._settingsReturnState = "title"; game.state = "settings"; return; } if (game.titleCodexHit(p.x, p.y)) { game.toCodex(); return; } if (game.titleHelpHit(p.x, p.y)) { game.toTutorial(); return; } if (game.titleShipHit(p.x, p.y)) { game.toShipSelect(); return; } if (game.titleChallengeHit(p.x, p.y)) { game.openChallengePrompt(); return; } if (game.titleEndlessHit(p.x, p.y)) { game.state = "endlessdiff"; return; } if (game.titleStartHit(p.x, p.y)) game.toMap(); return; }
+  if (game.state === "title") {
+    if (game.titleSettingsHit(p.x, p.y)) { game._resetArmed = false; game._settingsReturnState = "title"; game.state = "settings"; return; }
+    if (game.titleCodexHit(p.x, p.y)) { game.toCodex(); return; }
+    if (game.titleHelpHit(p.x, p.y)) { game.toTutorial(); return; }
+    // GG6:四个入口按钮改成"按下先按压反馈,松开时若手指/鼠标还在同一个按钮上才真正触发"——这样手机点击时
+    //   能看到按下缩小的反馈,而不是 pointerdown 一到就立刻跳转、动画一帧都来不及播完
+    const key = game.titleButtonKeyAt(p.x, p.y);
+    if (key) { game._titlePressKey = key; }
+    return;
+  }
   if (game.state === "endlessdiff") {
     const inR = (r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
     if (inR(game.endlessDiffNormalRect())) { game.setEndlessDiff("normal"); game.startEndless({ diff: "normal" }); return; }
@@ -79,6 +88,7 @@ canvas.addEventListener("pointerdown", (e) => {
   if (game.state === "paused") {
     if (game.pauseToggleHit(0, p.x, p.y)) { game.autoSpecial = !game.autoSpecial; Settings.set("autoSpecial", game.autoSpecial); return; }
     if (game.pauseToggleHit(1, p.x, p.y)) { game.autoLaser = !game.autoLaser; Settings.set("autoLaser", game.autoLaser); return; }
+    if (game.pauseToggleHit(2, p.x, p.y)) { Settings.set("hideWings", !Settings.data.hideWings); return; }
     const i = game.pauseMenuHit(p.x, p.y); if (i === 0) game.resume(); else if (i === 1) { game._resetArmed = false; game._settingsReturnState = "paused"; game.state = "settings"; } else if (i === 2) { game.endless = false; game.toTitle(); } else if (i === 3 && game.endless) game.settleEndless(); return;
   }
   if (game.state !== "playing") { game.toMap(); return; }                                            // 结算/失败界面 → 返回地图
@@ -96,6 +106,9 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 canvas.addEventListener("pointermove", (e) => {
   const p = toLogic(e.clientX, e.clientY);
+  // GG6:首页四个插图按钮——鼠标悬停/手指按住滑动时实时更新"当前指向的按钮",供 update() 里的缩放动画和
+  //   pointerup 里的"松手时是否还在同一个按钮上"判断复用;拖出按钮再松手会因为 key 对不上而不触发跳转
+  if (game.state === "title") { game._titleHoverKey = game.titleButtonKeyAt(p.x, p.y); return; }
   if (game.state === "settings" && game._sliderDrag === "sfx") { game.setSfxVolumeFromX(p.x); return; }
   if (game.state === "settings" && game._sliderDrag === "music") { game.setMusicVolumeFromX(p.x); return; }
   if (game.state === "map" && game._mapDragging) { game.mapPointerMove(p.x, p.y); return; }
@@ -107,6 +120,13 @@ canvas.addEventListener("pointermove", (e) => {
   if (!input.dragging) return; updateRelativeDrag(p.x, p.y);
 });
 canvas.addEventListener("pointerup", (e) => {
+  // GG6:松手时手指/鼠标是否还在按下的那个按钮上——是才真正触发跳转,拖出去松手等于取消(标准按钮手感)
+  if (game.state === "title" && game._titlePressKey) {
+    const key = game._titlePressKey; game._titlePressKey = null;
+    const p = toLogic(e.clientX, e.clientY);
+    if (game.titleButtonKeyAt(p.x, p.y) === key) game.activateTitleButton(key);
+    return;
+  }
   if (e.pointerId === input.chargePointerId) { game.releaseCharge(); input.chargePointerId = null; }
   if (e.pointerId === input.movePointerId) { input.dragging = false; resetJoystick(); input.movePointerId = null; }   // YY:只有移动手指抬起才停止跟随
   game._sliderDrag = false;
@@ -117,10 +137,13 @@ canvas.addEventListener("pointerup", (e) => {
   game._shipDragging = false; game._codexDragging = false; game._tutorialDragging = false; game._mapDragging = false; game._codexUpgradeDragging = false;
 });
 canvas.addEventListener("pointercancel", (e) => {
+  game._titlePressKey = null;
   if (e.pointerId === input.chargePointerId) { game.releaseCharge(); input.chargePointerId = null; }
   if (e.pointerId === input.movePointerId) { input.dragging = false; resetJoystick(); input.movePointerId = null; }
   game._sliderDrag = false; game._shipDragging = false; game._codexDragging = false; game._tutorialDragging = false; game._mapDragging = false; game._codexUpgradeDragging = false;
 });
+// GG6:鼠标移出画布——清掉首页按钮的悬停高亮,不然移出去了缩放动画还停在放大状态
+canvas.addEventListener("pointerleave", () => { game._titleHoverKey = null; });
 // OO:鼠标滚轮纵向滚动 —— 地图节点区域 / 强化图鉴列表,和拖动滚动共用同一份 clamp 逻辑,只是换一种输入方式
 canvas.addEventListener("wheel", (e) => {
   const scale = CONFIG.HEIGHT / canvas.getBoundingClientRect().height, dy = e.deltaY * scale;
