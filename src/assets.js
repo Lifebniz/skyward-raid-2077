@@ -159,22 +159,50 @@ const ImageAssets = {
   allSources() {
     return Array.from(new Set(this.sources(this.manifest).concat(this.dynamicSources()))).filter(Boolean);
   },
-  decode(img) {
-    if (!img) return Promise.resolve(false);
-    const key = img.src || "";
-    if (key && this.decodeCache[key]) return this.decodeCache[key];
-    const loaded = img.complete ? Promise.resolve(img.naturalWidth > 0) : new Promise(resolve => {
-      const done = (ok) => {
-        img.removeEventListener("load", onLoad);
-        img.removeEventListener("error", onError);
-        resolve(ok && img.naturalWidth > 0);
-      };
+  // GG15:加载优先级分层——一次性发起全部素材请求会让"常用的"和"很少用到的"抢同一份带宽,
+  //   拆成两层:①"常用" = 所有机型/僚机贴图(展柜一进就要看全部机型) + HUD 图标/道具/芯片/强化/特效(第一关就用得到) +
+  //   首页贴图,开屏页会等这一层加载完才结束(见 main.js loadTiered);②"长尾" = 全部敌机/BOSS立绘/其余世界背景,
+  //   这些要么出现得晚(BOSS/后期世界)要么本来就有矢量兜底(敌机),不值得让玩家多等,开屏页结束后继续在后台悄悄加载。
+  commonSources() {
+    const srcs = this.dynamicSources().concat(this.sources(this.manifest.player), this.sources(this.manifest.wingman));
+    const titleKeys = ["button-map", "button-challenge", "button-rival", "button-ship", "wordmark", "vignette", "logo-glow", "subtitle", "footer-glow"];
+    for (const k of titleKeys) srcs.push("assets/images/ui/title/title-" + this.slug(k) + ".png");
+    return Array.from(new Set(srcs)).filter(Boolean);
+  },
+  longTailSources() {
+    const common = new Set(this.commonSources());
+    return this.allSources().filter(src => !common.has(src));
+  },
+  // 先等"常用层"加载完(开屏页缓冲期正好覆盖这段等待),再悄悄把"长尾层"丢到后台继续加载,不阻塞任何人
+  loadTiered() {
+    return this.preloadSources(this.commonSources()).then(ok => {
+      this.preloadSources(this.longTailSources());
+      return ok;
+    });
+  },
+  // GG14:静默重试——弱网/瞬时抖动导致的单张贴图加载失败,不该让这张图永久兜底成矢量图形。
+  //   失败后间隔 retryDelay 重新赋值 img.src(强制浏览器重新发起请求)再试,最多 maxRetries 次,
+  //   全程不打断/不提示玩家,成功了就正常继续,试完还失败才走原有的矢量兜底,行为对调用方完全透明
+  waitImageSettle(img) {
+    return new Promise(resolve => {
+      if (img.complete) { resolve(img.naturalWidth > 0); return; }
+      const done = (ok) => { img.removeEventListener("load", onLoad); img.removeEventListener("error", onError); resolve(ok); };
       const onLoad = () => done(true);
       const onError = () => done(false);
       img.addEventListener("load", onLoad);
       img.addEventListener("error", onError);
     });
-    const promise = loaded.then(ok => {
+  },
+  decode(img, maxRetries = 2, retryDelay = 650) {
+    if (!img) return Promise.resolve(false);
+    const key = img.src || "";
+    if (key && this.decodeCache[key]) return this.decodeCache[key];
+    const attempt = (n) => this.waitImageSettle(img).then(ok => {
+      if (ok) return true;
+      if (n >= maxRetries) return false;
+      return new Promise(r => setTimeout(r, retryDelay)).then(() => { img.src = key; return attempt(n + 1); });
+    });
+    const promise = attempt(0).then(ok => {
       if (!ok) return false;
       if (!img.decode) return true;
       return img.decode().then(() => true, () => true);
