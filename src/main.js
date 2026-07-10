@@ -144,8 +144,10 @@ function drawSplash(ctx) {
   // GG27:原来"点击任意位置跳过"是整个画布都能触发,现在收窄成"点击此位置跳过"这一小块专属热区——
   //   文案跟着改名,判定范围比文字本身的占地明显更大(横向 padding 32px、纵向撑到 44px 的触控友好高度),
   //   再画一圈淡淡的胶囊描边提示"这里可以点"。热区矩形存进 splash.skipHitRect,供下面的 pointerdown 判定复用。
+  // GG28:BUG修复——热区矩形(hit.y = skipLabelY-30)算出来的顶边正好等于 barY+barH(进度条底边),0 间距贴在一起,
+  //   进度条的 shadowBlur 光晕一叠上去视觉上就像糊成一片"重叠"了。改成显式从 barY+barH 起算,留足 18px 净间距。
   const hintAlpha = clamp((splash.t - 0.9) / 0.5, 0, 1) * (1 - exitK) * textAlpha;
-  const skipLabelY = barY + 40;
+  const skipLabelY = barY + barH + 48;
   ctx.font = "17px 'Segoe UI', sans-serif";
   const skipLabel = done ? "点击立即进入" : "点击此位置跳过";
   const labelW = ctx.measureText(skipLabel).width;

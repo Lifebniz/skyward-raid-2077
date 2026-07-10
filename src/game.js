@@ -17,6 +17,7 @@ const game = {
   // RV2:复活——进关卡/无尽新局时按当前难度的 reviveCount 重置次数(简单2/普通1/困难0),每死一次消耗一次,
   //   死亡时若还有余量则弹出复活确认(state="revive"),用完(=0)后走原来的三路结算分支
   _reviveCount: 0, _reviveUsedThisRun: false,
+  _gearDrop: null, _gearDropPopupOpen: false,   // RG3:结算掉落的机装+是否正显示专属弹窗(不停在关卡自动进的场景走横幅,不开这个弹窗)
   _itemSpawnTimer: 0,   // Q:常规关卡(非无尽)每隔 CONFIG.powerup.autoInterval 秒自动刷新一个道具
   _overflowBatch: {},
   _bombsUsedThisLevel: 0,   // OO:本关用了几个炸弹(给"轻装上阵"成就用)
@@ -123,7 +124,8 @@ const game = {
   //   这两个按钮必须整体挪到 x>375 之后,否则会被标题图压住(实测验证过,见 shot-shipequip-diagram.png 的教训)
   shipViewToggleRect(mode) { return mode === "info" ? { x: CONFIG.WIDTH - 160, y: 28, w: 70, h: 36 } : { x: CONFIG.WIDTH - 80, y: 28, w: 70, h: 36 }; },
   // RG2:机装槽位在"装备"视图里围着机身摆成一圈(8个方位,从正上方顺时针),leader line 从机身边缘拉到槽位图标
-  equipSlotAnchor() { const info = this.shipInfoPanelRect(); return { cx: CONFIG.WIDTH / 2, cy: info.y + info.h / 2 + 14, rx: 172, ry: 148 }; },
+  // RG3:ry 从 148 收到 140——品阶点+双行标签比之前多占了纵向空间,收一点半径给底部节点的标签留够不溢出面板的余量
+  equipSlotAnchor() { const info = this.shipInfoPanelRect(); return { cx: CONFIG.WIDTH / 2, cy: info.y + info.h / 2 + 10, rx: 172, ry: 140 }; },
   equipSlotNodePos(i) {
     const a = this.equipSlotAnchor(), angle = -Math.PI / 2 + i * (Math.PI * 2 / CONFIG.gearSlots.length);
     return { x: a.cx + Math.cos(angle) * a.rx, y: a.cy + Math.sin(angle) * a.ry, angle, cx: a.cx, cy: a.cy };
@@ -862,12 +864,16 @@ const game = {
     if (dropKey) {
       this._gearDrop = Object.assign({ key: dropKey, name: this.gearItemName(dropKey) }, this.gearAward(dropKey));
     }
-    // ②勾选自动进入下一关:同难度、同机型、新初始配置直接开下一关
+    // ②勾选自动进入下一关:同难度、同机型、新初始配置直接开下一关(仍在游戏中,弹整页窗口太打断,用横幅代替)
+    // RG3:非自动进下一关(停在结算画面)时,掉落改成一个专门的弹出窗口展示——比结算页里一行小字更有"开箱"的仪式感
     if (advance && this.currentLevel < this.realLevelCount() - 1) {
       const drop = this._gearDrop;
       this.startLevel(this.currentLevel + 1);
       if (drop) this.banner("获得机装:" + drop.name, drop.autoEquipped ? "已自动装备" : "已存入图鉴 · 机装页可手动装备");
-    } else this.state = "settle";
+    } else {
+      this.state = "settle";
+      this._gearDropPopupOpen = !!this._gearDrop;
+    }
   },
   spawnFarmWave() {
     this._farmWaveN++;
@@ -928,6 +934,38 @@ const game = {
     if (!itemKey) return null;
     const slot = this.gearSlotDef(this.gearSlotOf(itemKey)), tier = CONFIG.gearTiers.find(t => t.key === this.gearTierOf(itemKey));
     return slot && tier ? tier.name + slot.name : itemKey;
+  },
+  // RG3:品阶视觉差异化——不只是描边变色,档位越高描边越粗、发光越强、外圈品阶点越多,魄能(t3)额外加一圈旋转的
+  //   放射短线(像传统 RPG"传说品质"道具的光效),制式(t1)完全朴素无特效,三档拉开明显的"一眼看出档次"的区分度。
+  gearTierFX(tierKey) { return { t1: { pips: 1, glow: 0, ring: 1.5, sparkle: false }, t2: { pips: 2, glow: 10, ring: 2.5, sparkle: false }, t3: { pips: 3, glow: 18, ring: 3.5, sparkle: true } }[tierKey] || { pips: 0, glow: 0, ring: 1.5, sparkle: false }; },
+  // 圆形槽位徽章通用绘制——ship-equip放射图/掉落弹窗共用,owned=false 时叠一层锁定遮罩(codex 列表因为是方形沿用自己的画法,不复用这个)
+  drawGearBadge(ctx, x, y, r, slot, tierKey, owned) {
+    const tierDef = tierKey ? CONFIG.gearTiers.find(t => t.key === tierKey) : null;
+    const fx = this.gearTierFX(tierKey);
+    const color = tierDef ? tierDef.color : slot.color;
+    if (tierKey === "t3") {   // 魄能:旋转放射短线在徽章底下先画,徽章盖在上面,呈现"光从后面透出来"的层次
+      ctx.save(); ctx.globalAlpha = 0.45 + Math.sin(this.titleT * 3) * 0.2; ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+      for (let i = 0; i < 8; i++) { const a = i * (Math.PI / 4) + this.titleT * 0.5; ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * (r + 3), y + Math.sin(a) * (r + 3)); ctx.lineTo(x + Math.cos(a) * (r + 11), y + Math.sin(a) * (r + 11)); ctx.stroke(); }
+      ctx.restore();
+    }
+    ctx.save();
+    if (fx.glow) { ctx.shadowColor = color; ctx.shadowBlur = fx.glow; }
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = UI.rgba(slot.color, tierKey ? 0.24 : 0.08); ctx.fill();
+    ctx.lineWidth = tierKey ? fx.ring : 1.5; ctx.strokeStyle = tierDef ? color : UI.rgba(slot.color, owned ? 0.55 : 0.3); ctx.stroke();
+    ctx.restore();
+    const icon = ImageAssets.gear(slot.key);
+    ctx.save(); ctx.textAlign = "center";
+    if (icon) { ctx.beginPath(); ctx.arc(x, y, r - 4, 0, Math.PI * 2); ctx.clip(); ImageAssets.draw(ctx, icon, x, y, (r - 4) * 2); }
+    else { ctx.fillStyle = slot.color; ctx.font = "bold " + Math.round(r * 0.6) + "px 'Segoe UI', sans-serif"; ctx.fillText(String(slot.world), x, y + r * 0.2); }
+    ctx.restore();
+    if (owned === false) { ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.font = Math.round(r * 0.5) + "px 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.fillText("🔒", x, y + r * 0.18); ctx.restore(); }
+    // 品阶点:徽章正下方一排小圆点,1/2/3 个点对应制式/精密/魄能,未装备(tierKey=null)不画
+    if (tierKey) {
+      ctx.save(); const pipY = y + r + 7, gap = Math.max(6, r * 0.28);
+      for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(x + (i - 1) * gap, pipY, 2.4, 0, Math.PI * 2); ctx.fillStyle = i < fx.pips ? color : "rgba(255,255,255,.15)"; ctx.fill(); }
+      ctx.restore();
+    }
   },
   // RG:拾取/掉落装备——新档位比当前已装备的高(或槽位空着)就自动换上,不需要玩家每次都手动进图鉴装备;
   //   已经拥有的重复掉落直接忽略(简化模型不做残片/分解经济,后续可以加)
@@ -2700,6 +2738,8 @@ const game = {
     if (this.state === "settle") this._drawFaded(ctx, () => this.drawSettle(ctx));
     if (this.state === "endlessover") this._drawFaded(ctx, () => this.drawEndlessOver(ctx));
     if (sh > 0) ctx.restore();
+    // RG3:掉落弹窗盖在最上层(结算画面之上),不受上面 sh 屏幕震动的 save/restore 影响,画面本身也不会跟着抖
+    if (this._gearDropPopupOpen) this.drawGearDropPopup(ctx);
   },
 
   // GG:品质徽标宽度单独抽出来算,好让卡片顶部那行标签在排版时就知道要给徽标让出多少空间(见 drawChipSelect)
@@ -3334,18 +3374,10 @@ const game = {
       const lx0 = a.cx + Math.cos(p.angle) * 34, ly0 = a.cy + Math.sin(p.angle) * 18;
       ctx.strokeStyle = UI.rgba(slot.color, owned ? 0.5 : 0.2); ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(lx0, ly0); ctx.lineTo(p.x, p.y); ctx.stroke();
-      // 槽位徽章:圆形底 + 描边(装备了就用档位色描边,没装备用槽位主题色淡描边)+ 贴图/占位数字
-      ctx.save();
-      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = UI.rgba(slot.color, owned ? 0.22 : 0.08); ctx.fill();
-      ctx.lineWidth = equippedKey ? 2.5 : 1.5; ctx.strokeStyle = tierDef ? tierDef.color : UI.rgba(slot.color, owned ? 0.6 : 0.3); ctx.stroke();
-      ctx.restore();
-      const icon = ImageAssets.gear(slot.key);
-      if (icon) { ctx.save(); ctx.beginPath(); ctx.arc(p.x, p.y, r - 4, 0, Math.PI * 2); ctx.clip(); ImageAssets.draw(ctx, icon, p.x, p.y, (r - 4) * 2); ctx.restore(); }
-      else { ctx.fillStyle = slot.color; ctx.font = "bold 16px 'Segoe UI', sans-serif"; ctx.fillText(String(slot.world), p.x, p.y + 6); }
-      if (!owned) { ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText("🔒", p.x, p.y + 5); }
-      // WW:标注统一放在槽位正下方(用户明确要求),槽位名 + 当前装备档位(或"未装备"/"未获得")
-      const labelY = p.y + r + 15;
+      this.drawGearBadge(ctx, p.x, p.y, r, slot, tier, owned);
+      // WW:标注统一放在槽位正下方(用户明确要求),槽位名 + 当前装备档位(或"未装备"/"未获得")——
+      //   品阶点占了 badge 下方一点空间,标签整体再往下让一点
+      const labelY = p.y + r + 22;
       ctx.fillStyle = "#dee2e6"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText(slot.name, p.x, labelY);
       ctx.fillStyle = tierDef ? tierDef.color : (owned ? "#495057" : "#343a40"); ctx.font = "10px 'Segoe UI', sans-serif";
       ctx.fillText(tierDef ? tierDef.name : (owned ? "未装备" : "未获得"), p.x, labelY + 13);
@@ -3357,6 +3389,8 @@ const game = {
   drawEquipPicker(ctx) {
     const slotKey = this._equipPickerSlot, slot = this.gearSlotDef(slotKey), r = this.equipPickerRect(), opts = this.equipPickerOptions(slotKey);
     ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    // GG:同 drawGearDropPopup 的修复——UI.panel 单独用只是半透明玻璃面板,先垫一层实色底防止装备放射图透出来跟文字糊在一起
+    UI.roundRect(ctx, r.x, r.y, r.w, r.h, 16); ctx.fillStyle = "rgba(8,12,20,.96)"; ctx.fill();
     UI.panel(ctx, r.x, r.y, r.w, r.h, 16, { accent: slot.color });
     ctx.textAlign = "center"; ctx.fillStyle = slot.color; ctx.font = "bold 16px 'Segoe UI', sans-serif"; ctx.fillText(slot.name, r.x + r.w / 2, r.y + 30);
     const equippedKey = this.gearEquipped(slotKey);
@@ -3460,6 +3494,36 @@ const game = {
   //   数量较多(40+条),纵向裁剪+拖动滚动,和地图节点区域(mapViewportRect 系列)同一套算法 ──
   // RG:机装图鉴——8槽位固定列表,左侧用槽位主题色的圆角方块占位(数字=对应第几战区),贴图后续替换这一块;
   //   右侧文字区显示槽位名+掉落来源+效果说明+当前装备+已拥有档位,点整行循环切换装备档位(见 codexPointerDown/gearCycleSlot)
+  // RG3:结算掉落的专属弹窗——比结算页里一行小字更有"开箱"仪式感:大徽章(带完整品阶特效)+ 名称/品阶/来源战区 + 装备状态。
+  //   点击任意位置关闭(见 input.js 最前置的拦截),关闭后结算页上仍有一行常驻小字可以回顾(drawSettle 里那行)。
+  drawGearDropPopup(ctx) {
+    const g = this._gearDrop; if (!g) return;
+    const cx = CONFIG.WIDTH / 2, cy = CONFIG.HEIGHT / 2;
+    const slot = this.gearSlotDef(this.gearSlotOf(g.key)), tierKey = this.gearTierOf(g.key);
+    const tierDef = CONFIG.gearTiers.find(t => t.key === tierKey);
+    ctx.fillStyle = "rgba(0,0,0,.74)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    const cardW = 320, cardH = 360, cardX = cx - cardW / 2, cardY = cy - cardH / 2;
+    // 品阶越高,卡片本身也叠一层更强的外发光,呼应徽章的发光强度,让"这次开出好东西了"从卡片轮廓就能感觉到
+    const fx = this.gearTierFX(tierKey);
+    if (fx.glow) { ctx.save(); ctx.shadowColor = tierDef.color; ctx.shadowBlur = fx.glow * 1.4; UI.roundRect(ctx, cardX, cardY, cardW, cardH, 22); ctx.fillStyle = UI.rgba(tierDef.color, .04); ctx.fill(); ctx.restore(); }
+    // GG:UI.panel 本身只叠半透明渐变(玻璃质感),背后结算页的文字会透出来糊成一片——先垫一层接近不透明的实色底,
+    // 再叠 UI.panel 做玻璃高光/描边,两层加起来才是"完全盖住底下内容"的真正弹窗,而不是一层半透明蒙版
+    UI.roundRect(ctx, cardX, cardY, cardW, cardH, 22); ctx.fillStyle = "rgba(8,12,20,.96)"; ctx.fill();
+    UI.panel(ctx, cardX, cardY, cardW, cardH, 22, { accent: tierDef.color, lineWidth: 2.5 });
+    ctx.textAlign = "center";
+    ctx.fillStyle = tierDef.color; ctx.font = "bold 14px 'Segoe UI', sans-serif";
+    ctx.fillText(g.isNew ? "◆ 获得新机装 ◆" : "◆ 机装掉落(重复)◆", cx, cardY + 32);
+    this.drawGearBadge(ctx, cx, cardY + 138, 58, slot, tierKey, true);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 22px 'Segoe UI', sans-serif"; ctx.fillText(slot.name, cx, cardY + 224);
+    ctx.fillStyle = tierDef.color; ctx.font = "bold 16px 'Segoe UI', sans-serif"; ctx.fillText(tierDef.name + " 品阶", cx, cardY + 250);
+    ctx.fillStyle = "#adb5bd"; ctx.font = "13px 'Segoe UI', sans-serif";
+    ctx.fillText("第" + slot.world + "战区掉落 · " + slot.desc, cx, cardY + 274);
+    ctx.fillStyle = g.autoEquipped ? "#38d9a9" : "#868e96"; ctx.font = "bold 14px 'Segoe UI', sans-serif";
+    ctx.fillText(g.autoEquipped ? "已自动装备" : (g.isNew ? "已存入机装库 · 可在机型选择手动装备" : "重复获得(已拥有,未替换当前装备)"), cx, cardY + 302);
+    ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText("点击任意位置关闭", cx, cardY + cardH - 18);
+    ctx.textAlign = "left";
+  },
+
   drawGearCodex(ctx) {
     ctx.textAlign = "left"; ctx.fillStyle = "#868e96"; ctx.font = "13px 'Segoe UI', sans-serif";
     ctx.fillText("机装系统 · 8槽位对应8战区,关卡结算有几率掉落对应装备 · 点击整行切换已拥有档位", 18, 120);
@@ -3468,13 +3532,11 @@ const game = {
       const equippedKey = this.gearEquipped(slot.key), equippedTier = this.gearTierOf(equippedKey);
       const tierDef = equippedTier ? CONFIG.gearTiers.find(t => t.key === equippedTier) : null;
       UI.panel(ctx, r.x, r.y, r.w, r.h, 12, { accent: slot.color });
-      // 左侧占位图标——槽位主题色圆角方块 + 战区数字,贴图就位后直接换成 drawImage
-      const iconS = r.h - 24;
-      ctx.fillStyle = slot.color; UI.roundRect(ctx, r.x + 12, r.y + 12, iconS, iconS, 10); ctx.fill();
-      ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.font = "bold 22px 'Segoe UI', sans-serif"; ctx.textAlign = "center";
-      ctx.fillText(String(slot.world), r.x + 12 + iconS / 2, r.y + 12 + iconS / 2 + 8);
-      ctx.textAlign = "left";
-      const tx = r.x + iconS + 26;
+      // RG3:圆形徽章复用 drawGearBadge(和机型选择的装备图一致的品阶视觉:描边粗细/发光/魄能放射线/品阶点)——
+      //   徽章中心比行正中略偏上,给品阶点留出的行内空间不会挤到面板下边缘
+      const iconR = 28, iconCx = r.x + 12 + iconR, iconCy = r.y + 36;
+      this.drawGearBadge(ctx, iconCx, iconCy, iconR, slot, equippedTier, this.gearOwnsAny(slot.key));
+      const tx = r.x + iconR * 2 + 26;
       ctx.fillStyle = "#fff"; ctx.font = "bold 16px 'Segoe UI', sans-serif";
       ctx.fillText(slot.name + "  ·  第" + slot.world + "战区掉落", tx, r.y + 24);
       ctx.fillStyle = "#adb5bd"; ctx.font = "12px 'Segoe UI', sans-serif";
