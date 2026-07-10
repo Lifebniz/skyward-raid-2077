@@ -14,6 +14,8 @@ const game = {
   dlgName: "", dlgText: "", dlgTimer: 0,   // P:BOSS 台词
   topScores: [], _recorded: false,
   farming: false, _reached: false, _farmTimer: 0, _farmWaveN: 0, _clearScore: 0, settleResult: null, _resetArmed: false, _settingsReturnState: "title",
+  // RV:复活——每次进入关卡/无尽新局重置为可用,死亡时若可用则弹出复活确认(state="revive"),用掉后本局(含刷分续关)不再有第二次
+  _reviveAvailable: false,
   _itemSpawnTimer: 0,   // Q:常规关卡(非无尽)每隔 CONFIG.powerup.autoInterval 秒自动刷新一个道具
   _overflowBatch: {},
   _bombsUsedThisLevel: 0,   // OO:本关用了几个炸弹(给"轻装上阵"成就用)
@@ -275,6 +277,7 @@ const game = {
     this.resetDepthSystems();
     this.flashTimer = 0; this._morphFlashTimer = 0; this.warningTimer = 0; this._recorded = false;
     this.farming = false; this._reached = false; this._farmTimer = 0; this._farmWaveN = 0; this.settleResult = null;
+    this._reviveAvailable = true;
     this._itemSpawnTimer = this.itemAutoInterval(); this._overflowBatch = {}; this._hpTrailRatio = 1; this._bombsUsedThisLevel = 0;
     this._cannonCritsThisRun = 0; this._morphSwitchesThisRun = 0;
     director.begin(LEVELS[i].script);
@@ -301,6 +304,7 @@ const game = {
     if (!this.endlessLite) this.setEndlessDiff(opts.diff || Settings.data.endlessDiff || "normal");
     this.challengeSeed = opts.seed || Challenge.randomSeed(); this.challengeMode = !!opts.challenge; this.challengeDaily = !!opts.daily; this.challengeTarget = opts.target || null; this.challengeSplits = []; this.rivalInterference = (typeof RivalInterference !== "undefined") ? RivalInterference.create(this.challengeTarget) : null; this._rng = Challenge.rng(this.challengeSeed);
     this.farming = false; this._reached = false; this.currentLevel = 0; this.world = 1;
+    this._reviveAvailable = true;
     this._worldTransFrom = this.world; this._worldTransT = this.worldTransitionDur();
     this.state = "playing";
     this.player = new Player(); this.boss = null;
@@ -506,6 +510,28 @@ const game = {
     if (!this.endlessLite && proto >= 0 && this._endlessT >= 240 && this._endlessBossN % 3 === 2) return proto;
     const n = proto >= 0 ? CONFIG.bosses.length - 1 : CONFIG.bosses.length;
     return this._endlessBossN % n;
+  },
+  // RV:复活确认页的两个按钮 —— 布局参照 clearedMenuRect(通关后"结算/继续刷分"二选一)同一套居中堆叠模式,
+  //   避免另起一套坐标体系;两个 rect 之间、以及和上方文案之间都留了≥20px 间距,drawRevive 不会出现重叠。
+  reviveRect() { return { x: CONFIG.WIDTH / 2 - 150, y: 420, w: 300, h: 64 }; },
+  reviveDeclineRect() { return { x: CONFIG.WIDTH / 2 - 120, y: 530, w: 240, h: 50 }; },
+  reviveHit(px, py) { const r = this.reviveRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  reviveDeclineHit(px, py) { const r = this.reviveDeclineRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  // RV:确认复活——满血复活、给一段无敌缓冲、白送一次炸弹清屏(不消耗库存)、再把炸弹库存补到至少当前+2(封顶 maxBombs)
+  doRevive() {
+    if (this.state !== "revive" || !this.player) return;
+    const p = this.player;
+    this.state = "playing";
+    p.hp = p.maxHp;
+    p.invulnTimer = Math.max(p.invulnTimer, CONFIG.player.bombInvuln + 1.2);
+    this.bombClearEffect();
+    p.bombs = Math.min((p.bombs || 0) + 2, CONFIG.player.maxBombs);
+    Sound.revive(); Haptics.revive();
+    this.banner("复活!", "已恢复满血 · 炸弹 +2");
+  },
+  // RV:放弃复活——原来死亡时的三路分支(无尽/刷分/常规关卡)原样保留在这里
+  declineRevive() {
+    if (this.endless) this.settleEndless(); else if (this.farming) this.settle(); else this.state = "gameover";
   },
   settleEndless() {
     this.recordEndlessTelemetry();
@@ -1867,9 +1893,15 @@ const game = {
   bombButtonHit(x, y) { const b = this.bombBtn; return (x - b.x) ** 2 + (y - b.y) ** 2 <= b.r * b.r; },
   useBomb() {
     if (!this.player || this.player.bombs <= 0) return;
-    this.player.bombs--; this._bombsUsedThisLevel++; Sound.bomb(); Haptics.bomb(); this.addShake(6, 0.2); this.hitStop(0.04);
+    this.player.bombs--; this._bombsUsedThisLevel++;
     if (this._endlessStats) this._endlessStats.bombs++;
     this.dropThreat(CONFIG.threat.bombLoss);
+    this.bombClearEffect();
+  },
+  // RV:炸弹清屏效果拆成独立方法——useBomb() 正常消耗一枚库存调用它,doRevive() 复活时也调用同一个效果
+  //   但不经过 useBomb() 的库存扣减/次数统计,避免"复活白送的这一下"被误记成玩家手动用了一个炸弹
+  bombClearEffect() {
+    Sound.bomb(); Haptics.bomb(); this.addShake(6, 0.2); this.hitStop(0.04);
     this.flashTimer = CONFIG.bomb.flash;
     this.player.invulnTimer = Math.max(this.player.invulnTimer, CONFIG.player.bombInvuln);
     for (const b of this.enemyBullets) { this.burst(b.x, b.y, "#ff8787", 3, 120); b.dead = true; }
@@ -2256,7 +2288,7 @@ const game = {
       this._titleBtnScale[k] = cur + (target - cur) * Math.min(1, dt * 12);
     }
     if (this._tutorialAnimT < 1) this._tutorialAnimT = Math.min(1, this._tutorialAnimT + dt / 0.2);   // GG22:翻页滑入动画,0.2s 线性推进
-    if (this.state === "paused") return;          // 暂停:冻结一切(逻辑/粒子/计时器)
+    if (this.state === "paused" || this.state === "revive") return;   // 暂停/复活确认:冻结一切(逻辑/粒子/计时器)
     if (this._cannonHitStopCd > 0) this._cannonHitStopCd -= dt;   // MO9:大炮命中反馈节流冷却
     if (this.flashTimer > 0) this.flashTimer -= dt;
     if (this._morphFlashTimer > 0) this._morphFlashTimer -= dt;
@@ -2322,7 +2354,9 @@ const game = {
     pruneDead(this.enemies, releaseDead.enemy);
     pruneDead(this.powerups);
     if (this.boss && this.boss.dead) this.boss = null;
-    if (this.player.hp <= 0) { if (this.endless) this.settleEndless(); else if (this.farming) this.settle(); else this.state = "gameover"; }   // 刷分中阵亡也进结算
+    // RV:阵亡时若本局还没用过复活机会,先弹出复活确认(冻结在 state="revive"),而不是直接结算/失败;
+    //   玩家选择后走 doRevive()/declineRevive(),declineRevive 里才是原来这行的三路分支
+    if (this.player.hp <= 0) { if (this._reviveAvailable) { this._reviveAvailable = false; this.state = "revive"; } else this.declineRevive(); }   // 刷分中阵亡也进结算
   },
 
   resolveCollisions() {
@@ -2455,7 +2489,7 @@ const game = {
     // N:屏幕震动(仅对局态;标题/地图/设置/机型选择/图鉴 sh=0 不会 save,故其提前 return 不失衡)
     // HH:paused 也要排除在外 —— 之前 _shakeT 在暂停时不递减(冻结),但这里没排除 paused,
     // 导致每帧仍用 Math.random() 重新算一次抖动偏移,暂停画面就变成没完没了的随机抖动。
-    const inGame = this.state !== "title" && this.state !== "endlessdiff" && this.state !== "settings" && this.state !== "map" && this.state !== "shipselect" && this.state !== "codex" && this.state !== "tutorial" && this.state !== "paused";
+    const inGame = this.state !== "title" && this.state !== "endlessdiff" && this.state !== "settings" && this.state !== "map" && this.state !== "shipselect" && this.state !== "codex" && this.state !== "tutorial" && this.state !== "paused" && this.state !== "revive";
     const sh = (this._shakeT > 0 && inGame) ? this._shake : 0;
     if (sh > 0) { ctx.save(); ctx.translate((Math.random() * 2 - 1) * sh, (Math.random() * 2 - 1) * sh); }
     this.drawWorldBackground(ctx); stars.draw(ctx);
@@ -2520,6 +2554,7 @@ const game = {
     if (this.warningTimer > 0 && this.state === "playing") this.drawWarning(ctx);
     if (this.state === "chipselect") this._drawFaded(ctx, () => this.drawChipSelect(ctx));
     if (this.state === "paused") this._drawFaded(ctx, () => this.drawPause(ctx));
+    if (this.state === "revive") this._drawFaded(ctx, () => this.drawRevive(ctx));
     if (this.state === "gameover") this._drawFaded(ctx, () => this.drawEndScreen(ctx, "战斗失败", "#ff6b6b"));
     if (this.state === "cleared") this._drawFaded(ctx, () => this.drawCleared(ctx));
     if (this.state === "settle") this._drawFaded(ctx, () => this.drawSettle(ctx));
@@ -4266,6 +4301,23 @@ const game = {
       ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
       ctx.fillStyle = "#38d9a9"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText("✓ 通关 · 刷分 " + this.score + "/" + Math.round(this._clearScore * CONFIG.scoring.farmScoreCapMult), 200, 56);
     }
+  },
+
+  // RV:复活确认页——阵亡瞬间冻结画面(飞机/敌机/弹幕都还留在原地,呼应"座机被击落"的既视感),
+  //   叠一层比结算页更深的暗幕,文案+两个按钮,按钮样式复用 UI.button(和结算/通关页同一套视觉语言)。
+  drawRevive(ctx) {
+    const cx = CONFIG.WIDTH / 2;
+    ctx.fillStyle = "rgba(0,0,0,.8)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ff6b6b"; ctx.font = "bold 42px 'Segoe UI', sans-serif"; ctx.fillText("座机被击落", cx, 300);
+    ctx.fillStyle = "#adb5bd"; ctx.font = "16px 'Segoe UI', sans-serif"; ctx.fillText("本局最后一次复活机会", cx, 332);
+    ctx.fillStyle = "#fff"; ctx.font = "20px 'Segoe UI', sans-serif"; ctx.fillText("本局得分 " + this.easedCount(this.score), cx, 366);
+    const rr = this.reviveRect();
+    UI.button(ctx, rr, { label: "复活 REVIVE", color: "#38d9a9", active: true, font: 22, radius: 14 });
+    ctx.fillStyle = "#868e96"; ctx.font = "13px 'Segoe UI', sans-serif";
+    ctx.fillText("复活后自动触发一次炸弹清屏 · 炸弹 +2", cx, rr.y + rr.h + 24);
+    UI.button(ctx, this.reviveDeclineRect(), { label: "放弃 GIVE UP", color: "#495057", font: 17, radius: 12 });
+    ctx.textAlign = "left";
   },
 
   drawEndScreen(ctx, title, color) {

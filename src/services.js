@@ -14,9 +14,9 @@ const Sound = {
     this.noiseBuf = buf;
   },
   resume() { this.init(); if (this.ctx && this.ctx.state === "suspended") this.ctx.resume(); },
-  tone(freq, dur, type, gain, glideTo) {
+  tone(freq, dur, type, gain, glideTo, delay) {
     if (!this.enabled || !this.ctx || this.volume <= 0) return;
-    const t = this.ctx.currentTime, o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    const t = this.ctx.currentTime + (delay || 0), o = this.ctx.createOscillator(), g = this.ctx.createGain();
     o.type = type || "square"; o.frequency.setValueAtTime(freq, t);
     if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t + dur);
     g.gain.setValueAtTime(gain * this.volume, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
@@ -52,6 +52,9 @@ const Sound = {
   // X5:相位护盾破碎——短促清脆的"啪"(高频三角波快速下滑 + 极短噪声),和切换形态的低沉能量鼓胀音区分开,
   //   听感上更像"防护罩碎了"而不是"主动发力",玩家闭眼也能分清这次是防御触发还是自己按的技能
   shieldBreak() { this.tone(1400, 0.1, "triangle", 0.16, 500); this.noise(0.08, 0.1, 2600); },
+  // RV:复活——三个音区依次上扬的方波琶音("重新启动"的感觉),和炸弹/BOSS击败的爆破音区分开,是唯一的上升旋律
+  //   三个音用同一个 AudioContext 时钟按 delay 排队(而不是 setTimeout),不受标签页节流影响,音准更稳
+  revive() { this.tone(392, 0.12, "square", 0.1, 0, 0); this.tone(523, 0.12, "square", 0.11, 0, 0.09); this.tone(784, 0.18, "square", 0.13, 0, 0.18); },
 };
 
 /* =====================================================================
@@ -129,6 +132,7 @@ const Haptics = {
   powerup()    { this.buzz(20); },
   morphShift() { this.buzz([0, 40, 25, 60]); },
   shieldBreak() { this.buzz([0, 25, 15, 25]); },
+  revive() { this.buzz([0, 35, 40, 35, 40, 60]); },
 };
 
 /* =====================================================================
