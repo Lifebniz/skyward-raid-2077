@@ -163,10 +163,12 @@ function drawSplash(ctx) {
     ctx.font = "17px 'Segoe UI', sans-serif";
     ctx.fillText(skipLabel, cx, skipLabelY);
     if (!done) {
+      // GG29:BUG修复——跳过热区胶囊(高44,底边在 skipLabelY+14)和这两行说明文字原来只隔 12px 基线间距,
+      //   14px 字体的字形上沿实际只比胶囊底边低 1px,肉眼几乎贴在一起。往下挪 12px,留出清楚的呼吸间距。
       ctx.globalAlpha = hintAlpha * 0.5;
       ctx.font = "14px 'Segoe UI', sans-serif";
-      ctx.fillText("提前跳过后剩余贴图将在后台继续加载，", cx, skipLabelY + 26);
-      ctx.fillText("未就绪的画面会暂以简化图形显示，加载完成后自动恢复", cx, skipLabelY + 46);
+      ctx.fillText("提前跳过后剩余贴图将在后台继续加载，", cx, skipLabelY + 38);
+      ctx.fillText("未就绪的画面会暂以简化图形显示，加载完成后自动恢复", cx, skipLabelY + 58);
     }
     ctx.restore();
   }

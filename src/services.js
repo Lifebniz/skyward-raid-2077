@@ -142,7 +142,7 @@ const Settings = {
   key: "kzts_settings",
   // JJ:音效/音乐拆成独立音量+独立开关(原来共用一个 volume,音乐音效没法分别调)
   data: { sfxVolume: 0.8, musicVolume: 0.7, sound: true, music: true, haptics: true, diff: "normal", endlessDiff: "normal", ship: "balanced", autoNext: false, autoSpecial: false, autoLaser: false, hideWings: false, seenTutorial: false, controlMode: "drag", mpSide: "right", mpTop: 8,
-    gearOwned: [], gearLoadout: {}, gearStarterGranted: false },   // RG:机装系统——已拾取的装备key列表 / 8槽位当前装备 / 是否已发过新手礼包(制式全套)
+    gearOwned: {}, gearLoadout: {}, gearStarterGranted: false },   // RG7:机装系统——已拾取的装备(itemKey -> 持有数量,重铸要消耗多件同款) / 8槽位当前装备 / 是否已发过新手礼包(魂魄全套)
   load() {
     try {
       const s = JSON.parse(localStorage.getItem(this.key));
@@ -152,6 +152,11 @@ const Settings = {
         if (s.volume != null && s.musicVolume == null) s.musicVolume = s.volume;
         Object.assign(this.data, s);
         if (!CONFIG.endlessDifficulties[this.data.endlessDiff]) this.data.endlessDiff = "normal";
+        // RG7:老存档的 gearOwned 是数组(每件装备只记有没有,不记数量)——迁移成数量映射,每件按 1 件算
+        if (Array.isArray(this.data.gearOwned)) {
+          const map = {}; for (const k of this.data.gearOwned) map[k] = 1;
+          this.data.gearOwned = map;
+        }
       }
     } catch (e) {}
     this.apply();

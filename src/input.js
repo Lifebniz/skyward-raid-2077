@@ -45,7 +45,11 @@ canvas.addEventListener("pointerdown", (e) => {
   Sound.resume(); Music.resume(true);
   const p = toLogic(e.clientX, e.clientY);
   // RG3:机装掉落弹窗盖在最上层,拦在所有状态分支最前面——点哪都先关弹窗,不会误触到弹窗底下结算页的"点击返回地图"
-  if (game._gearDropPopupOpen) { game._gearDropPopupOpen = false; return; }
+  // RG7:BOSS关卡可能精良+魂魄双出——队列里还有下一件就先展示下一件,队列空了才真正关闭弹窗
+  if (game._gearDropPopupOpen) {
+    if (game._gearDropQueue.length) { game._gearDrop = game._gearDropQueue.shift(); } else { game._gearDropPopupOpen = false; }
+    return;
+  }
   if (game.state === "title") {
     if (game.titleSettingsHit(p.x, p.y)) { game._resetArmed = false; game._settingsReturnState = "title"; game.state = "settings"; return; }
     if (game.titleCodexHit(p.x, p.y)) { game.toCodex(); return; }
