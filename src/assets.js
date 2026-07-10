@@ -173,12 +173,17 @@ const ImageAssets = {
     const common = new Set(this.commonSources());
     return this.allSources().filter(src => !common.has(src));
   },
-  // 先等"常用层"加载完(开屏页缓冲期正好覆盖这段等待),再悄悄把"长尾层"丢到后台继续加载,不阻塞任何人
-  loadTiered() {
-    return this.preloadSources(this.commonSources()).then(ok => {
-      this.preloadSources(this.longTailSources());
-      return ok;
-    });
+  // GG18:开屏页改为"全部贴图加载完才自动进入",需要真实的加载进度供进度条展示——
+  //   loadProgress 记录 已完成/总数,每张图 decode 落定(成功或走完重试彻底失败)都记一次 done;
+  //   加载顺序仍保持分层:先常用层(首页/机型/HUD)后长尾层(BOSS/敌机/后期背景),返回的 Promise 在"全部"落定后才 resolve。
+  loadProgress: { done: 0, total: 0 },
+  _trackList(list) {
+    return Promise.all(list.map(src => this.decode(this.ensure(src)).then(ok => { this.loadProgress.done++; return ok; })));
+  },
+  loadAllTiered() {
+    const common = this.commonSources(), tail = this.longTailSources();
+    this.loadProgress.done = 0; this.loadProgress.total = common.length + tail.length;
+    return this._trackList(common).then(() => this._trackList(tail)).then(() => true, () => true);
   },
   // GG14:静默重试——弱网/瞬时抖动导致的单张贴图加载失败,不该让这张图永久兜底成矢量图形。
   //   失败后间隔 retryDelay 重新赋值 img.src(强制浏览器重新发起请求)再试,最多 maxRetries 次,

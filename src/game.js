@@ -2006,7 +2006,7 @@ const game = {
     Sound.shieldBreak(); Haptics.shieldBreak(); this.addShake(3, 0.1);
   },
   // MO:爆震波推进——半径匀速扩散,清掉扫过的所有敌弹,对每架敌机只结算一次伤害,到达最大半径后消亡
-  // MO11:healOnDeath 的波(护盾破碎波)额外记录清了多少发弹幕/消灭了多少敌机,波消亡时按"消除弹幕数+消灭敌人数"回血
+  // MO11:healOnDeath 的波(护盾破碎波)额外记录清了多少发弹幕/消灭了多少敌机,波消亡时按"(消除弹幕数+消灭敌人数)×5"回血
   updateMorphBlasts(dt) {
     const m = (this.player && this.player.ship.morph) || {};
     const speed = m.blastSpeed || 640;
@@ -2037,7 +2037,8 @@ const game = {
       if (w.r >= maxR) {
         w.dead = true;
         if (w.healOnDeath && this.player) {
-          const heal = w.clearedBullets + w.clearedEnemies;
+          // MO13:回血量从"清除数×1"上调为"清除数×5"——×1 在中后期弹幕密度下回血几乎无感,被动缺乏存在感
+          const heal = (w.clearedBullets + w.clearedEnemies) * 5;
           if (heal > 0) { this.player.heal(heal); this.floats.push(new FloatText(w.x, w.y - 30, "相位回收 +" + heal, "#66d9e8")); }
         }
       }
@@ -3265,16 +3266,22 @@ const game = {
     UI.button(ctx, this.tutorialArrowRect(-1), { label: "‹", color: "#495057", font: 26, radius: 12 });
     UI.button(ctx, this.tutorialArrowRect(1), { label: "›", color: "#495057", font: 26, radius: 12 });
 
-    const cardW = 340, cardH = 340, cardX = cx - cardW / 2, cardY = 220;
+    // MO13:卡片高度改为按正文实际行数自适应——固定 340 高在行多的页(双形态机)会让文字戳穿底框。
+    //   先用正文字体量好每条要点折行后的子行数,算出所需高度再画卡片;条目之间留一点段间距,读起来不糊成一坨。
+    const cardW = 340, cardX = cx - cardW / 2, cardY = 200;
+    const bodyFont = "15px 'Segoe UI', sans-serif", lineH = 22, itemGap = 8;
+    ctx.font = bodyFont;
+    const wrapped = p.lines.map((line) => UI.wrapText(ctx, line, cardW - 40, 3));
+    const bodyH = wrapped.reduce((s, subs) => s + subs.length * lineH, 0) + (wrapped.length - 1) * itemGap;
+    const cardH = Math.max(320, 152 + bodyH + 6);   // 6 ≈ 让末行基线到底框保持约 28px 的呼吸边距
     UI.panel(ctx, cardX, cardY, cardW, cardH, 20, { accent: "#4dabf7" });
     ctx.font = "56px 'Segoe UI', sans-serif"; ctx.fillStyle = "#fff"; ctx.fillText(p.icon, cx, cardY + 74);
     ctx.fillStyle = "#4dabf7"; ctx.font = "bold 22px 'Segoe UI', sans-serif"; ctx.fillText(p.title, cx, cardY + 118);
-    ctx.fillStyle = "#dee2e6"; ctx.font = "15px 'Segoe UI', sans-serif";
-    // BB:教程正文有几行较长(如机型技能说明),原来按固定行距整行绘制会撑出卡片边框;
-    //   改用 UI.wrapText 按卡片可用宽度逐字断行,再按实际子行数累加行距。
-    let lineY = cardY + 138;
-    p.lines.forEach((line) => {
-      UI.wrapText(ctx, line, cardW - 40, 3).forEach((sub) => { lineY += 22; ctx.fillText(sub, cx, lineY); });
+    ctx.fillStyle = "#dee2e6"; ctx.font = bodyFont;
+    let lineY = cardY + 152;
+    wrapped.forEach((subs) => {
+      subs.forEach((sub) => { ctx.fillText(sub, cx, lineY); lineY += lineH; });
+      lineY += itemGap;
     });
 
     for (let i = 0; i < n; i++) {
