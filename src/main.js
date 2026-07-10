@@ -61,6 +61,14 @@ function drawSplash(ctx) {
   ctx.save();
   ctx.globalAlpha = textAlpha;
   ctx.textAlign = "center";
+  // GG25:适龄提示图标——常驻右上角,和鸣谢文字同一节奏渐入,不单独抢注意力
+  const ageIcon = ImageAssets.ready(ImageAssets.ageRatingSrc);
+  if (ageIcon) {
+    // GG26:面积放大到原来的 5 倍(线性边长 ×√5),经验证压缩版在此尺寸下和原图肉眼无差异,可以放心用
+    // 右边距从 14 加到 36——放大后宽度够到联机浮标(mp-peek,默认挂在右边缘 top:8%)的常驻区域,留够间距避免遮挡
+    const iconH = 46 * Math.sqrt(5), iconW = iconH * ageIcon.naturalWidth / ageIcon.naturalHeight;
+    ctx.drawImage(ageIcon, W - 36 - iconW, 14, iconW, iconH);
+  }
   // ① 开发团队鸣谢(上段)
   ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.font = "13px 'Segoe UI', sans-serif";
   ctx.fillText("开发团队 DEVELOPED BY", cx, H * 0.20);

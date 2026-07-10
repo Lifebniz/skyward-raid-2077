@@ -4,6 +4,8 @@
  * 3.5) 可选图片素材
  * ===================================================================== */
 const ImageAssets = {
+  // GG25:适龄提示图标——独立于 manifest 分类树,直接给一个固定路径常量,开屏页/鸣谢页右上角常驻展示
+  ageRatingSrc: "assets/images/ui/rating/icon-age-rating.png",
   manifest: {
     player: {
       balanced: "assets/images/ships/player-balanced.png",
@@ -167,6 +169,7 @@ const ImageAssets = {
     const srcs = this.dynamicSources().concat(this.sources(this.manifest.player), this.sources(this.manifest.wingman));
     const titleKeys = ["button-map", "button-challenge", "button-rival", "button-ship", "wordmark", "vignette", "logo-glow", "subtitle", "footer-glow"];
     for (const k of titleKeys) srcs.push("assets/images/ui/title/title-" + this.slug(k) + ".png");
+    srcs.push(this.ageRatingSrc);   // GG25:适龄提示图标——常用层,和其余首屏必需素材一起统计进加载进度
     return Array.from(new Set(srcs)).filter(Boolean);
   },
   longTailSources() {
@@ -255,6 +258,7 @@ const ImageAssets = {
       "assets/images/ui/icons/icon-power-upgrade.png",
       "assets/images/ui/powerups/icon-powerup-power.png",
       "assets/images/ui/powerups/icon-powerup-heal.png",
+      this.ageRatingSrc,   // GG25:开屏页第一帧就要用,必须进关键层,不能等常用/长尾分层轮到它
     ];
   },
   loadCritical(opts = {}) {
