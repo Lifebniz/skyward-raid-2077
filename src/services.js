@@ -157,6 +157,16 @@ const Settings = {
           const map = {}; for (const k of this.data.gearOwned) map[k] = 1;
           this.data.gearOwned = map;
         }
+        // RG8:BUG修复——制式(t1)档位已经从 CONFIG.gearTiers 里删掉了,但老存档里可能还装备/持有着 t1 物品,
+        //   任何要查 CONFIG.gearTiers.find(...).color/.name 的地方碰到 t1 就会拿到 undefined 直接崩(图鉴机装页
+        //   点进去就卡死的根因)。统一在读档这一步把 t1 升级成精良(t2),存量数据不会再出现失效的档位引用。
+        const upT1 = (k) => k && k.endsWith("_t1") ? k.slice(0, -2) + "t2" : k;
+        if (this.data.gearLoadout) for (const slot of Object.keys(this.data.gearLoadout)) this.data.gearLoadout[slot] = upT1(this.data.gearLoadout[slot]);
+        if (this.data.gearOwned) {
+          const migrated = {};
+          for (const [k, n] of Object.entries(this.data.gearOwned)) { const nk = upT1(k); migrated[nk] = (migrated[nk] || 0) + n; }
+          this.data.gearOwned = migrated;
+        }
       }
     } catch (e) {}
     this.apply();

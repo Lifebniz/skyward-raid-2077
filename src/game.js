@@ -946,6 +946,9 @@ const game = {
   gearItemKey(slotKey, tierKey) { return slotKey + "_" + tierKey; },
   gearEquipped(slotKey) { return (Settings.data.gearLoadout || {})[slotKey] || null; },
   gearTierOf(itemKey) { return itemKey ? itemKey.split("_")[1] : null; },
+  // RG8:安全查表——CONFIG.gearTiers.find(...) 查不到(比如遇到已经删掉的档位 key)时不返回 undefined 崩掉调用方,
+  //   给一个能正常显示的兜底档位定义。Settings.load() 已经把老存档的 t1 迁移成 t2,这里是双保险,不指望它天天触发。
+  gearTierDef(tierKey) { return CONFIG.gearTiers.find(t => t.key === tierKey) || { key: tierKey || "?", name: "未知品阶", color: "#868e96" }; },
   gearSlotOf(itemKey) { return itemKey ? itemKey.split("_")[0] : null; },
   // RG7:库存改成数量映射(itemKey -> 件数)而不是有/无的布尔值——重铸要消耗多件同款,仓库视图也要能看出"这件有几份"
   gearCount(itemKey) { return !!itemKey && ((Settings.data.gearOwned || {})[itemKey] || 0); },
@@ -959,7 +962,7 @@ const game = {
   gearSlotDef(slotKey) { return CONFIG.gearSlots.find(s => s.key === slotKey) || null; },
   gearItemName(itemKey) {
     if (!itemKey) return null;
-    const slot = this.gearSlotDef(this.gearSlotOf(itemKey)), tier = CONFIG.gearTiers.find(t => t.key === this.gearTierOf(itemKey));
+    const slot = this.gearSlotDef(this.gearSlotOf(itemKey)), tier = this.gearTierDef(this.gearTierOf(itemKey));
     return slot && tier ? tier.name + slot.name : itemKey;
   },
   // RG3:品阶视觉差异化——不只是描边变色,档位越高描边越粗、发光越强、外圈品阶点越多,魄能(t3)额外加一圈旋转的
@@ -995,11 +998,11 @@ const game = {
   //   之前图标只认槽位贴图和装备与否无关,现在图标只在真正装备了东西时才画);③完全没有(ownsAny=false)→锁定遮罩。
   //   ringColor 可选:传了就按"这一圈"的统一底色画(不传回退到槽位主题色),用来区分放射图的内圈/外圈。
   drawGearBadge(ctx, x, y, r, slot, tierKey, ownsAny, ringColor) {
-    const tierDef = tierKey ? CONFIG.gearTiers.find(t => t.key === tierKey) : null;
+    const tierDef = tierKey ? this.gearTierDef(tierKey) : null;
     const fx = this.gearTierFX(tierKey);
     const baseColor = ringColor || slot.color;
     const ringCol = tierDef ? tierDef.color : baseColor;
-    if (tierKey === "t3") this.drawGearSparkle(ctx, x, y, r, ringCol);   // 魂魄:星芒光效在徽章底下先画,徽章盖在上面,呈现"光从后面透出来"的层次
+    if (tierKey === "t3") this.drawGearSparkle(ctx, x, y, r, ringCol);   // 魂能:星芒光效在徽章底下先画,徽章盖在上面,呈现"光从后面透出来"的层次
     ctx.save();
     if (fx.glow) { ctx.shadowColor = ringCol; ctx.shadowBlur = fx.glow; }
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -1056,11 +1059,26 @@ const game = {
     if (this.isBossLevel() && Math.random() < cfg.soulChance) drops.push(this.gearItemKey(slot.key, "t3"));
     return drops;
   },
-  // RG7:新手礼包——每个用户首次启动免费拿一整套魂魄(t3,顶档)装备,8槽位全配好。只发一次(存档标记)。
+  // RG8:新手礼包——每个用户首次启动免费拿一整套魂能(t3,顶档)装备,8槽位全配好。只发一次(存档标记)。
   grantStarterGear() {
     if (Settings.data.gearStarterGranted) return;
     for (const s of CONFIG.gearSlots) this.gearAward(this.gearItemKey(s.key, "t3"));
     Settings.set("gearStarterGranted", true);
+  },
+  // RG8:兑换码——设置页里弹窗输入,不区分大小写/首尾空格;命中 "iclaude" 直接发一整套魂能(t3)装备,
+  //   刻意不做"只能领一次"的限制(用户明确要求可重复获取),每次都会给库存 +1 份(用来囤重铸材料也说得通)。
+  redeemGearCode() {
+    const raw = window.prompt("输入兑换码:", "");
+    if (raw == null) return;
+    const code = raw.trim().toLowerCase();
+    if (!code) return;
+    if (code === "iclaude") {
+      for (const s of CONFIG.gearSlots) this.gearAward(this.gearItemKey(s.key, "t3"));
+      Sound.powerup(); Haptics.powerup();
+      window.prompt("兑换成功!已获得一整套魂能装备(仅供查看,可关闭):", "");
+    } else {
+      window.prompt("兑换码无效(仅供查看,可关闭):", raw);
+    }
   },
   // RG7:装备仓库——某槽位当前拥有的所有(档位,件数)条目,档位从低到高排列,供仓库视图/重铸候选池使用
   gearWarehouseEntries(slotKey) {
@@ -3517,20 +3535,24 @@ const game = {
     ctx.textAlign = "center";
     ctx.fillStyle = "#fff"; ctx.font = "bold 18px 'Segoe UI', sans-serif"; ctx.fillText("机装配置", cx, info.y + 30);
     ctx.fillStyle = "#868e96"; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText("所有机型共用同一套装备 · 点击槽位打开装备仓库", cx, info.y + 50);
-    // RG7:内外圈引导线——用两圈很淡的虚线椭圆把 8 个节点"框"在一起,一眼看出这是两层有机整体而不是散落的点,
-    //   代替原来那 8 根从机身引出的直线(参考意见:直线太呆板)
-    ctx.save(); ctx.strokeStyle = "rgba(255,255,255,.14)"; ctx.lineWidth = 1; ctx.setLineDash([2, 7]);
+    // RG8:内外圈引导线——原来 0.14 透明度太淡快看不见了,提到 0.4 并按"内圈/外圈"各自的主题色上色(而不是纯白),
+    //   线也加粗到 1.5,现在一眼就能看出这是两层轨道,不用凑近了眯眼睛才分辨。
+    ctx.save(); ctx.lineWidth = 1.5; ctx.setLineDash([3, 6]);
+    ctx.strokeStyle = UI.rgba(this.gearRingColor(true), .4);
     ctx.beginPath(); ctx.ellipse(a.cx, a.cy, a.inner.rx, a.inner.ry, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = UI.rgba(this.gearRingColor(false), .4);
     ctx.beginPath(); ctx.ellipse(a.cx, a.cy, a.outer.rx, a.outer.ry, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]); ctx.restore();
-    // RG7:机身缩小到 72%——原尺寸的机头会顶到正上方内圈徽章,缩小后各方向都留出清楚的间距
-    ctx.save(); ctx.translate(a.cx, a.cy); ctx.scale(0.72, 0.72); ctx.translate(-a.cx, -a.cy);
-    this.drawShipPreview(ctx, a.cx, a.cy, sp);
+    // RG8:BUG修复——缩小机身(72%)那版实测机头还是会顶到正上方内圈徽章;直接把机身整体下移一截(而不是只缩小),
+    //   下移量在缩放变换之外单独控制,不随缩放比例打折扣,效果更直接可控。
+    const shipY = a.cy + 22;
+    ctx.save(); ctx.translate(a.cx, shipY); ctx.scale(0.72, 0.72); ctx.translate(-a.cx, -shipY);
+    this.drawShipPreview(ctx, a.cx, shipY, sp);
     ctx.restore();
     CONFIG.gearSlots.forEach((slot, i) => {
       const p = this.equipSlotNodePos(i);
       const equippedKey = this.gearEquipped(slot.key), tier = this.gearTierOf(equippedKey);
-      const tierDef = tier ? CONFIG.gearTiers.find(t => t.key === tier) : null;
+      const tierDef = tier ? this.gearTierDef(tier) : null;
       const owned = this.gearOwnsAny(slot.key), r = p.inner ? 23 : 27;   // 内圈稍小/外圈稍大,强化"两层"的层次感
       this.drawGearBadge(ctx, p.x, p.y, r, slot, tier, owned, this.gearRingColor(p.inner));
       // WW:标注统一放在槽位正下方(用户明确要求),槽位名 + 当前装备档位(或"未装备"/"未获得")——
@@ -3563,7 +3585,7 @@ const game = {
       if (isCur) { ctx.save(); ctx.strokeStyle = "#38d9a9"; ctx.lineWidth = 2; UI.roundRect(ctx, cr.x, cr.y, cr.w, cr.h, 12); ctx.stroke(); ctx.restore(); }
       if (cell.itemKey) {
         this.drawGearBadge(ctx, cx, cy, 26, slot, this.gearTierOf(cell.itemKey), true);
-        ctx.fillStyle = "#dee2e6"; ctx.font = "10px 'Segoe UI', sans-serif"; ctx.fillText((CONFIG.gearTiers.find(t => t.key === this.gearTierOf(cell.itemKey)) || {}).name || "", cx, cr.y + cr.h - 18);
+        ctx.fillStyle = "#dee2e6"; ctx.font = "10px 'Segoe UI', sans-serif"; ctx.fillText(this.gearTierDef(this.gearTierOf(cell.itemKey)).name, cx, cr.y + cr.h - 18);
         if (cell.count > 1) { ctx.fillStyle = "#868e96"; ctx.font = "10px 'Segoe UI', sans-serif"; ctx.fillText("×" + cell.count, cx, cr.y + cr.h - 6); }
         if (isCur) { ctx.fillStyle = "#38d9a9"; ctx.font = "9px 'Segoe UI', sans-serif"; ctx.fillText("装备中", cx, cr.y + 16); }
       } else {
@@ -3613,7 +3635,7 @@ const game = {
   },
   drawReforgeResult(ctx) {
     const r = this._reforgeResult, cx = CONFIG.WIDTH / 2, cy = CONFIG.HEIGHT / 2;
-    const slot = this.gearSlotDef(this.gearSlotOf(r.resultKey)), tierDef = CONFIG.gearTiers.find(t => t.key === this.gearTierOf(r.resultKey));
+    const slot = this.gearSlotDef(this.gearSlotOf(r.resultKey)), tierDef = this.gearTierDef(this.gearTierOf(r.resultKey));
     ctx.fillStyle = "rgba(0,0,0,.74)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
     const cardW = 300, cardH = 300, cardX = cx - cardW / 2, cardY = cy - cardH / 2;
     UI.roundRect(ctx, cardX, cardY, cardW, cardH, 20); ctx.fillStyle = "rgba(8,12,20,.96)"; ctx.fill();
@@ -3726,7 +3748,7 @@ const game = {
     const g = this._gearDrop; if (!g) return;
     const cx = CONFIG.WIDTH / 2, cy = CONFIG.HEIGHT / 2;
     const slot = this.gearSlotDef(this.gearSlotOf(g.key)), tierKey = this.gearTierOf(g.key);
-    const tierDef = CONFIG.gearTiers.find(t => t.key === tierKey);
+    const tierDef = this.gearTierDef(tierKey);
     ctx.fillStyle = "rgba(0,0,0,.74)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
     const cardW = 320, cardH = 360, cardX = cx - cardW / 2, cardY = cy - cardH / 2;
     // 品阶越高,卡片本身也叠一层更强的外发光,呼应徽章的发光强度,让"这次开出好东西了"从卡片轮廓就能感觉到
@@ -3758,7 +3780,7 @@ const game = {
     CONFIG.gearSlots.forEach((slot, i) => {
       const r = this.gearRowRect(i);
       const equippedKey = this.gearEquipped(slot.key), equippedTier = this.gearTierOf(equippedKey);
-      const tierDef = equippedTier ? CONFIG.gearTiers.find(t => t.key === equippedTier) : null;
+      const tierDef = equippedTier ? this.gearTierDef(equippedTier) : null;
       UI.panel(ctx, r.x, r.y, r.w, r.h, 12, { accent: slot.color });
       // RG3:圆形徽章复用 drawGearBadge(和机型选择的装备图一致的品阶视觉:描边粗细/发光/魄能放射线/品阶点)——
       //   徽章中心比行正中略偏上,给品阶点留出的行内空间不会挤到面板下边缘
@@ -3774,7 +3796,7 @@ const game = {
       // RG7:仓库数量而不是"有没有"——直观看出这个槽位屯了几份,重铸要用的时候心里有数
       const entries = this.gearWarehouseEntries(slot.key);
       ctx.textAlign = "right"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillStyle = "#868e96";
-      ctx.fillText(entries.length ? "仓库 " + entries.map(e => (CONFIG.gearTiers.find(t => t.key === e.tierKey) || {}).name + "×" + e.count).join(" ") : "尚未获得", r.x + r.w - 14, r.y + r.h - 14);
+      ctx.fillText(entries.length ? "仓库 " + entries.map(e => this.gearTierDef(e.tierKey).name + "×" + e.count).join(" ") : "尚未获得", r.x + r.w - 14, r.y + r.h - 14);
       ctx.textAlign = "left";
     });
   },
@@ -4244,8 +4266,9 @@ const game = {
       controlMode: { x: W / 2 - 80, y: 594, w: 160, h: 44 },   // KK:操作方式(相对拖动/虚拟摇杆)二选一
       exportSave: { x: W / 2 - 130, y: 668, w: 124, h: 44 },   // PP:存档导入导出
       importSave: { x: W / 2 + 6, y: 668, w: 124, h: 44 },
-      reset:    { x: W / 2 - 130, y: 728, w: 260, h: 48 },
-      back:     { x: W / 2 - 100, y: 786, w: 200, h: 52 },
+      redeemCode: { x: W / 2 - 130, y: 726, w: 260, h: 44 },   // RG8:兑换码
+      reset:    { x: W / 2 - 130, y: 788, w: 260, h: 48 },
+      back:     { x: W / 2 - 100, y: 848, w: 200, h: 52 },
     };
   },
   setSfxVolumeFromX(px) { const r = this.settingsRects().sfxVolume; Settings.set("sfxVolume", clamp((px - r.x) / r.w, 0, 1)); },
@@ -4269,6 +4292,7 @@ const game = {
       if (s) { const ok = SaveData.importAll(s); this.topScores = []; Sound.hit(); if (!ok) window.prompt("导入失败,内容不是合法的存档文本(仅供查看,可关闭):", s); }
       return;
     }
+    if (inR(R.redeemCode)) { this._resetArmed = false; this.redeemGearCode(); return; }
     if (inR(R.reset))   {   // 完全重置:需二次确认
       if (this._resetArmed) { Progress.clearAll(); Leaderboard.clearAll(); EndlessBoard.clearAll(); EndlessBoardLite.clearAll(); ChallengeHistory.clearAll(); Achievements.clearAll(); this.topScores = []; this._resetArmed = false; Sound.hit(); }
       else this._resetArmed = true;
@@ -4310,6 +4334,8 @@ const game = {
     // PP:导出/导入存档(弹窗展示/粘贴 JSON 文本,零依赖不用文件下载)
     UI.button(ctx, R.exportSave, { label: "导出存档", color: "#4dabf7", font: 15, radius: 11 });
     UI.button(ctx, R.importSave, { label: "导入存档", color: "#4dabf7", font: 15, radius: 11 });
+    // RG8:兑换码——弹窗输入,匹配到就发一整套魂能装备,可重复兑换
+    UI.button(ctx, R.redeemCode, { label: "🎁 兑换码", color: "#cc5de8", font: 16, radius: 11 });
     // 重置(二次确认)+ 返回
     UI.button(ctx, R.reset, { label: this._resetArmed ? "⚠ 再点一次确认清空" : "重置所有关卡分数", color: "#f03e3e", active: this._resetArmed, font: 18, radius: 12 });
     UI.button(ctx, R.back, { label: "返回 BACK", color: "#adb5bd", font: 20, radius: 13 });

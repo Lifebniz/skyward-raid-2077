@@ -458,7 +458,7 @@ const CONFIG = {
   //   (gearValues 保留 t1 数值兜底),只是再也不会新掉落出来。
   gearTiers: [
     { key: "t2", name: "精良", color: "#4dabf7" },
-    { key: "t3", name: "魂魄", color: "#ffd43b" },
+    { key: "t3", name: "魂能", color: "#ffd43b" },
   ],
   // 每档数值:除 special 外都是"加成幅度"(该槽位效果在 gearValue 用法处自行决定加/减/乘);special 是冷却缩短比例
   gearValues: {
