@@ -3,6 +3,9 @@
 /* =====================================================================
  * 8) 前景星点 + 主循环
  * ===================================================================== */
+// GG27:适龄提示图标优先加载——开屏页第一帧就要用到,必须是整个页面里最先发出的图片请求,
+//   抢在 loadCritical/loadAllTiered 的任何一张机型/背景图之前拿到带宽,不等分层加载轮到它。
+ImageAssets.ensure(ImageAssets.ageRatingSrc);
 const stars = {
   items: Array.from({ length: 60 }, () => ({ x: Math.random() * CONFIG.WIDTH, y: Math.random() * CONFIG.HEIGHT, s: 90 + Math.random() * 160, r: Math.random() < 0.8 ? 1 : 2 })),
   update(dt) { for (const p of this.items) { p.y += p.s * dt; if (p.y > CONFIG.HEIGHT) { p.y = 0; p.x = Math.random() * CONFIG.WIDTH; } } },
@@ -94,8 +97,8 @@ function drawSplash(ctx) {
   const frac = clamp(splash.prog, 0, 1), done = splash.ready && frac > 0.995;
   const barColor = progressColor(frac);
   ctx.fillStyle = done ? "rgba(148,232,180,.95)" : "rgba(255,255,255,.62)";
-  ctx.font = "12px 'Segoe UI', sans-serif";
-  ctx.fillText(done ? "加载完成，即将进入游戏…" : "贴图加载中 " + Math.floor(frac * 100) + "%", cx, barY - 12);
+  ctx.font = "16px 'Segoe UI', sans-serif";   // GG27:12→16,加载百分比是玩家在这一页停留期间唯一持续变化的信息,字号太小容易被忽略
+  ctx.fillText(done ? "加载完成，即将进入游戏…" : "贴图加载中 " + Math.floor(frac * 100) + "%", cx, barY - 14);
   // 玻璃容器:外层淡淡的发光轮廓 + 内层竖向渐变模拟玻璃反光
   ctx.save();
   ctx.shadowColor = "rgba(255,255,255,.18)"; ctx.shadowBlur = 6;
@@ -138,27 +141,47 @@ function drawSplash(ctx) {
   UI.roundRect(ctx, barX + 0.5, barY + 0.5, barW - 1, barH - 1, (barH - 1) / 2); ctx.stroke();
   ctx.restore();
   // GG17/GG18:跳过提示挪到进度条正下方,并写明提前跳过的后果;延迟 0.9s 才淡入,不抢开场注意力
+  // GG27:原来"点击任意位置跳过"是整个画布都能触发,现在收窄成"点击此位置跳过"这一小块专属热区——
+  //   文案跟着改名,判定范围比文字本身的占地明显更大(横向 padding 32px、纵向撑到 44px 的触控友好高度),
+  //   再画一圈淡淡的胶囊描边提示"这里可以点"。热区矩形存进 splash.skipHitRect,供下面的 pointerdown 判定复用。
   const hintAlpha = clamp((splash.t - 0.9) / 0.5, 0, 1) * (1 - exitK) * textAlpha;
+  const skipLabelY = barY + 40;
+  ctx.font = "17px 'Segoe UI', sans-serif";
+  const skipLabel = done ? "点击立即进入" : "点击此位置跳过";
+  const labelW = ctx.measureText(skipLabel).width;
+  splash.skipHitRect = { x: cx - labelW / 2 - 32, y: skipLabelY - 30, w: labelW + 64, h: 44 };
   if (hintAlpha > 0.01) {
-    ctx.save(); ctx.textAlign = "center"; ctx.fillStyle = "#fff";
-    ctx.globalAlpha = hintAlpha * 0.6;
-    ctx.font = "13px 'Segoe UI', sans-serif";
-    ctx.fillText(done ? "点击立即进入" : "点击任意位置跳过", cx, barY + 34);
+    ctx.save(); ctx.textAlign = "center";
+    const hit = splash.skipHitRect;
+    ctx.globalAlpha = hintAlpha * 0.35;
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1;
+    UI.roundRect(ctx, hit.x, hit.y, hit.w, hit.h, hit.h / 2); ctx.stroke();
+    ctx.fillStyle = "#fff";
+    ctx.globalAlpha = hintAlpha * 0.75;
+    ctx.font = "17px 'Segoe UI', sans-serif";
+    ctx.fillText(skipLabel, cx, skipLabelY);
     if (!done) {
-      ctx.globalAlpha = hintAlpha * 0.4;
-      ctx.font = "11px 'Segoe UI', sans-serif";
-      ctx.fillText("提前跳过后剩余贴图将在后台继续加载，", cx, barY + 56);
-      ctx.fillText("未就绪的画面会暂以简化图形显示，加载完成后自动恢复", cx, barY + 72);
+      ctx.globalAlpha = hintAlpha * 0.5;
+      ctx.font = "14px 'Segoe UI', sans-serif";
+      ctx.fillText("提前跳过后剩余贴图将在后台继续加载，", cx, skipLabelY + 26);
+      ctx.fillText("未就绪的画面会暂以简化图形显示，加载完成后自动恢复", cx, skipLabelY + 46);
     }
     ctx.restore();
   }
 }
 // GG17:点击/点按跳过开屏页——用捕获阶段拦截,吞掉这一下点击(stopImmediatePropagation),
-//   不会让同一次点击又被 input.js 的标题页按钮逻辑接收到,避免"跳过的同时不小心点进了某个按钮"
+//   不会让同一次点击又被 input.js 的标题页按钮逻辑接收到,避免"跳过的同时不小心点进了某个按钮"。
+// GG27:原来整块画布都是跳过热区,现在收窄到 drawSplash 算出的 skipHitRect(见上,文字"点击此位置跳过"周围
+//   一圈比文字本身大一截的胶囊区域)——命中才触发退场,画布上其余位置的点击照样吞掉(splash 还在时不能让
+//   点击穿透到下面的标题页),只是不再触发跳过,避免"随手一点就跳过开屏页"的误触。
 canvas.addEventListener("pointerdown", (e) => {
   if (!splash.active) return;
-  if (!splash.exiting) { splash.exiting = true; splash.exitT = 0; }
   e.stopImmediatePropagation(); e.preventDefault();
+  if (splash.exiting) return;
+  const p = toLogic(e.clientX, e.clientY), hit = splash.skipHitRect;
+  if (hit && p.x >= hit.x && p.x <= hit.x + hit.w && p.y >= hit.y && p.y <= hit.y + hit.h) {
+    splash.exiting = true; splash.exitT = 0;
+  }
 }, { capture: true });
 // GG20:热启动收短停留时长——常用层(首页/机型/HUD)在 500ms 内就落定,通常意味着贴图已经在浏览器缓存里,
 //   属于"回头玩家再次打开"而非首次冷启动,没必要还让他们多等 2.2s 的最短展示时间,缩到 1.0s 即可。
@@ -182,7 +205,7 @@ function loop(now) {
   if (dt > 0.05) dt = 0.05;
   game.titleT += dt;
   if (game._hitStopT > 0) { game._hitStopT -= dt; game.draw(ctx); drawSplash(ctx); requestAnimationFrame(loop); return; }   // N:命中停顿(冻结逻辑,仍绘制)
-  if (game.state !== "paused") { background.update(dt); stars.update(dt); }   // 暂停冻结背景
+  if (game.state !== "paused" && game.state !== "revive") { background.update(dt); stars.update(dt); }   // 暂停/复活确认冻结背景
   Music.update(dt);                                                           // M:BGM 步进
   if (window.Multiplayer) Multiplayer.update(dt);
   game.update(dt); game.draw(ctx);
