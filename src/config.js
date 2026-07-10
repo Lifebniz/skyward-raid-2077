@@ -331,12 +331,12 @@ const CONFIG = {
       enemyHpMult: 0.40, bossHpMult: 0.52, enemySpeedMult: 1,
       enemyHpBoostMult: 1.30, enemyHpDoubleInterval: 360,
       dmgRampMult: 2.2, dmgDoubleInterval: 420,
-      scoreMult: 1.0, fireMult: 1.0, dmgMult: 1.0, invuln: 1.2, startBombs: 3,
+      scoreMult: 1.0, fireMult: 1.0, dmgMult: 1.0, invuln: 1.2, startBombs: 3, reviveCount: 1,
     },
     hell: {
       key: "hell", name: "绝境深潜", color: "#ff6b6b",
       playerHpMult: 2, playerDmgMult: 3, startWings: 2, startPower: 2,
-      startingDrafts: 3, draftInterval: 30,
+      startingDrafts: 3, draftInterval: 30, reviveCount: 0,
       enemyHpMult: 0.65, bossHpMult: 5, enemySpeedMult: 1.15,
       enemyHpBoostMult: 1.80, enemyHpDoubleInterval: 240,
       dmgRampMult: null, dmgDoubleInterval: null,
@@ -441,15 +441,51 @@ const CONFIG = {
   // P:关卡过场副标题(按世界)
   worldIntro: ["第一战区 · 近海突破", "第二战区 · 大漠强袭", "第三战区 · 夜空决战", "第四战区 · 深渊禁地", "第五战区 · 虚空回廊", "第六战区 · 棱镜天幕", "第七战区 · 铁幕航母", "第八战区 · 引潮核心"],
 
+  // RG:机装系统——每架飞机 8 个装备槽位,一一对应 8 个战区(world 1~8),关卡结算时按当前战区掉落对应槽位的装备。
+  //   简化模型:不做随机词条/多属性混合,每个槽位固定挂一个数值维度、3 档固定数值(制式/精密/魄能),无贴图先用槽位主题色占位。
+  gearSlots: [
+    { key: "wing",        name: "翼载强化", world: 1, color: "#4dabf7", stat: "maxHpMult",           desc: "提升最大生命值" },
+    { key: "engine",      name: "引擎核心", world: 2, color: "#51cf66", stat: "agilityMult",          desc: "提升移动机动性" },
+    { key: "fireControl", name: "火控矩阵", world: 3, color: "#ff6b6b", stat: "damageMult",           desc: "提升主炮/副炮伤害" },
+    { key: "armor",       name: "装甲层",   world: 4, color: "#868e96", stat: "damageReductionMult",  desc: "降低受到的伤害" },
+    { key: "avionics",    name: "航电阵列", world: 5, color: "#cc5de8", stat: "comboLeniencyMult",    desc: "延长连击容错时间" },
+    { key: "powerCore",   name: "动力核心", world: 6, color: "#ffd43b", stat: "energyMult",           desc: "加快机型技能能量恢复" },
+    { key: "hardpoint",   name: "武装挂架", world: 7, color: "#ff922b", stat: "secondaryDamageMult",  desc: "提升导弹/追踪弹/镭射伤害" },
+    { key: "special",     name: "异能模块", world: 8, color: "#66d9e8", stat: "specialCooldownMult",  desc: "缩短机型技能冷却" },
+  ],
+  gearTiers: [
+    { key: "t1", name: "制式", color: "#adb5bd" },
+    { key: "t2", name: "精密", color: "#4dabf7" },
+    { key: "t3", name: "魄能", color: "#ffd43b" },
+  ],
+  // 每档数值:除 special 外都是"加成幅度"(该槽位效果在 gearValue 用法处自行决定加/减/乘);special 是冷却缩短比例
+  gearValues: {
+    wing:        { t1: 0.06, t2: 0.12, t3: 0.20 },
+    engine:      { t1: 0.05, t2: 0.10, t3: 0.18 },
+    fireControl: { t1: 0.05, t2: 0.10, t3: 0.18 },
+    armor:       { t1: 0.04, t2: 0.08, t3: 0.14 },
+    avionics:    { t1: 0.08, t2: 0.16, t3: 0.28 },
+    powerCore:   { t1: 0.06, t2: 0.12, t3: 0.20 },
+    hardpoint:   { t1: 0.08, t2: 0.16, t3: 0.28 },
+    special:     { t1: 0.06, t2: 0.12, t3: 0.20 },
+  },
+  // 结算掉落:按难度决定掉落概率 + 档位权重(权重会按总和归一化,不需要凑成1)
+  gearDrop: {
+    easy:   { chance: 0.20, weights: { t1: 1,   t2: 0,   t3: 0 } },
+    normal: { chance: 0.28, weights: { t1: 0.7, t2: 0.3, t3: 0 } },
+    hard:   { chance: 0.38, weights: { t1: 0.4, t2: 0.4, t3: 0.2 } },
+  },
+
   // 难度档:dmgMult 敌方伤害倍率 / fireMult 敌方射击间隔倍率(>1 更慢=更易)
   //          bossHpMult BOSS 血量倍率 / invuln 玩家受击无敌时长 / startBombs 初始炸弹
   // X3:itemDropMult(仅 BOSS 关卡的自动掉落间隔倍率,>1 更慢更稀有)/ preBossMobMult(标了 preBoss:true 的波次数量倍率)
   //   —— 难度越高,BOSS 关卡里白捡的道具越少、BOSS 前要清的小怪越多,和已有的 dmgMult/bossHpMult 一起构成完整的难度曲线
   difficulties: {
     // X4:desc 补上新的BOSS关卡道具/小怪经济差异(原来只提伤害/炸弹/无敌时长),并在地图难度按钮上显示出来(之前定义了但从没真正渲染过)
-    easy:   { key: "easy",   name: "简单 EASY",   color: "#38d9a9", desc: "伤害低·补给多",   dmgMult: 0.6, fireMult: 1.35, bossHpMult: 0.60, invuln: 1.5, startBombs: 4, scoreMult: 0.5, rank: 1, itemDropMult: 0.75, preBossMobMult: 0.8 },
-    normal: { key: "normal", name: "普通 NORMAL", color: "#4dabf7", desc: "标准平衡",         dmgMult: 1.0, fireMult: 1.00, bossHpMult: 0.82, invuln: 1.2, startBombs: 3, scoreMult: 1.0, rank: 2, itemDropMult: 1.0,  preBossMobMult: 1.0 },
-    hard:   { key: "hard",   name: "困难 HARD",   color: "#ff6b6b", desc: "弹幕快·补给少",   dmgMult: 1.4, fireMult: 0.80, bossHpMult: 1.25, invuln: 0.9, startBombs: 2, scoreMult: 3.0, rank: 3, itemDropMult: 1.6,  preBossMobMult: 1.5 },
+    // RV2:reviveCount——每局复活机会数,按难度差异化(简单容错高给2次,困难0次逼玩家打得更谨慎)
+    easy:   { key: "easy",   name: "简单 EASY",   color: "#38d9a9", desc: "伤害低·补给多",   dmgMult: 0.6, fireMult: 1.35, bossHpMult: 0.60, invuln: 1.5, startBombs: 4, scoreMult: 0.5, rank: 1, itemDropMult: 0.75, preBossMobMult: 0.8, reviveCount: 2 },
+    normal: { key: "normal", name: "普通 NORMAL", color: "#4dabf7", desc: "标准平衡",         dmgMult: 1.0, fireMult: 1.00, bossHpMult: 0.82, invuln: 1.2, startBombs: 3, scoreMult: 1.0, rank: 2, itemDropMult: 1.0,  preBossMobMult: 1.0, reviveCount: 1 },
+    hard:   { key: "hard",   name: "困难 HARD",   color: "#ff6b6b", desc: "弹幕快·补给少",   dmgMult: 1.4, fireMult: 0.80, bossHpMult: 1.25, invuln: 0.9, startBombs: 2, scoreMult: 3.0, rank: 3, itemDropMult: 1.6,  preBossMobMult: 1.5, reviveCount: 0 },
   },
 };
 
