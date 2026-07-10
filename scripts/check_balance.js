@@ -22,8 +22,8 @@ sandbox.pools = {
 };
 sandbox.Sound = { powerup() {}, tone() {}, laser() {}, hit() {} };
 sandbox.Haptics = { powerup() {}, hit() {} };
-vm.runInContext(fs.readFileSync("src/entities.js", "utf8") + "\nglobalThis.Player = Player; globalThis.Enemy = Enemy; globalThis.EnemyBullet = EnemyBullet; globalThis.Missile = Missile; globalThis.PlayerLaser = PlayerLaser; globalThis.Boss = Boss; globalThis.runBossAttack = runBossAttack;", sandbox);
-const { Player, Enemy, EnemyBullet, Missile, PlayerLaser, Boss, runBossAttack } = sandbox;
+vm.runInContext(fs.readFileSync("src/entities.js", "utf8") + "\nglobalThis.Player = Player; globalThis.Enemy = Enemy; globalThis.EnemyBullet = EnemyBullet; globalThis.Missile = Missile; globalThis.PlayerLaser = PlayerLaser; globalThis.Boss = Boss; globalThis.runBossAttack = runBossAttack; globalThis.entityPools = pools; globalThis.releaseDead = releaseDead;", sandbox);
+const { Player, Enemy, EnemyBullet, Missile, PlayerLaser, Boss, runBossAttack, entityPools, releaseDead } = sandbox;
 
 const between = (value, min, max, label) => assert(value >= min && value <= max, `${label} ${value} outside ${min}-${max}`);
 const unique = (items, label) => assert.strictEqual(new Set(items).size, items.length, `${label} has duplicate keys`);
@@ -35,7 +35,8 @@ assert.strictEqual(CONFIG.player.maxPower, 8, "player max power should allow one
 assert.strictEqual(CONFIG.player.maxOvercharge, 8, "player overcharge cap should allow longer endless scaling");
 assert.strictEqual(CONFIG.wingMax, 6, "wing cap should stay even for symmetric wingmen");
 assert(CONFIG.weapon[CONFIG.player.maxPower], "maxPower should have a weapon pattern");
-assert.strictEqual(CONFIG.challenge.rulesVersion, 96, "challenge rules should bump when overflow power damage changes");
+assert.strictEqual(CONFIG.challenge.rulesVersion, 97, "challenge rules should bump when competitive gear rules change");
+assert.strictEqual(CONFIG.challenge.gearEnabled, false, "competitive challenges should disable persistent gear");
 assert(CONFIG.endlessDifficulties && CONFIG.endlessDifficulties.normal && CONFIG.endlessDifficulties.hell, "endless difficulties should define normal and hell");
 assert(CONFIG.endlessDifficulties.normal.enemyHpMult < CONFIG.endlessDifficulties.hell.enemyHpMult, "normal endless enemies should have less HP than hell");
 assert(CONFIG.endlessDifficulties.normal.bossHpMult < CONFIG.endlessDifficulties.hell.bossHpMult, "normal endless bosses should have less HP than hell");
@@ -909,14 +910,22 @@ game.player = new Player(); game.player.power = CONFIG.charge.minPower; game.pla
 sandbox.input.targetX = game.player.x; sandbox.input.targetY = game.player.y;
 game.spawnPlayerLaser = function(x, y, overcharge) { this.playerLasers.push({ x, y, overcharge }); };
 game.spawnShockwave = function(x, y, maxR, color) { this.shockwaves.push({ x, y, maxR, color }); };
+game.autoLaser = false;
 game.player.update(0.01);
-assert(game.player.charging, "charge weapon should start charging automatically when ready");
+assert.strictEqual(game.player.charging, false, "manual charge should stay idle until the player holds the control");
+game.startCharge();
 game.player.charge = CONFIG.charge.max - 0.01;
 game.player.update(0.02);
-assert.strictEqual(game.player.charging, false, "charge weapon should auto release at full charge");
-assert.strictEqual(game.player.charge, 0, "auto released charge should reset charge meter");
-assert.strictEqual(game.playerLasers.length, 1, "auto released charge should fire one laser");
-assert(game.player.chargeCooldown > 0, "auto released charge should enter cooldown");
+assert(game.player.charging && game.player.charge === CONFIG.charge.max, "manual charge should stay held at full charge");
+assert.strictEqual(game.playerLasers.length, 0, "manual charge should not fire before release");
+game.releaseCharge();
+assert.strictEqual(game.playerLasers.length, 1, "manual release should fire one laser");
+assert(game.player.chargeCooldown > 0, "manual release should enter cooldown");
+game.player.chargeCooldown = 0; game.autoLaser = true; game.updateAutoLaser();
+assert(game.player.charging, "auto laser should start charging when enabled");
+game.player.charge = CONFIG.charge.max; game.updateAutoLaser();
+assert.strictEqual(game.playerLasers.length, 2, "auto laser should release one full-charge shot");
+game.autoLaser = false;
 game.spawnPlayerLaser = realSpawnPlayerLaser; game.spawnShockwave = realSpawnShockwave;
 game.bonuses = {}; assert.strictEqual(game.homingVolleyBonus(), 0, "homing route should not add shots before ready");
 game.bonuses = { swarmCore: 3 }; assert.strictEqual(game.homingVolleyBonus(), 1, "homing route should add one homing shot when ready");
@@ -924,5 +933,111 @@ assert(game.homingCooldownMult() < 1 && game.routeEffectText().includes("追踪+
 game.bonuses = { missileRack: 2 };
 assert(game.routeProgressText().includes("/7"), "route progress should show resonance threshold");
 assert(game.routePreviewText(game.cardInfo("bonus:missileRack")).includes("解锁共鸣"), "draft route preview should show resonance unlock");
+
+// 持久机装在普通模式生效，但 RIVAL/每日挑战必须统一停用，避免同挑战码条件不一致。
+sandbox.Settings.data.gearOwned = ["fireControl_t3"];
+sandbox.Settings.data.gearLoadout = { fireControl: "fireControl_t3" };
+game.challengeMode = false;
+assert.strictEqual(game.gearValue("fireControl"), CONFIG.gearValues.fireControl.t3, "regular modes should apply equipped gear");
+game.challengeMode = true;
+assert.strictEqual(game.gearValue("fireControl"), 0, "competitive challenges should ignore persistent gear");
+game.challengeMode = false;
+
+// Enemy 对象池必须重置 Boss 护卫状态，并用每次生成的新 token 与贯穿攻击去重。
+game.endless = false; game.diff = CONFIG.difficulties.normal; game.boss = null; game._rng = () => 0.99;
+const pooledEscort = entityPools.enemy.get("small", 120, 0, "straight");
+const firstSpawnId = pooledEscort._spawnId;
+pooledEscort._bossEliteDr = 0.5; pooledEscort._bossEliteMinLifeT = 999;
+entityPools.enemy.release(pooledEscort);
+const pooledNormal = entityPools.enemy.get("small", 120, 0, "straight");
+assert.strictEqual(pooledNormal, pooledEscort, "enemy pool test should reuse the same object");
+assert.notStrictEqual(pooledNormal._spawnId, firstSpawnId, "pooled enemies should receive a fresh spawn id");
+assert.strictEqual(pooledNormal._bossEliteDr, 0, "pooled enemies should not inherit boss escort damage reduction");
+assert.strictEqual(pooledNormal._bossEliteMinLifeT, 0, "pooled enemies should not inherit boss escort life locks");
+assert(!new Set([firstSpawnId]).has(pooledNormal._spawnId), "old piercing-hit tokens should not match a reused enemy");
+assert.strictEqual(pooledNormal.damage(pooledNormal.hp), true, "a reused normal enemy should take full lethal damage");
+entityPools.enemy.release(pooledNormal);
+assert(!/hitEnemies\.has\(e\)|hitEnemies\.add\(e\)/.test(fs.readFileSync("src/game.js", "utf8")), "hit sets should store spawn ids instead of pooled object references");
+
+// Warden 无论被武器击杀、撞毁还是越界回池，都必须撤销已授予的护盾。
+const warden = entityPools.enemy.get("warden", 160, 0, "straight");
+const guarded = entityPools.enemy.get("small", 200, 0, "straight");
+guarded.guardShield = 8; guarded.guardedBy = warden; game.enemies = [warden, guarded];
+releaseDead.enemy(warden);
+assert.strictEqual(guarded.guardShield, 0, "releasing a warden should clear granted shields");
+assert.strictEqual(guarded.guardedBy, null, "releasing a warden should clear stale owner references");
+releaseDead.enemy(guarded); game.enemies = [];
+
+// Boss 初始护卫减伤与阶段弱点窗口都必须可实际生效。
+const guardBossIndex = CONFIG.bosses.findIndex(b => b.guardDR > 0);
+assert(guardBossIndex >= 0, "a guard-DR boss should exist");
+const guardBoss = new Boss(guardBossIndex); guardBoss._entered = true; guardBoss._fireTimer = 999;
+game.boss = guardBoss; game.enemies = [guardBoss, { dead: false, isBoss: false }];
+assert.strictEqual(guardBoss._weakTimer, 0, "boss weak timer should initialize to zero");
+const guardHpBefore = guardBoss.hp;
+guardBoss.damage(10);
+approx(guardHpBefore - guardBoss.hp, 10 * (1 - guardBoss.def.guardDR), 1e-9, "guard escorts should reduce boss damage before a weak window");
+guardBoss._weakTimer = 2.4; guardBoss._invulnTimer = 5;
+guardBoss.update(1);
+approx(guardBoss._weakTimer, 2.4, 1e-9, "boss invulnerability should pause the weak window");
+guardBoss._invulnTimer = 0; guardBoss.update(0.4);
+approx(guardBoss._weakTimer, 2.0, 1e-9, "weak window should resume after invulnerability");
+
+// director 切出 playing 后，本帧不能继续碰撞；刷分强制结算同理。
+const realUpdateDepthSystems = game.updateDepthSystems, realUpdateOverflowRewards = game.updateOverflowRewards;
+const realResolveCollisions = game.resolveCollisions, realSettle = game.settle;
+game.updateDepthSystems = () => {}; game.updateOverflowRewards = () => {};
+game.playerBullets = []; game.homingShots = []; game.missiles = []; game.playerLasers = []; game.enemyBullets = [];
+game.enemies = []; game.powerups = []; game.particles = []; game.imageEffects = []; game.floats = []; game.lasers = [];
+game.gravityPulses = []; game.shockwaves = []; game.specialWaves = []; game.morphBlasts = []; game.combo = 0; game.farming = false;
+let collisionCalls = 0;
+game.resolveCollisions = () => { collisionCalls++; };
+sandbox.director = { update() { game.state = "cleared"; } };
+game.state = "playing"; game.update(0.016);
+assert.strictEqual(game.state, "cleared", "director clear should preserve the cleared state");
+assert.strictEqual(collisionCalls, 0, "collisions should stop once director leaves playing");
+sandbox.director.update = () => {};
+game.state = "playing"; game.endless = false; game.farming = true; game.score = 200; game._clearScore = 100; game._itemSpawnTimer = 999;
+game.settle = () => { game.state = "settle"; };
+game.update(0.016);
+assert.strictEqual(game.state, "settle", "farm score cap should settle the run");
+assert.strictEqual(collisionCalls, 0, "collisions should stop after forced settlement");
+game.updateDepthSystems = realUpdateDepthSystems; game.updateOverflowRewards = realUpdateOverflowRewards;
+game.resolveCollisions = realResolveCollisions; game.settle = realSettle;
+
+// 所有启动预载路径必须真实存在；两个入口必须保持同步并显式禁止 favicon 404。
+const assetSandbox = { console };
+vm.createContext(assetSandbox);
+vm.runInContext(fs.readFileSync("src/config.js", "utf8") + "\nglobalThis.CONFIG = CONFIG;", assetSandbox);
+vm.runInContext(fs.readFileSync("src/assets.js", "utf8") + "\nglobalThis.ImageAssets = ImageAssets;", assetSandbox);
+const advertisedAssets = Array.from(new Set(Array.from(assetSandbox.ImageAssets.commonSources()).concat(Array.from(assetSandbox.ImageAssets.longTailSources()))));
+const missingAssets = advertisedAssets.filter(src => !fs.existsSync(src));
+assert.deepStrictEqual(missingAssets, [], "preloaded asset paths should exist in the repository");
+const indexHtml = fs.readFileSync("index.html", "utf8"), chineseHtml = fs.readFileSync("空中突袭.html", "utf8");
+assert.strictEqual(chineseHtml, indexHtml, "both HTML entry points should stay byte-identical");
+assert(indexHtml.includes('href="data:,"'), "entry points should suppress the implicit favicon request");
+
+// 损坏/旧版设置必须被归一化，不能让地图和机装页在启动后崩溃。
+let storedSettings = JSON.stringify({ diff: "removed", endlessDiff: "removed", ship: "__proto__", sfxVolume: "bad", musicVolume: 9, gearOwned: { bad: true }, gearLoadout: [], gearStarterGranted: true });
+const serviceSandbox = {
+  console, Math, Date,
+  localStorage: {
+    getItem(key) { return key === "kzts_settings" ? storedSettings : null; },
+    setItem(key, value) { if (key === "kzts_settings") storedSettings = String(value); },
+    removeItem() {},
+  },
+};
+vm.createContext(serviceSandbox);
+vm.runInContext(fs.readFileSync("src/config.js", "utf8") + "\nglobalThis.CONFIG = CONFIG;", serviceSandbox);
+vm.runInContext(fs.readFileSync("src/services.js", "utf8") + "\nglobalThis.CheckedSettings = Settings;", serviceSandbox);
+serviceSandbox.CheckedSettings.load();
+const normalized = serviceSandbox.CheckedSettings.data;
+assert.strictEqual(normalized.diff, "normal", "invalid saved difficulty should fall back to normal");
+assert.strictEqual(normalized.endlessDiff, "normal", "invalid endless difficulty should fall back to normal");
+assert.strictEqual(normalized.ship, "balanced", "invalid saved ship should fall back to balanced");
+assert.strictEqual(normalized.sfxVolume, 0.8, "invalid volume should fall back to its default");
+assert.strictEqual(normalized.musicVolume, 1, "saved volume should be clamped");
+assert(Array.isArray(normalized.gearOwned) && normalized.gearOwned.length === 0, "invalid gear inventory should normalize to an empty list");
+assert.strictEqual(normalized.gearStarterGranted, false, "invalid starter inventory should be repaired on next boot");
 
 console.log(`balance check passed: ${CONFIG.endless.events.length} events, ${affixes.length} boss affixes, ${CONFIG.bonusOrder.length} bonuses`);

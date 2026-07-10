@@ -11,7 +11,7 @@ const input = {
   // YY:movePointerId 记录"正在负责移动飞机"的那根手指的 pointerId。移动端常见操作是一根手指按住拖动飞机、
   //   另一根手指点必杀/炸弹/暂停按钮——Pointer Events 本身按手指区分 pointerId,但原来 pointermove/up 从不检查
   //   是哪根手指发来的事件,导致"点技能"那根手指抬起/移动时的坐标会串进移动目标,飞机瞬间被拽向按钮位置。
-  movePointerId: null, chargePointerId: null,
+  movePointerId: null, chargePointerId: null, uiPointerId: null,
 };
 // KK:根据触点位置更新摇杆头位置和方向强度(触点越靠近/超出摇杆半径,强度越接近1;死区内视为无输入)
 function updateJoystick(px, py) {
@@ -25,6 +25,22 @@ function updateJoystick(px, py) {
 function resetJoystick() {
   input.joystickActive = false; input.joyDX = 0; input.joyDY = 0;
   input.joyKnobX = CONFIG.joystick.baseX; input.joyKnobY = CONFIG.joystick.baseY;
+}
+function captureUiPointer(e) {
+  input.uiPointerId = e.pointerId;
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+}
+function releaseUiPointer(pointerId) {
+  if (input.uiPointerId !== pointerId) return false;
+  input.uiPointerId = null;
+  try { if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId); } catch (err) {}
+  return true;
+}
+function cancelUiGesture() {
+  game._titlePressKey = null; game._sliderDrag = false;
+  if (game._shipDragging) game.beginShipSnap(Math.round(game._shipScroll));
+  game._shipDragging = false; game._codexDragging = false; game._tutorialDragging = false;
+  game._mapDragging = false; game._codexUpgradeDragging = false;
 }
 function startRelativeDrag(px, py) {
   const p = game.player || input;
@@ -44,6 +60,7 @@ function toggleMute() {
 canvas.addEventListener("pointerdown", (e) => {
   Sound.resume(); Music.resume(true);
   const p = toLogic(e.clientX, e.clientY);
+  if (input.uiPointerId != null && e.pointerId !== input.uiPointerId) return;
   // RG3:机装掉落弹窗盖在最上层,拦在所有状态分支最前面——点哪都先关弹窗,不会误触到弹窗底下结算页的"点击返回地图"
   if (game._gearDropPopupOpen) { game._gearDropPopupOpen = false; return; }
   if (game.state === "title") {
@@ -53,7 +70,7 @@ canvas.addEventListener("pointerdown", (e) => {
     // GG6:四个入口按钮改成"按下先按压反馈,松开时若手指/鼠标还在同一个按钮上才真正触发"——这样手机点击时
     //   能看到按下缩小的反馈,而不是 pointerdown 一到就立刻跳转、动画一帧都来不及播完
     const key = game.titleButtonKeyAt(p.x, p.y);
-    if (key) { game._titlePressKey = key; }
+    if (key) { game._titlePressKey = key; captureUiPointer(e); }
     return;
   }
   if (game.state === "endlessdiff") {
@@ -70,11 +87,11 @@ canvas.addEventListener("pointerdown", (e) => {
     if (backToMap) game.toMap(); else game.toTitle();
     return;
   }
-  if (game.state === "settings") { game.settingsPointerDown(p.x, p.y); return; }
-  if (game.state === "shipselect") { game.shipSelectPointerDown(p.x, p.y); return; }
-  if (game.state === "codex") { game.codexPointerDown(p.x, p.y); return; }
-  if (game.state === "tutorial") { game.tutorialPointerDown(p.x, p.y); return; }
-  if (game.state === "map") { game.mapPointerDown(p.x, p.y); return; }
+  if (game.state === "settings") { game.settingsPointerDown(p.x, p.y); if (game._sliderDrag) captureUiPointer(e); return; }
+  if (game.state === "shipselect") { game.shipSelectPointerDown(p.x, p.y); if (game._shipDragging) captureUiPointer(e); return; }
+  if (game.state === "codex") { game.codexPointerDown(p.x, p.y); if (game._codexDragging || game._codexUpgradeDragging) captureUiPointer(e); return; }
+  if (game.state === "tutorial") { game.tutorialPointerDown(p.x, p.y); if (game._tutorialDragging) captureUiPointer(e); return; }
+  if (game.state === "map") { game.mapPointerDown(p.x, p.y); if (game._mapDragging) captureUiPointer(e); return; }
   if (game.state === "chipselect") {
     const action = game.chipActionHit(p.x, p.y);
     if (action === "reroll") game.rerollChipDraft();
@@ -116,12 +133,12 @@ canvas.addEventListener("pointermove", (e) => {
   const p = toLogic(e.clientX, e.clientY);
   // GG6:首页四个插图按钮——鼠标悬停/手指按住滑动时实时更新"当前指向的按钮",供 update() 里的缩放动画和
   //   pointerup 里的"松手时是否还在同一个按钮上"判断复用;拖出按钮再松手会因为 key 对不上而不触发跳转
-  if (game.state === "title") { game._titleHoverKey = game.titleButtonKeyAt(p.x, p.y); return; }
-  if (game.state === "settings" && game._sliderDrag === "sfx") { game.setSfxVolumeFromX(p.x); return; }
-  if (game.state === "settings" && game._sliderDrag === "music") { game.setMusicVolumeFromX(p.x); return; }
-  if (game.state === "map" && game._mapDragging) { game.mapPointerMove(p.x, p.y); return; }
-  if (game.state === "codex" && game._codexUpgradeDragging) { game.codexUpgradePointerMove(p.y); return; }
-  if (game.state === "shipselect" && game._shipDragging) { game.shipSelectPointerMove(p.x); return; }
+  if (game.state === "title") { if (game._titlePressKey && e.pointerId !== input.uiPointerId) return; game._titleHoverKey = game.titleButtonKeyAt(p.x, p.y); return; }
+  if (game.state === "settings" && game._sliderDrag === "sfx") { if (e.pointerId !== input.uiPointerId) return; game.setSfxVolumeFromX(p.x); return; }
+  if (game.state === "settings" && game._sliderDrag === "music") { if (e.pointerId !== input.uiPointerId) return; game.setMusicVolumeFromX(p.x); return; }
+  if (game.state === "map" && game._mapDragging) { if (e.pointerId !== input.uiPointerId) return; game.mapPointerMove(p.x, p.y); return; }
+  if (game.state === "codex" && game._codexUpgradeDragging) { if (e.pointerId !== input.uiPointerId) return; game.codexUpgradePointerMove(p.y); return; }
+  if (game.state === "shipselect" && game._shipDragging) { if (e.pointerId !== input.uiPointerId) return; game.shipSelectPointerMove(p.x); return; }
   // YY:忽略非移动手指发来的坐标——否则点技能/炸弹/暂停按钮的那根手指稍微一动就会把飞机的移动目标改成按钮位置
   if (e.pointerId !== input.movePointerId) return;
   if (input.joystickActive) { updateJoystick(p.x, p.y); return; }
@@ -130,25 +147,32 @@ canvas.addEventListener("pointermove", (e) => {
 canvas.addEventListener("pointerup", (e) => {
   // GG6:松手时手指/鼠标是否还在按下的那个按钮上——是才真正触发跳转,拖出去松手等于取消(标准按钮手感)
   if (game.state === "title" && game._titlePressKey) {
+    if (e.pointerId !== input.uiPointerId) return;
     const key = game._titlePressKey; game._titlePressKey = null;
     const p = toLogic(e.clientX, e.clientY);
+    releaseUiPointer(e.pointerId);
     if (game.titleButtonKeyAt(p.x, p.y) === key) game.activateTitleButton(key);
     return;
   }
   if (e.pointerId === input.chargePointerId) { game.releaseCharge(); input.chargePointerId = null; }
   if (e.pointerId === input.movePointerId) { input.dragging = false; resetJoystick(); input.movePointerId = null; }   // YY:只有移动手指抬起才停止跟随
-  game._sliderDrag = false;
-  if (game.state === "shipselect" && game._shipDragging) game.shipSelectPointerUp();
-  if (game.state === "codex" && game._codexDragging) { const p = toLogic(e.clientX, e.clientY); game.codexSwipe(p.x); }
-  if (game.state === "tutorial" && game._tutorialDragging) { const p = toLogic(e.clientX, e.clientY); game.tutorialSwipe(p.x); }
-  if (game.state === "map" && game._mapDragging) { const p = toLogic(e.clientX, e.clientY); game.mapPointerUp(p.x, p.y); }
-  game._shipDragging = false; game._codexDragging = false; game._tutorialDragging = false; game._mapDragging = false; game._codexUpgradeDragging = false;
+  if (e.pointerId === input.uiPointerId) {
+    game._sliderDrag = false;
+    if (game.state === "shipselect" && game._shipDragging) game.shipSelectPointerUp();
+    if (game.state === "codex" && game._codexDragging) { const p = toLogic(e.clientX, e.clientY); game.codexSwipe(p.x); }
+    if (game.state === "tutorial" && game._tutorialDragging) { const p = toLogic(e.clientX, e.clientY); game.tutorialSwipe(p.x); }
+    if (game.state === "map" && game._mapDragging) { const p = toLogic(e.clientX, e.clientY); game.mapPointerUp(p.x, p.y); }
+    game._shipDragging = false; game._codexDragging = false; game._tutorialDragging = false; game._mapDragging = false; game._codexUpgradeDragging = false;
+    releaseUiPointer(e.pointerId);
+  }
 });
 canvas.addEventListener("pointercancel", (e) => {
-  game._titlePressKey = null;
   if (e.pointerId === input.chargePointerId) { game.releaseCharge(); input.chargePointerId = null; }
   if (e.pointerId === input.movePointerId) { input.dragging = false; resetJoystick(); input.movePointerId = null; }
-  game._sliderDrag = false; game._shipDragging = false; game._codexDragging = false; game._tutorialDragging = false; game._mapDragging = false; game._codexUpgradeDragging = false;
+  if (e.pointerId === input.uiPointerId) { cancelUiGesture(); releaseUiPointer(e.pointerId); }
+});
+canvas.addEventListener("lostpointercapture", (e) => {
+  if (e.pointerId === input.uiPointerId) { cancelUiGesture(); input.uiPointerId = null; }
 });
 // GG6:鼠标移出画布——清掉首页按钮的悬停高亮,不然移出去了缩放动画还停在放大状态
 canvas.addEventListener("pointerleave", () => { game._titleHoverKey = null; });
@@ -172,5 +196,5 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "v" || e.key === "V") Settings.set("haptics", !Settings.data.haptics);
 });
 window.addEventListener("keyup", (e) => {
-  if (e.key === "c" || e.key === "C") { if (game.state === "playing") game.releaseCharge(); e.preventDefault(); }
+  if (e.key === "c" || e.key === "C") { game.releaseCharge(); e.preventDefault(); }
 });

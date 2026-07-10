@@ -7,10 +7,14 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 // EE:高分屏适配 —— backing store 按 devicePixelRatio(封顶2,避免低端机因像素过多掉帧)放大,
 // 再用 ctx.scale 抵消,这样后面所有绘制代码仍按 540×960 逻辑坐标写,不用改一行。
-const DPR = Math.min(window.devicePixelRatio || 1, 2);
-canvas.width = CONFIG.WIDTH * DPR; canvas.height = CONFIG.HEIGHT * DPR;
-ctx.scale(DPR, DPR);
 function fitToScreen() {
+  // 浏览器缩放或窗口跨显示器时 DPR 会变化；resize 时同步 backing store，并用绝对变换避免 scale 累积。
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const pixelW = Math.round(CONFIG.WIDTH * dpr), pixelH = Math.round(CONFIG.HEIGHT * dpr);
+  if (canvas.width !== pixelW || canvas.height !== pixelH) {
+    canvas.width = pixelW; canvas.height = pixelH;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
   const ratio = CONFIG.WIDTH / CONFIG.HEIGHT;
   let h = window.innerHeight * 0.98, w = h * ratio;
   if (w > window.innerWidth) { w = window.innerWidth; h = w / ratio; }

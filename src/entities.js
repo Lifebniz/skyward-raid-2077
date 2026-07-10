@@ -51,10 +51,8 @@ class Player {
     if (this._recoilT > 0) this._recoilT -= dt;   // MO6:大炮开火后坐力动画剩余时间(见 update() 里 spawnPlayerBullet("cannon") 那一支和 _drawBody 的位移计算)
     if (this.specialCooldown > 0) this.specialCooldown -= dt;
     if (this.chargeCooldown > 0) this.chargeCooldown -= dt;
-    if (!this.charging && game.chargeReady()) game.startCharge();
     if (this.charging) {
       this.charge = Math.min(CONFIG.charge.max, this.charge + dt * game.chipValue("chargeCore", "chargeRate", 1) * game.shipWeaponValue("chargeRate", 1));
-      if (this.charge >= CONFIG.charge.max) game.releaseCharge();
     }
     if (this.stealthTimer > 0) this.stealthTimer -= dt;
     if (this.shieldTimer > 0) { this.shieldTimer -= dt; if (this.shieldTimer <= 0) { this.shieldHp = 0; this.shieldMax = 0; this.shieldHits = 0; } }
@@ -579,12 +577,13 @@ class PlayerLaser {
   }
 }
 
+let enemySpawnSequence = 0;
 class Enemy {
   constructor(type, x, yOffset = 0, move = "straight", elite = null) { this.init(type, x, yOffset, move, elite); }
   init(type, x, yOffset = 0, move = "straight", elite = null) {
     const t = CONFIG.enemy[type], chosenMove = t.move && (!move || move === "straight") ? t.move : (move || "straight");
     const diff = game.activeEndlessDiff();
-    this.type = type; this.isBoss = false; this.x = x; this.y = t.fromBottom ? CONFIG.HEIGHT + t.radius + yOffset : -t.radius - yOffset;
+    this.type = type; this.isBoss = false; this._spawnId = ++enemySpawnSequence; this.x = x; this.y = t.fromBottom ? CONFIG.HEIGHT + t.radius + yOffset : -t.radius - yOffset;
     this.baseX = x; this.baseY = this.y; this.radius = t.radius; this.hp = t.hp; this.speed = t.speed * diff.enemySpeedMult; this.score = t.score; this.color = t.color; this.cfg = t;
     this._fireTimer = 0.6 + game.rng() * 0.6; this.dead = false; this._endlessSpawnT = game.endless ? game._endlessT : null;
     this.elite = elite || this.rollElite(); this.eliteCfg = this.elite ? CONFIG.elite[this.elite] : null;
@@ -610,6 +609,7 @@ class Enemy {
     this._phaseTimer = (t.blinkInterval || 0) * (0.45 + game.rng() * 0.35); this._phaseWarn = 0; this._phaseTargetX = 0;
     this._homingSkillTimer = (t.homingInterval || 0) * (0.5 + game.rng() * 0.35); this._zoneTimer = (t.zoneInterval || 0) * (0.5 + game.rng() * 0.35);
     this._reflectCd = 0; this.guardShield = 0; this.guardedBy = null; this._wardenPulse = 0; this._stolenKind = ""; this._escapeTimer = 0;
+    this._bossEliteDr = 0; this._bossEliteMinLifeT = 0;
   }
   rollElite() {
     if (this.type === "small" || !game.player) return null;
@@ -1159,7 +1159,7 @@ function fillBossShape(ctx, x, y, r, shape, color, assetIndex) {
 class Boss {
   constructor(defIndex) {
     const def = CONFIG.bosses[defIndex % CONFIG.bosses.length];
-    this.def = def; this.isBoss = true;
+    this.def = def; this.isBoss = true; this._spawnId = ++enemySpawnSequence;
     this.x = CONFIG.WIDTH / 2; this.y = -def.radius; this.radius = def.radius;
     this.maxHp = Math.round(def.hp * game.activeDiff.bossHpMult); this.hp = this.maxHp;
     this.bulletDamage = def.damage; this.score = def.score;   // 注意:不能叫 this.damage,会覆盖 damage() 方法
@@ -1170,7 +1170,7 @@ class Boss {
     this.defIndex = defIndex % CONFIG.bosses.length;   // W2:记下具体是哪个BOSS,给"击败特定BOSS"成就用
     const inv = CONFIG.bossInvuln || {}, min = inv.minCount || 0, max = inv.maxCount || min;
     this._invulnTotal = min + Math.floor(game.rng() * Math.max(1, max - min + 1));
-    this._invulnLeft = this._invulnTotal; this._invulnTimer = 0;
+    this._invulnLeft = this._invulnTotal; this._invulnTimer = 0; this._weakTimer = 0; this._weakDamageMult = 0;
   }
   get phaseIndex() { const r = this.hp / this.maxHp, ph = this.def.phases; for (let i = 0; i < ph.length; i++) if (r > ph[i].until) return i; return ph.length - 1; }
   get phase() { return this.phaseIndex + 1; }         // 兼容旧引用
@@ -1186,7 +1186,14 @@ class Boss {
   update(dt) {
     const def = this.def;
     if (!this._entered) { this.y += 90 * dt; if (this.y >= def.enterY) { this.y = def.enterY; this._entered = true; } return; }
-    this._t += dt; this._moveT += dt; if (this._flash > 0) this._flash -= dt; if (this._laserCd > 0) this._laserCd -= dt; if (this._gravityCd > 0) this._gravityCd -= dt; if (this._weakTimer > 0) this._weakTimer = Math.max(0, this._weakTimer - dt); if (this._invulnTimer > 0) this._invulnTimer = Math.max(0, this._invulnTimer - dt); this.move(dt);
+    this._t += dt; this._moveT += dt;
+    if (this._flash > 0) this._flash -= dt;
+    if (this._laserCd > 0) this._laserCd -= dt;
+    if (this._gravityCd > 0) this._gravityCd -= dt;
+    // 锁血屏障与阶段破甲窗口可能同帧触发；屏障期间暂停弱点计时，保证承诺的输出窗口可实际使用。
+    if (this._invulnTimer > 0) this._invulnTimer = Math.max(0, this._invulnTimer - dt);
+    else if (this._weakTimer > 0) this._weakTimer = Math.max(0, this._weakTimer - dt);
+    this.move(dt);
     const phaseIndex = this.phaseIndex;
     if (phaseIndex !== this._lastPhaseIndex) { this._lastPhaseIndex = phaseIndex; game.onBossPhaseChange(this, phaseIndex); }
     // Y:血量 <=20% 时触发一次狂暴,此后攻击频率永久提升
@@ -1447,7 +1454,11 @@ const releaseDead = {
   homingShot: (o) => pools.homingShot.release(o),
   missile: (o) => pools.missile.release(o),
   playerLaser: (o) => pools.playerLaser.release(o),
-  enemy: (o) => { if (!o.isBoss) pools.enemy.release(o); },
+  enemy: (o) => {
+    if (o.isBoss) return;
+    if (o.type === "warden" && game.clearGuardShields) game.clearGuardShields(o);
+    pools.enemy.release(o);
+  },
   particle: (o) => pools.particle.release(o),
 };
 

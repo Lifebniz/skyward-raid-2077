@@ -392,7 +392,9 @@ const game = {
     Achievements.trackShipUse(this.ship.key);   // OO
   },
   endlessBannerText() {
-    return { text: this.endlessLite ? "无尽关卡" : (this.challengeMode ? "挑战模式" : "无尽挑战"), sub: this.challengeDaily ? "每日空域" : (this.challengeMode ? "同种子竞速" : "") };
+    const sub = this.challengeDaily ? "每日空域" : (this.challengeMode ? "同种子竞速" : "");
+    const gearNote = this.challengeMode && CONFIG.challenge.gearEnabled === false ? "机装停用" : "";
+    return { text: this.endlessLite ? "无尽关卡" : (this.challengeMode ? "挑战模式" : "无尽挑战"), sub: [sub, gearNote].filter(Boolean).join(" · ") };
   },
   beginStartingDraft() {
     this._startingDrafts--;
@@ -795,7 +797,9 @@ const game = {
     };
     const readonlyRoute = opts.code ? routeText(Challenge.decode(opts.code)) : "";
     title.textContent = opts.readonly ? "复制挑战码" : "挑战码 RIVAL";
-    hint.textContent = (opts.readonly ? "复制后发给朋友，对方会进入同一种子、同机型的无尽局。" : "粘贴朋友发来的挑战码，或直接开始每日/新挑战。") + (readonlyRoute ? "\n" + readonlyRoute : "");
+    hint.textContent = (opts.readonly ? "复制后发给朋友，对方会进入同一种子、同机型的无尽局。" : "粘贴朋友发来的挑战码，或直接开始每日/新挑战。")
+      + (CONFIG.challenge.gearEnabled === false ? "\nRIVAL/每日挑战统一停用持久机装，确保双方条件一致。" : "")
+      + (readonlyRoute ? "\n" + readonlyRoute : "");
     input.value = opts.code || "";
     input.readOnly = !!opts.readonly;
     overlay.id = "challenge-modal";
@@ -925,6 +929,7 @@ const game = {
   gearSlotOf(itemKey) { return itemKey ? itemKey.split("_")[0] : null; },
   gearOwns(itemKey) { return !!itemKey && (Settings.data.gearOwned || []).includes(itemKey); },
   gearValue(slotKey, fallback = 0) {
+    if (this.challengeMode && CONFIG.challenge.gearEnabled === false) return fallback;
     const itemKey = this.gearEquipped(slotKey);
     if (!itemKey) return fallback;
     const tier = this.gearTierOf(itemKey), v = CONFIG.gearValues[slotKey];
@@ -2257,11 +2262,12 @@ const game = {
         if (dx * dx + dy * dy <= w.r * w.r) { b.dead = true; this.spawnHitSpark(b.x, b.y); if (w.healOnDeath) w.clearedBullets++; }
       }
       for (const e of this.enemies) {
-        if (e.dead || w.hitEnemies.has(e)) continue;
+        const hitKey = e._spawnId || e;
+        if (e.dead || w.hitEnemies.has(hitKey)) continue;
         const dx = e.x - w.x, dy = e.y - w.y, rr = w.r + e.radius;
         // MO3:固定底伤 + 敌机当前最大生命值的一定比例,和无尽模式敌机血量随威胁等级增长的曲线挂钩,后期依旧有存在感
         if (dx * dx + dy * dy <= rr * rr) {
-          w.hitEnemies.add(e);
+          w.hitEnemies.add(hitKey);
           // MO6:非 BOSS 敌机沿波心向外击退(衰减推力,约 30~50px),给"清弹"之外再加一层防御性的喘息窗口;BOSS 免疫,避免打断 BOSS 战节奏
           if (!e.isBoss) { const d = Math.hypot(dx, dy) || 1; e._kbT = 0.35; e._kbVX = dx / d * 260; e._kbVY = dy / d * 260; }
           const dmg = (m.blastDamage || 45) + e.maxHp * (m.blastPctMaxHp || 0);
@@ -2516,13 +2522,15 @@ const game = {
     this.updateDepthSystems(dt);
 
     director.update(dt);
+    // director 的 clear 步骤会同步切到 cleared；必须立刻停帧，不能再让残弹碰撞把通关覆盖成失败。
+    if (this.state !== "playing") return;
     if (this.endless) { this.updateEndless(dt); if (this.state !== "playing") return; }
     else {   // Q:常规关卡(含刷分续关)每隔固定秒数自动刷新一个道具;无尽模式不刷新(有自己的掉落节奏)
       this._itemSpawnTimer -= dt;
       if (this._itemSpawnTimer <= 0) { this._itemSpawnTimer = this.itemAutoInterval(); this.spawnPowerUp(30 + this.rng() * (CONFIG.WIDTH - 60), this.chooseDrop()); }
     }
     if (this.farming) {
-      if (this.score >= this._clearScore * CONFIG.scoring.farmScoreCapMult) { this.settle(); }   // 达刷分总分上限 → 强制结算
+      if (this.score >= this._clearScore * CONFIG.scoring.farmScoreCapMult) { this.settle(); return; }   // 达刷分总分上限 → 强制结算
       else { this._farmTimer -= dt; if (this._farmTimer <= 0 && this.enemies.length < CONFIG.scoring.farmMaxEnemies) { this._farmTimer = CONFIG.scoring.farmInterval; this.spawnFarmWave(); } }
     }
     this.updateGravityPulses(dt);
@@ -2563,9 +2571,10 @@ const game = {
     for (const b of this.playerBullets) {
       if (b.dead) continue;
       for (const e of this.enemies) {
-        if (e.dead || b.hitEnemies.has(e)) continue;
+        const hitKey = e._spawnId || e;
+        if (e.dead || b.hitEnemies.has(hitKey)) continue;
         if (!hit(b, e)) continue;
-        b.hitEnemies.add(e); this.spawnHitSpark(b.x, b.y);
+        b.hitEnemies.add(hitKey); this.spawnHitSpark(b.x, b.y);
         if (this.mainBulletArmorPierces(e) && (!e._armorPierceFx || e._armorPierceFx <= 0)) { e._armorPierceFx = 0.35; this.floats.push(new FloatText(e.x, e.y - e.radius - 10, "破甲", CONFIG.bonuses.armorPiercer.color)); }
         let dmg = this.playerDamage(this.mainBulletDamage(e, b.source), e);
         // MO:同一敌机每吃满 critEvery 发大炮炮弹,这一发追加 critMult 倍巨额暴击
@@ -2626,9 +2635,10 @@ const game = {
       if (l.dead) continue;
       const half = l.width / 2;
       for (const e of this.enemies) {
-        if (e.dead || l.hitEnemies.has(e)) continue;
+        const hitKey = e._spawnId || e;
+        if (e.dead || l.hitEnemies.has(hitKey)) continue;
         if (e.y <= l.y + e.radius && Math.abs(e.x - l.x) <= half + e.radius) {
-          l.hitEnemies.add(e);
+          l.hitEnemies.add(hitKey);
           this.spawnHitSpark(e.x, e.y);
           if (e.damage(this.playerDamage(l.damage, e))) this.onEnemyKilled(e);
         }
@@ -2652,9 +2662,10 @@ const game = {
       const halfW = w.width / 2, halfT = w.thickness / 2;
       for (const b of this.enemyBullets) { if (b.dead) continue; if (Math.abs(b.x - w.x) <= halfW && Math.abs(b.y - w.y) <= halfT) { b.dead = true; this.spawnHitSpark(b.x, b.y); } }
       for (const e of this.enemies) {
-        if (e.dead || w.hitEnemies.has(e)) continue;
+        const hitKey = e._spawnId || e;
+        if (e.dead || w.hitEnemies.has(hitKey)) continue;
         if (Math.abs(e.x - w.x) <= halfW + e.radius && Math.abs(e.y - w.y) <= halfT + e.radius) {
-          w.hitEnemies.add(e);
+          w.hitEnemies.add(hitKey);
           if (e.damage(this.playerDamage(CONFIG.special.waveDamage, e))) this.onEnemyKilled(e); else this.spawnHitSpark(e.x, e.y);
         }
       }
@@ -4397,11 +4408,14 @@ const game = {
     if (!e) return;
     const text = e.name + " " + Math.ceil(this._endlessEventTimer) + "s";
     const detail = this.endlessEventHUDDetail(e);
-    const x = CONFIG.WIDTH / 2, y = this.boss ? 122 : 88;
     const icon = ImageAssets.uiEvent(e.key), iconPad = icon ? 30 : 0;
     ctx.save();
     ctx.font = "bold 13px 'Segoe UI', sans-serif";
     const w = Math.min(CONFIG.WIDTH - 64, Math.max(ctx.measureText(text).width, detail ? ctx.measureText(detail).width : 0) + 22 + iconPad), h = detail ? 40 : 24;
+    const stacked = !!this.targetChallengeSplit();
+    const desiredX = stacked ? CONFIG.WIDTH / 2 + 40 : CONFIG.WIDTH / 2;
+    const x = clamp(desiredX, w / 2 + 16, CONFIG.WIDTH - w / 2 - 16);
+    const y = this.boss ? (stacked ? 180 : 122) : (stacked ? 140 : 88);
     ctx.fillStyle = "rgba(8, 16, 28, .74)"; UI.roundRect(ctx, x - w / 2, y - h + 4, w, h, 8); ctx.fill();
     ctx.strokeStyle = UI.rgba(e.color || "#ffd43b", .82); ctx.lineWidth = 1.2; UI.roundRect(ctx, x - w / 2, y - h + 4, w, h, 8); ctx.stroke();
     const tx = icon ? x + iconPad / 2 : x;
@@ -4453,10 +4467,11 @@ const game = {
     if (!target) return;
     const current = Math.round(this.score * this.activeDiff.scoreMult), delta = current - target.score;
     const text = "影子 " + target.t + "s " + target.score + " · " + (delta >= 0 ? "+" : "") + delta;
-    const x = CONFIG.WIDTH / 2, y = this.boss ? 96 : 64;
     ctx.save();
     ctx.font = "bold 13px 'Segoe UI', sans-serif";
     const w = Math.min(CONFIG.WIDTH - 56, ctx.measureText(text).width + 22), h = 24;
+    const desiredX = CONFIG.WIDTH / 2 + 40;
+    const x = clamp(desiredX, w / 2 + 16, CONFIG.WIDTH - w / 2 - 16), y = this.boss ? 124 : 84;
     ctx.fillStyle = "rgba(8, 16, 28, .72)"; UI.roundRect(ctx, x - w / 2, y - h + 4, w, h, 8); ctx.fill();
     ctx.strokeStyle = delta >= 0 ? "rgba(56,217,169,.78)" : "rgba(255,212,59,.78)";
     ctx.lineWidth = 1.2; UI.roundRect(ctx, x - w / 2, y - h + 4, w, h, 8); ctx.stroke();
