@@ -555,13 +555,26 @@ class PlayerLaser {
     this.maxLife = this.life; this.dead = false; this.hitEnemies = new Set();
   }
   update(dt) { this.life -= dt; if (this.life <= 0) this.dead = true; }
+  // LZ:激光光柱改成单条连续渐变(中心亮白→蓝→透明),不再是"外层软渐变 + 内层硬边纯白矩形"叠两层——
+  //   之前那个纯白矩形边缘是硬直角,和外层柔光衔接得很生硬;现在从中心到两侧一路平滑过渡,读起来是一整根发光光柱
+  //   而不是"白框里塞了根白棍子"。同时叠一层更窄的核心高光,加强"能量在中心最烫"的层次感,而不是纯色块。
   draw(ctx) {
-    const a = clamp(this.life / this.maxLife, 0, 1), half = this.width / 2;
+    const a = clamp(this.life / this.maxLife, 0, 1), half = this.width / 2, outer = half * 2;
     ctx.save(); ctx.globalAlpha = a;
-    const glow = ctx.createLinearGradient(this.x - half * 2, 0, this.x + half * 2, 0);
-    glow.addColorStop(0, "rgba(77,171,247,0)"); glow.addColorStop(0.5, "rgba(116,192,252,.5)"); glow.addColorStop(1, "rgba(77,171,247,0)");
-    ctx.fillStyle = glow; ctx.fillRect(this.x - half * 2, 0, half * 4, this.y);
-    ctx.fillStyle = "#fff"; ctx.fillRect(this.x - Math.max(2, half * 0.22), 0, Math.max(4, half * 0.44), this.y);
+    const beam = ctx.createLinearGradient(this.x - outer, 0, this.x + outer, 0);
+    beam.addColorStop(0, "rgba(77,171,247,0)");
+    beam.addColorStop(0.32, "rgba(116,192,252,.55)");
+    beam.addColorStop(0.46, "rgba(210,235,255,.92)");
+    beam.addColorStop(0.5, "#fff");
+    beam.addColorStop(0.54, "rgba(210,235,255,.92)");
+    beam.addColorStop(0.68, "rgba(116,192,252,.55)");
+    beam.addColorStop(1, "rgba(77,171,247,0)");
+    ctx.fillStyle = beam; ctx.fillRect(this.x - outer, 0, outer * 2, this.y);
+    // 核心高光:更窄的一条纯白渐变叠在最中心,边缘也用渐变(而不是硬边矩形)柔和收边
+    const coreW = Math.max(3, half * 0.5);
+    const core = ctx.createLinearGradient(this.x - coreW, 0, this.x + coreW, 0);
+    core.addColorStop(0, "rgba(255,255,255,0)"); core.addColorStop(0.5, "rgba(255,255,255,.85)"); core.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = core; ctx.fillRect(this.x - coreW, 0, coreW * 2, this.y);
     ctx.restore();
   }
 }

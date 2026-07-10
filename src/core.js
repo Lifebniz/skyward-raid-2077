@@ -160,5 +160,9 @@ const background = {
     }
     ImageAssets.drawScrolling(ctx, ImageAssets.background(level, "mid"), this.scroll * 0.45, 0.95);
     ImageAssets.drawScrolling(ctx, ImageAssets.background(level, "fg"), this.scroll * 1.4, 0.9);
+    // RG5:第2战区(大漠强袭)素材整体偏亮(大片黄沙+高光),压一层半透明黑降低背景亮度;背景变暗只会让敌弹/玩家
+    // 这些前景元素的相对对比度更高,不会影响躲避弹幕。background.draw() 是首页/结算/关卡过场共用的唯一入口
+    // (level 统一取 game.world),这里改一处,所有用到第2战区背景的画面都会跟着变暗,不需要各处分别处理。
+    if (level === 2) { ctx.fillStyle = "rgba(0,0,0,.32)"; ctx.fillRect(0, 0, W, H); }
   },
 };

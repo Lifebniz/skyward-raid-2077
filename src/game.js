@@ -123,12 +123,13 @@ const game = {
   //   横向标题贴图(drawSectionTitle "ship", maxW 210 居中于 cx)实测渲染宽度也就 210,右边缘落在 x=375,
   //   这两个按钮必须整体挪到 x>375 之后,否则会被标题图压住(实测验证过,见 shot-shipequip-diagram.png 的教训)
   shipViewToggleRect(mode) { return mode === "info" ? { x: CONFIG.WIDTH - 160, y: 28, w: 70, h: 36 } : { x: CONFIG.WIDTH - 80, y: 28, w: 70, h: 36 }; },
-  // RG2:机装槽位在"装备"视图里围着机身摆成一圈(8个方位,从正上方顺时针),leader line 从机身边缘拉到槽位图标
-  // RG3:ry 从 148 收到 140——品阶点+双行标签比之前多占了纵向空间,收一点半径给底部节点的标签留够不溢出面板的余量
-  equipSlotAnchor() { const info = this.shipInfoPanelRect(); return { cx: CONFIG.WIDTH / 2, cy: info.y + info.h / 2 + 10, rx: 172, ry: 140 }; },
+  // RG4:去掉机身引出的连接线(太呆板)后改成内外双圈错开——8个方位角固定不变(45°等分),但按下标奇偶分到
+  //   内圈/外圈两个不同半径:偶数下标(正上/右/下/左四个基本方位)落内圈更靠近机身,奇数下标(四个斜角)落外圈,
+  //   两圈天然交错、互不遮挡,不需要额外算避让,比原来单圈+引出线更有层次感也更活泼。
+  equipSlotAnchor() { const info = this.shipInfoPanelRect(); return { cx: CONFIG.WIDTH / 2, cy: info.y + info.h / 2 + 6, inner: { rx: 98, ry: 82 }, outer: { rx: 188, ry: 156 } }; },
   equipSlotNodePos(i) {
-    const a = this.equipSlotAnchor(), angle = -Math.PI / 2 + i * (Math.PI * 2 / CONFIG.gearSlots.length);
-    return { x: a.cx + Math.cos(angle) * a.rx, y: a.cy + Math.sin(angle) * a.ry, angle, cx: a.cx, cy: a.cy };
+    const a = this.equipSlotAnchor(), angle = -Math.PI / 2 + i * (Math.PI * 2 / CONFIG.gearSlots.length), ring = i % 2 === 0 ? a.inner : a.outer;
+    return { x: a.cx + Math.cos(angle) * ring.rx, y: a.cy + Math.sin(angle) * ring.ry, angle, cx: a.cx, cy: a.cy, inner: i % 2 === 0 };
   },
   equipSlotHit(px, py) {
     for (let i = 0; i < CONFIG.gearSlots.length; i++) { const p = this.equipSlotNodePos(i); if (Math.hypot(px - p.x, py - p.y) <= 32) return i; }
@@ -938,16 +939,37 @@ const game = {
   // RG3:品阶视觉差异化——不只是描边变色,档位越高描边越粗、发光越强、外圈品阶点越多,魄能(t3)额外加一圈旋转的
   //   放射短线(像传统 RPG"传说品质"道具的光效),制式(t1)完全朴素无特效,三档拉开明显的"一眼看出档次"的区分度。
   gearTierFX(tierKey) { return { t1: { pips: 1, glow: 0, ring: 1.5, sparkle: false }, t2: { pips: 2, glow: 10, ring: 2.5, sparkle: false }, t3: { pips: 3, glow: 18, ring: 3.5, sparkle: true } }[tierKey] || { pips: 0, glow: 0, ring: 1.5, sparkle: false }; },
+  // RG4:魄能星芒——原来 8 根等长等宽、统一明暗的直线太机械("呆板"),改成经典四芒星:4 根长主脊(十字)+4 根短副脊
+  //   (斜角),每根脊都有独立的闪烁相位和长度起伏(不同步明暗/伸缩),根部到尖端用渐变收细收暗(不是硬边直线),
+  //   整体再叠一个很慢的旋转,读起来像"珠宝在发光"而不是"风扇叶片在转"。
+  drawGearSparkle(ctx, x, y, r, color) {
+    const t = this.titleT, rot = t * 0.18;
+    const spokes = [
+      { a: 0, len: 20, w: 2.6, ph: 0.0 }, { a: Math.PI / 2, len: 20, w: 2.6, ph: 1.7 },
+      { a: Math.PI, len: 20, w: 2.6, ph: 3.1 }, { a: -Math.PI / 2, len: 20, w: 2.6, ph: 4.4 },
+      { a: Math.PI / 4, len: 11, w: 1.4, ph: 2.3 }, { a: 3 * Math.PI / 4, len: 11, w: 1.4, ph: 0.6 },
+      { a: -Math.PI / 4, len: 11, w: 1.4, ph: 5.1 }, { a: -3 * Math.PI / 4, len: 11, w: 1.4, ph: 3.8 },
+    ];
+    ctx.save();
+    for (const s of spokes) {
+      const twinkle = 0.35 + Math.abs(Math.sin(t * 2.1 + s.ph)) * 0.65;
+      const stretch = 0.7 + Math.abs(Math.sin(t * 1.4 + s.ph * 1.3)) * 0.3;
+      const ang = s.a + rot, len = s.len * stretch;
+      const x0 = x + Math.cos(ang) * (r + 2), y0 = y + Math.sin(ang) * (r + 2);
+      const x1 = x + Math.cos(ang) * (r + 2 + len), y1 = y + Math.sin(ang) * (r + 2 + len);
+      const g = ctx.createLinearGradient(x0, y0, x1, y1);
+      g.addColorStop(0, UI.rgba(color, twinkle * 0.85)); g.addColorStop(1, UI.rgba(color, 0));
+      ctx.strokeStyle = g; ctx.lineWidth = s.w; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    }
+    ctx.restore();
+  },
   // 圆形槽位徽章通用绘制——ship-equip放射图/掉落弹窗共用,owned=false 时叠一层锁定遮罩(codex 列表因为是方形沿用自己的画法,不复用这个)
   drawGearBadge(ctx, x, y, r, slot, tierKey, owned) {
     const tierDef = tierKey ? CONFIG.gearTiers.find(t => t.key === tierKey) : null;
     const fx = this.gearTierFX(tierKey);
     const color = tierDef ? tierDef.color : slot.color;
-    if (tierKey === "t3") {   // 魄能:旋转放射短线在徽章底下先画,徽章盖在上面,呈现"光从后面透出来"的层次
-      ctx.save(); ctx.globalAlpha = 0.45 + Math.sin(this.titleT * 3) * 0.2; ctx.strokeStyle = color; ctx.lineWidth = 1.5;
-      for (let i = 0; i < 8; i++) { const a = i * (Math.PI / 4) + this.titleT * 0.5; ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * (r + 3), y + Math.sin(a) * (r + 3)); ctx.lineTo(x + Math.cos(a) * (r + 11), y + Math.sin(a) * (r + 11)); ctx.stroke(); }
-      ctx.restore();
-    }
+    if (tierKey === "t3") this.drawGearSparkle(ctx, x, y, r, color);   // 魄能:星芒光效在徽章底下先画,徽章盖在上面,呈现"光从后面透出来"的层次
     ctx.save();
     if (fx.glow) { ctx.shadowColor = color; ctx.shadowBlur = fx.glow; }
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -3357,8 +3379,9 @@ const game = {
     ctx.fillStyle = "#4a90d9"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.fillText("左右滑动或点击两侧机型切换", cx, confirmRect.y + confirmRect.h + 28);
     ctx.textAlign = "left";
   },
-  // RG2:机型选择页的"装备"视图——机身居中,8个槽位以放射状排布在四周(leader line 从机身引出),
-  //   槽位下方标注类型名+当前装备档位;所有机型共用同一套(和 drawShipSelect 里选中的机型无关,只是顺手拿来当展示模型)
+  // RG4:机型选择页的"装备"视图——机身居中,8个槽位分内外双圈错开排布(不再有机身引出的连接线,内外圈天然
+  //   交错开的布局本身就能看出"围着机身"的关系,不需要线条硬连);槽位下方标注类型名+当前装备档位;
+  //   所有机型共用同一套(和 drawShipSelect 里选中的机型无关,只是顺手拿来当展示模型)
   drawShipEquip(ctx, sp, key) {
     const info = this.shipInfoPanelRect(), cx = CONFIG.WIDTH / 2, a = this.equipSlotAnchor();
     ctx.textAlign = "center";
@@ -3369,11 +3392,7 @@ const game = {
       const p = this.equipSlotNodePos(i);
       const equippedKey = this.gearEquipped(slot.key), tier = this.gearTierOf(equippedKey);
       const tierDef = tier ? CONFIG.gearTiers.find(t => t.key === tier) : null;
-      const owned = this.gearOwnsAny(slot.key), r = 26;
-      // 引出线:从机身边缘沿同一方向拉到槽位徽章
-      const lx0 = a.cx + Math.cos(p.angle) * 34, ly0 = a.cy + Math.sin(p.angle) * 18;
-      ctx.strokeStyle = UI.rgba(slot.color, owned ? 0.5 : 0.2); ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(lx0, ly0); ctx.lineTo(p.x, p.y); ctx.stroke();
+      const owned = this.gearOwnsAny(slot.key), r = p.inner ? 23 : 27;   // 内圈稍小/外圈稍大,强化"两层"的层次感
       this.drawGearBadge(ctx, p.x, p.y, r, slot, tier, owned);
       // WW:标注统一放在槽位正下方(用户明确要求),槽位名 + 当前装备档位(或"未装备"/"未获得")——
       //   品阶点占了 badge 下方一点空间,标签整体再往下让一点
