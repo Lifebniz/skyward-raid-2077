@@ -21,6 +21,18 @@ const ImageAssets = {
       defender: "assets/images/ships/player-wingman-defender.png",
       scout: "assets/images/ships/player-wingman-scout.png",
     },
+    // 只登记仓库中真实存在的可选素材。未登记项直接走 Canvas 兜底，避免启动时对尚未制作的
+    // 芯片/BONUS/标题装饰反复发起 404 请求；后续新增文件时在对应清单显式登记即可。
+    title: {
+      "button-map": "assets/images/ui/title/title-button-map.png",
+      "button-challenge": "assets/images/ui/title/title-button-challenge.png",
+      "button-rival": "assets/images/ui/title/title-button-rival.png",
+      "button-ship": "assets/images/ui/title/title-button-ship.png",
+      wordmark: "assets/images/ui/title/title-wordmark.png",
+    },
+    chip: {},
+    bonus: {},
+    event: {},
     enemy: {
       small: "assets/images/enemies/enemy-small.png",
       medium: "assets/images/enemies/enemy-medium.png",
@@ -105,17 +117,7 @@ const ImageAssets = {
   preload: {
     effects: "chain-spark shield-break repair-pulse weakpoint-marker shield-hit hit-spark mine-warning-pulse mine-armed floating-mine fire-zone ice-zone powerup-glow gravity-ring warning-laser-lane".split(" "),
     uiIcons: "bomb charge-shot heal power-upgrade secondary-homing secondary-laser secondary-missile skill-fire skill-ice special-nuke special-shield special-stealth special-wave".split(" "),
-    chips: "capacitor charge-core homing-swarm laser-focus missile-barrage side-guns volatile-core".split(" "),
     powerups: "bomb chip heal power wing".split(" "),
-    bonuses: "damage fire-rate range max-hp reinforced-hull armor-plating field-repair repair-loop repair-pulse leech living-armor medical-reservoir pain-converter missile-rack pierce chain-spark salvage shield-amplifier shield-breaker kinetic-ammo heavy-rounds armor-piercer armor-caliber stable-fire perfect-line side-cannons laser-lens laser-splitter swarm-core homing-shards signal-filter explosive-payload cluster-warheads missile-interceptor magnet-core combo-battery combo-barrage combo-surge charge-amp executioner elite-hunter reactive-armor last-stand emergency-barrier".split(" "),
-  },
-  missingBonusIcons: {
-    "vital-reactor": true,
-    "glass-cannon": true,
-    "boss-hunter": true,
-    "weak-scanner": true,
-    "adrenaline": true,
-    "overdrive": true,
   },
   slug(key) {
     return String(key || "")
@@ -146,31 +148,26 @@ const ImageAssets = {
     const addKeys = (prefix, keys) => {
       for (const key of keys || []) srcs.push(prefix + this.slug(key) + ".png");
     };
-    if (cfg && cfg.shipOrder) addKeys("assets/images/ships/player-wingman-", cfg.shipOrder);
     addKeys("assets/images/effects/effect-", this.preload.effects);
     addKeys("assets/images/ui/icons/icon-", this.preload.uiIcons);
     const powerupKeys = cfg && cfg.powerup
       ? Object.keys(Object.assign({}, cfg.powerup.weights || {}, cfg.powerup.endlessWeights || {}))
       : this.preload.powerups;
     addKeys("assets/images/ui/powerups/icon-powerup-", powerupKeys);
-    addKeys("assets/images/ui/chips/icon-chip-", cfg && cfg.chipOrder || this.preload.chips);
-    const bonusKeys = (cfg && cfg.bonusOrder || this.preload.bonuses).filter(key => !this.missingBonusIcons[this.slug(key)]);
-    addKeys("assets/images/ui/bonuses/icon-bonus-", bonusKeys);
     return srcs;
   },
   allSources() {
     return Array.from(new Set(this.sources(this.manifest).concat(this.dynamicSources()))).filter(Boolean);
   },
-  // GG15:加载优先级分层——一次性发起全部素材请求会让"常用的"和"很少用到的"抢同一份带宽,
-  //   拆成两层:①"常用" = 所有机型/僚机贴图(展柜一进就要看全部机型) + HUD 图标/道具/芯片/强化/特效(第一关就用得到) +
-  //   首页贴图,开屏页会等这一层加载完才结束(见 main.js loadTiered);②"长尾" = 全部敌机/BOSS立绘/其余世界背景,
-  //   这些要么出现得晚(BOSS/后期世界)要么本来就有矢量兜底(敌机),不值得让玩家多等,开屏页结束后继续在后台悄悄加载。
+  // GG15:加载优先级分层——一次性发起全部素材请求会让"常用的"和"很少用到的"抢同一份带宽。
+  //   先落常用层(机型/HUD/首页),再落敌机、Boss 与后期背景；开屏进度覆盖两层，玩家主动跳过后加载仍在后台继续。
   commonSources() {
-    const srcs = this.dynamicSources().concat(this.sources(this.manifest.player), this.sources(this.manifest.wingman));
+    const srcs = this.dynamicSources().concat(
+      this.sources(this.manifest.player), this.sources(this.manifest.wingman),
+      this.sources(this.manifest.title), this.sources(this.manifest.chip), this.sources(this.manifest.bonus), this.sources(this.manifest.event)
+    );
     // RG2:机装槽位图标——按用户要求排在飞机机身贴图之后加载(数组顺序即请求优先级,飞机模型看得见摸得着,机装要进机型选择页才用得到)
     if (typeof CONFIG !== "undefined" && CONFIG.gearSlots) for (const s of CONFIG.gearSlots) srcs.push("assets/images/ui/gear/icon-gear-" + s.key + ".png");
-    const titleKeys = ["button-map", "button-challenge", "button-rival", "button-ship", "wordmark", "vignette", "logo-glow", "subtitle", "footer-glow"];
-    for (const k of titleKeys) srcs.push("assets/images/ui/title/title-" + this.slug(k) + ".png");
     srcs.push(this.ageRatingSrc);   // GG25:适龄提示图标——常用层,和其余首屏必需素材一起统计进加载进度
     return Array.from(new Set(srcs)).filter(Boolean);
   },
@@ -209,21 +206,28 @@ const ImageAssets = {
   // GG14:静默重试——弱网/瞬时抖动导致的单张贴图加载失败,不该让这张图永久兜底成矢量图形。
   //   失败后间隔 retryDelay 重新赋值 img.src(强制浏览器重新发起请求)再试,最多 maxRetries 次,
   //   全程不打断/不提示玩家,成功了就正常继续,试完还失败才走原有的矢量兜底,行为对调用方完全透明
-  waitImageSettle(img) {
+  waitImageSettle(img, timeoutMs = 10000) {
     return new Promise(resolve => {
-      if (img.complete) { resolve(img.naturalWidth > 0); return; }
-      const done = (ok) => { img.removeEventListener("load", onLoad); img.removeEventListener("error", onError); resolve(ok); };
+      let settled = false, timer = null;
+      const done = (ok) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        img.removeEventListener("load", onLoad); img.removeEventListener("error", onError); resolve(ok);
+      };
       const onLoad = () => done(true);
       const onError = () => done(false);
+      if (img.complete) { done(img.naturalWidth > 0); return; }
       img.addEventListener("load", onLoad);
       img.addEventListener("error", onError);
+      timer = setTimeout(() => done(false), timeoutMs);
     });
   },
-  decode(img, maxRetries = 2, retryDelay = 650) {
+  decode(img, maxRetries = 2, retryDelay = 650, settleTimeout = 10000) {
     if (!img) return Promise.resolve(false);
     const key = img.src || "";
     if (key && this.decodeCache[key]) return this.decodeCache[key];
-    const attempt = (n) => this.waitImageSettle(img).then(ok => {
+    const attempt = (n) => this.waitImageSettle(img, settleTimeout).then(ok => {
       if (ok) return true;
       if (n >= maxRetries) return false;
       return new Promise(r => setTimeout(r, retryDelay)).then(() => { img.src = key; return attempt(n + 1); });
@@ -256,7 +260,7 @@ const ImageAssets = {
       this.manifest.player[shipKey] || this.manifest.player.balanced,
       this.manifest.wingman[shipKey] || this.manifest.wingman.balanced,
       "assets/images/ui/icons/icon-bomb.png",
-      "assets/images/ui/icons/icon-special-" + this.slug(ship && ship.specialType || "nuke") + ".png",
+      this.uiIconSrc("special-" + (ship && ship.specialType || "nuke")),
       "assets/images/ui/icons/icon-power-upgrade.png",
       "assets/images/ui/powerups/icon-powerup-power.png",
       "assets/images/ui/powerups/icon-powerup-heal.png",
@@ -308,10 +312,7 @@ const ImageAssets = {
     }
   },
   player(key) { return this.ready(this.manifest.player[key]); },
-  wingman(key) {
-    const src = this.manifest.wingman[key] || (key ? "assets/images/ships/player-wingman-" + this.slug(key) + ".png" : null);
-    return this.ready(src) || this.ready(this.manifest.wingman.balanced);
-  },
+  wingman(key) { return this.ready(this.manifest.wingman[key]) || this.ready(this.manifest.wingman.balanced); },
   enemy(type) { return this.ready(this.manifest.enemy[type]); },
   boss(index) { return this.ready(this.manifest.boss[index]); },
   background(world, layer) {
@@ -319,14 +320,18 @@ const ImageAssets = {
     return this.ready(bg && bg[layer]);
   },
   effect(key) { return this.ready("assets/images/effects/effect-" + this.slug(key) + ".png"); },
-  title(key) { return this.ready("assets/images/ui/title/title-" + this.slug(key) + ".png"); },
-  uiIcon(key) { return this.ready("assets/images/ui/icons/icon-" + this.slug(key) + ".png"); },
+  title(key) { return this.ready(this.manifest.title[this.slug(key)]); },
+  uiIconSrc(key) {
+    const slug = this.slug(key);
+    return this.preload.uiIcons.includes(slug) ? "assets/images/ui/icons/icon-" + slug + ".png" : "";
+  },
+  uiIcon(key) { const src = this.uiIconSrc(key); return src ? this.ready(src) : null; },
   uiPowerup(key) { return this.ready("assets/images/ui/powerups/icon-powerup-" + this.slug(key) + ".png"); },
-  uiChip(key) { return this.ready("assets/images/ui/chips/icon-chip-" + this.slug(key) + ".png"); },
-  uiBonus(key) { return this.ready("assets/images/ui/bonuses/icon-bonus-" + this.slug(key) + ".png"); },
+  uiChip(key) { return this.ready(this.manifest.chip[this.slug(key)]); },
+  uiBonus(key) { return this.ready(this.manifest.bonus[this.slug(key)]); },
   // RG2:机装槽位图标——文件名直接用槽位 key(wing/engine/...),不走 slug(),槽位 key 本身已经是合法文件名字符
   gear(slotKey) { return this.ready("assets/images/ui/gear/icon-gear-" + slotKey + ".png"); },
-  uiEvent(key) { return this.ready("assets/images/ui/events/icon-event-" + this.slug(key) + ".png"); },
+  uiEvent(key) { return this.ready(this.manifest.event[this.slug(key)]); },
   draw(ctx, img, x, y, size, rotation = 0) {
     if (!img) return false;
     const box = this.bounds(img) || { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };

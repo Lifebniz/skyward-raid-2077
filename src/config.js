@@ -422,7 +422,8 @@ const CONFIG = {
       ],
     },
   },
-  challenge: { rulesVersion: 96, splits: [30, 60, 120] },
+  // RIVAL/每日挑战统一停用持久机装，确保挑战码双方只比较同种子、同机型下的操作与构筑。
+  challenge: { rulesVersion: 97, splits: [30, 60, 120], gearEnabled: false },
 
   combo: { timeout: 2.5, scoreStep: 0.15, maxMult: 5, resetOnHit: false },
 

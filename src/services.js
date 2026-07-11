@@ -138,22 +138,67 @@ const Haptics = {
 /* =====================================================================
  * 1.57) 设置(localStorage 持久化:音量 / 音效 / 震动 / 上次难度)
  * ===================================================================== */
+const SETTINGS_DEFAULTS = {
+  sfxVolume: 0.8, musicVolume: 0.7, sound: true, music: true, haptics: true,
+  diff: "normal", endlessDiff: "normal", ship: "balanced",
+  autoNext: false, autoSpecial: false, autoLaser: false, hideWings: false,
+  seenTutorial: false, controlMode: "drag", mpSide: "right", mpTop: 8,
+  gearStarterGranted: false,
+};
 const Settings = {
   key: "kzts_settings",
   // JJ:音效/音乐拆成独立音量+独立开关(原来共用一个 volume,音乐音效没法分别调)
-  data: { sfxVolume: 0.8, musicVolume: 0.7, sound: true, music: true, haptics: true, diff: "normal", endlessDiff: "normal", ship: "balanced", autoNext: false, autoSpecial: false, autoLaser: false, hideWings: false, seenTutorial: false, controlMode: "drag", mpSide: "right", mpTop: 8,
-    gearOwned: [], gearLoadout: {}, gearStarterGranted: false },   // RG:机装系统——已拾取的装备key列表 / 8槽位当前装备 / 是否已发过新手礼包(制式全套)
-  load() {
-    try {
-      const s = JSON.parse(localStorage.getItem(this.key));
-      if (s) {
-        // JJ:旧存档只有单一 volume 字段,迁移到新的 sfxVolume/musicVolume,避免老玩家音量突然被清零
-        if (s.volume != null && s.sfxVolume == null) s.sfxVolume = s.volume;
-        if (s.volume != null && s.musicVolume == null) s.musicVolume = s.volume;
-        Object.assign(this.data, s);
-        if (!CONFIG.endlessDifficulties[this.data.endlessDiff]) this.data.endlessDiff = "normal";
+  data: Object.assign({}, SETTINGS_DEFAULTS, { gearOwned: [], gearLoadout: {} }),
+  // localStorage 和导入存档都属于不可信边界：旧版本枚举、手工修改或局部损坏不能把地图/机装页带崩。
+  normalize(raw) {
+    const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    const bool = (key) => typeof src[key] === "boolean" ? src[key] : SETTINGS_DEFAULTS[key];
+    const number = (value, fallback, lo, hi) => {
+      const n = value == null ? NaN : Number(value);
+      return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
+    };
+    const has = (obj, key) => typeof key === "string" && Object.prototype.hasOwnProperty.call(obj || {}, key);
+    const legacyVolume = src.volume;
+    const slots = (CONFIG && CONFIG.gearSlots) || [], tiers = (CONFIG && CONFIG.gearTiers) || [];
+    const slotKeys = new Set(slots.map(s => s.key)), tierKeys = new Set(tiers.map(t => t.key));
+    const validGear = (item, slotKey = null) => {
+      if (typeof item !== "string") return false;
+      const p = item.split("_");
+      return p.length === 2 && slotKeys.has(p[0]) && tierKeys.has(p[1]) && (!slotKey || p[0] === slotKey);
+    };
+    const gearOwned = Array.isArray(src.gearOwned)
+      ? Array.from(new Set(src.gearOwned.filter(item => validGear(item))))
+      : [];
+    const gearLoadout = {};
+    if (src.gearLoadout && typeof src.gearLoadout === "object" && !Array.isArray(src.gearLoadout)) {
+      for (const slot of slots) {
+        const item = src.gearLoadout[slot.key];
+        if (validGear(item, slot.key) && gearOwned.includes(item)) gearLoadout[slot.key] = item;
       }
+    }
+    const fullStarterSet = slots.every(slot => gearOwned.includes(slot.key + "_t1"));
+    return {
+      sfxVolume: number(src.sfxVolume != null ? src.sfxVolume : legacyVolume, SETTINGS_DEFAULTS.sfxVolume, 0, 1),
+      musicVolume: number(src.musicVolume != null ? src.musicVolume : legacyVolume, SETTINGS_DEFAULTS.musicVolume, 0, 1),
+      sound: bool("sound"), music: bool("music"), haptics: bool("haptics"),
+      diff: has(CONFIG.difficulties, src.diff) ? src.diff : SETTINGS_DEFAULTS.diff,
+      endlessDiff: has(CONFIG.endlessDifficulties, src.endlessDiff) ? src.endlessDiff : SETTINGS_DEFAULTS.endlessDiff,
+      ship: has(CONFIG.ships, src.ship) ? src.ship : SETTINGS_DEFAULTS.ship,
+      autoNext: bool("autoNext"), autoSpecial: bool("autoSpecial"), autoLaser: bool("autoLaser"),
+      hideWings: bool("hideWings"), seenTutorial: bool("seenTutorial"),
+      controlMode: src.controlMode === "joystick" || src.controlMode === "drag" ? src.controlMode : SETTINGS_DEFAULTS.controlMode,
+      mpSide: src.mpSide === "left" || src.mpSide === "right" ? src.mpSide : SETTINGS_DEFAULTS.mpSide,
+      mpTop: number(src.mpTop, SETTINGS_DEFAULTS.mpTop, 3, 92),
+      gearOwned, gearLoadout,
+      gearStarterGranted: src.gearStarterGranted === true && fullStarterSet,
+    };
+  },
+  load() {
+    let saved = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(this.key));
     } catch (e) {}
+    this.data = this.normalize(saved);
     this.apply();
   },
   save() { try { localStorage.setItem(this.key, JSON.stringify(this.data)); } catch (e) {} },
@@ -234,7 +279,7 @@ const Challenge = {
     return (CONFIG.challenge && CONFIG.challenge.rulesVersion) || 1;
   },
   routeSignature(seed, rulesVersion) {
-    const e = CONFIG.endless || {}, p = CONFIG.powerup || {}, spawn = e.spawn || {}, boss = e.boss || {}, hell = (CONFIG.endlessDifficulties || {}).hell || {};
+    const e = CONFIG.endless || {}, p = CONFIG.powerup || {}, spawn = e.spawn || {}, boss = e.boss || {}, hell = (CONFIG.endlessDifficulties || {}).hell || {}, challenge = CONFIG.challenge || {};
     const splits = CONFIG.challenge && CONFIG.challenge.splits ? CONFIG.challenge.splits : [30, 60, 120];
     const enemy = CONFIG.enemy || {}, skillKeys = ["gunner", "beacon", "mineLayer", "tether"];
     const skillSig = skillKeys.map(k => {
@@ -254,6 +299,7 @@ const Challenge = {
       skillSig,
       eventSig,
       splits.join(","),
+      challenge.gearEnabled === false ? "challenge-gear-off" : "challenge-gear-on",
     ];
     const r = this.rng(parts.join("|")), probes = [];
     for (let i = 0; i < 12; i++) probes.push(Math.floor(r() * 65536).toString(36));
