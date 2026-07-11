@@ -144,11 +144,13 @@ const SETTINGS_DEFAULTS = {
   autoNext: false, autoSpecial: false, autoLaser: false, hideWings: false,
   seenTutorial: false, controlMode: "drag", mpSide: "right", mpTop: 8,
   gearStarterGranted: false,
+  // RG12:经济系统——晶石(crystals)/体力(stamina,staminaUpdatedAt 是懒计算回复用的时间戳基准)
+  crystals: 0, stamina: 100, staminaUpdatedAt: 0,
 };
 const Settings = {
   key: "kzts_settings",
   // JJ:音效/音乐拆成独立音量+独立开关(原来共用一个 volume,音乐音效没法分别调)
-  data: Object.assign({}, SETTINGS_DEFAULTS, { gearInventory: [], gearLoadout: {} }),
+  data: Object.assign({}, SETTINGS_DEFAULTS, { gearInventory: [], gearLoadout: {}, gearStones: { reroll: 0, lock: 0, growth: 0 } }),
   // RG9:老存档的机装是"槽位+品阶"固定值模型(itemKey 数组或数量映射,没有独立实例),迁移到"每件独立随机实例"模型——
   //   按老档记录的件数重新掉率式地各roll一份全新实例(旧的固定数值本来就要被这次改版淘汰,不强求数值对得上,
   //   只保证换代后玩家手上的装备数量/装备中的槽位不丢);t1(制式)老物品统一按 t2(精良)品阶重roll,
@@ -221,6 +223,17 @@ const Settings = {
       mpTop: number(src.mpTop, SETTINGS_DEFAULTS.mpTop, 3, 92),
       gearInventory, gearLoadout,
       gearStarterGranted: src.gearStarterGranted === true && gearInventory.length > 0,
+      // RG12:晶石/体力/刷新石——数字夹到合理范围,体力上限跟着 CONFIG.economy.staminaMax 走(不是写死的常量),
+      //   staminaUpdatedAt 不合法(非数字/未来时间戳)时归零,让 game.staminaCurrent() 按"从没记录过"重新起算,
+      //   不会因为一个坏时间戳导致回复计算长期算错。
+      crystals: Math.max(0, Math.round(number(src.crystals, 0, 0, 1e9))),
+      stamina: number(src.stamina, SETTINGS_DEFAULTS.stamina, 0, (CONFIG.economy && CONFIG.economy.staminaMax) || 100),
+      staminaUpdatedAt: Number.isFinite(src.staminaUpdatedAt) && src.staminaUpdatedAt > 0 && src.staminaUpdatedAt <= Date.now() ? src.staminaUpdatedAt : 0,
+      gearStones: {
+        reroll: Math.max(0, Math.round(number(src.gearStones && src.gearStones.reroll, 0, 0, 1e6))),
+        lock: Math.max(0, Math.round(number(src.gearStones && src.gearStones.lock, 0, 0, 1e6))),
+        growth: Math.max(0, Math.round(number(src.gearStones && src.gearStones.growth, 0, 0, 1e6))),
+      },
     };
   },
   load() {

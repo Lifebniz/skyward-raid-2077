@@ -496,6 +496,26 @@ const CONFIG = {
     { key: "ACE", min: 0.98, color: "#ffd43b" },
   ],
 
+  // RG12:经济系统(商店/体力/扫荡/词条刷新石)——首版数值,先用简单的整数方便后续按实际游玩节奏调整。
+  //   晶石(crystals)是唯一货币,关卡结算/扫荡都按 crystalsForLevel() 给,商店里用来买体力包和三种刷新石。
+  //   体力用真实时间回复(staminaUpdatedAt 记上次结算的时间戳,懒计算,不需要常驻计时器)。
+  economy: {
+    crystalBase: 15, crystalPerWorld: 3, crystalBossMult: 1.5,
+    staminaMax: 100, staminaRegenMinutes: 4, staminaCostLevel: 8, staminaCostSweep: 8,
+  },
+  // RG12:商店货架——固定 4 件(体力包 + 三种刷新石),每次购买都是"+1件"(体力包例外,直接回体力值)。
+  shopItems: [
+    { key: "stamina30", kind: "stamina", amount: 30, price: 50, name: "体力补给包", desc: "立即恢复30点体力", color: "#38d9a9" },
+    { key: "rerollStone", kind: "stone", stoneKey: "reroll", price: 40, name: "刷新石", desc: "随机刷新所选装备的3条副属性数值(锁定的不受影响)", color: "#4dabf7" },
+    { key: "lockStone", kind: "stone", stoneKey: "lock", price: 30, name: "锁定石", desc: "锁定/解锁一条副属性,锁定后刷新石不会改动它", color: "#ffd43b" },
+    { key: "growthStone", kind: "stone", stoneKey: "growth", price: 60, name: "增长石", desc: "让所选装备的3条副属性数值全部提升一截", color: "#51cf66" },
+  ],
+  gearStoneDefs: {
+    reroll: { name: "刷新石", color: "#4dabf7" },
+    lock:   { name: "锁定石", color: "#ffd43b" },
+    growth: { name: "增长石", color: "#51cf66" },
+  },
+
   // 难度档:dmgMult 敌方伤害倍率 / fireMult 敌方射击间隔倍率(>1 更慢=更易)
   //          bossHpMult BOSS 血量倍率 / invuln 玩家受击无敌时长 / startBombs 初始炸弹
   // X3:itemDropMult(仅 BOSS 关卡的自动掉落间隔倍率,>1 更慢更稀有)/ preBossMobMult(标了 preBoss:true 的波次数量倍率)

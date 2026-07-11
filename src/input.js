@@ -72,6 +72,7 @@ canvas.addEventListener("pointerdown", (e) => {
     if (game.titleSettingsHit(p.x, p.y)) { game._resetArmed = false; game._settingsReturnState = "title"; game.state = "settings"; return; }
     if (game.titleCodexHit(p.x, p.y)) { game.toCodex(); return; }
     if (game.titleHelpHit(p.x, p.y)) { game.toTutorial(); return; }
+    if (game.titleShopHit(p.x, p.y)) { game.toShop(); return; }
     // GG6:四个入口按钮改成"按下先按压反馈,松开时若手指/鼠标还在同一个按钮上才真正触发"——这样手机点击时
     //   能看到按下缩小的反馈,而不是 pointerdown 一到就立刻跳转、动画一帧都来不及播完
     const key = game.titleButtonKeyAt(p.x, p.y);
@@ -97,6 +98,7 @@ canvas.addEventListener("pointerdown", (e) => {
   if (game.state === "codex") { game.codexPointerDown(p.x, p.y); if (game._codexDragging || game._codexUpgradeDragging || game._equipDetailDragging) captureUiPointer(e); return; }
   if (game.state === "tutorial") { game.tutorialPointerDown(p.x, p.y); if (game._tutorialDragging) captureUiPointer(e); return; }
   if (game.state === "map") { game.mapPointerDown(p.x, p.y); if (game._mapDragging) captureUiPointer(e); return; }
+  if (game.state === "shop") { game.shopPointerDown(p.x, p.y); return; }
   if (game.state === "chipselect") {
     const action = game.chipActionHit(p.x, p.y);
     if (action === "reroll") game.rerollChipDraft();

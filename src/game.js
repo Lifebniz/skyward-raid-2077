@@ -69,6 +69,7 @@ const game = {
   rng() { return this._rng ? this._rng() : Math.random(); },
   pick(list) { return list[(this.rng() * list.length) | 0]; },
   toTitle() { this.state = "title"; Music.play(); this._titleHoverKey = null; this._titlePressKey = null; },
+  toShop() { this.state = "shop"; this._shopMsg = ""; },
   // MM2:进图自动缓动滚动到"当前最新解锁关卡"所在战区——isUnlocked 对已解锁链条上的每一关都成立,取最大下标就是玩家的推进前沿,
   //   通关到第四、五战区的老玩家不用再每次手动往下拖
   toMap() {
@@ -180,6 +181,14 @@ const game = {
   },
   // RG11:装备此件/卸下按钮改到整个弹窗底部居中(不再只在右侧详情栏内居中,原来偏右显得不平衡);
   //   左上角另开一个独立的关闭按钮,不用非得记得"点弹窗外面才能关"。
+  // RG12:详情面板内固定布局的纵向坐标——主属性行/副属性3行/刷新+增长石按钮行,画和点全从这几个方法算,
+  //   不在两个地方各写一遍数字导致画的和点得到的对不上
+  equipDetailMainRowY() { return this.equipDetailPaneRect().y + 96; },
+  equipDetailSubRowY(idx) { return this.equipDetailMainRowY() + 30 + 20 + idx * 30; },
+  equipDetailStoneRowY() { return this.equipDetailSubRowY(3) + 10; },
+  equipDetailSubLockRect(idx) { const y = this.equipDetailSubRowY(idx); return { x: this.equipDetailPaneRect().x, y: y - 17, w: 20, h: 20 }; },
+  equipRerollButtonRect() { const pane = this.equipDetailPaneRect(), y = this.equipDetailStoneRowY(); return { x: pane.x, y, w: (pane.w - 8) / 2, h: 34 }; },
+  equipGrowthButtonRect() { const pane = this.equipDetailPaneRect(), y = this.equipDetailStoneRowY(); return { x: pane.x + (pane.w - 8) / 2 + 8, y, w: (pane.w - 8) / 2, h: 34 }; },
   equipDetailActionRect() {
     const r = this.equipPickerRect(), w = 240, h = 48;
     return { x: r.x + r.w / 2 - w / 2, y: r.y + r.h - h - 14, w, h };
@@ -193,6 +202,24 @@ const game = {
     const inR = (rr) => px >= rr.x && px <= rr.x + rr.w && py >= rr.y && py <= rr.y + rr.h;
     if (!inR(r)) { this._equipPickerSlot = null; this._equipDetailSelId = undefined; return; }   // 点弹窗外面 = 取消,不改动装备
     if (inR(this.equipCloseRect())) { this._equipPickerSlot = null; this._equipDetailSelId = undefined; return; }
+    // RG12:刷新石/增长石/锁定石操作——只在选中了具体实例时才响应(没选中就没有"这一件"可以操作)
+    const selInst = this.gearInstanceById(this._equipDetailSelId);
+    if (selInst) {
+      if (inR(this.equipRerollButtonRect())) {
+        this._gearStoneMsg = this.gearApplyReroll(selInst.id) ? "已刷新未锁定的副属性" : "刷新石不足";
+        return;
+      }
+      if (inR(this.equipGrowthButtonRect())) {
+        this._gearStoneMsg = this.gearApplyGrowth(selInst.id) ? "副属性数值已提升" : "增长石不足";
+        return;
+      }
+      for (let si = 0; si < selInst.subs.length; si++) {
+        if (inR(this.equipDetailSubLockRect(si))) {
+          this._gearStoneMsg = this.gearToggleSubLock(selInst.id, si) ? (selInst.subs[si].locked ? "已锁定" : "已解锁") : "锁定石不足";
+          return;
+        }
+      }
+    }
     const actionRect = this.equipDetailActionRect();
     if (inR(actionRect)) {
       const loadout = Object.assign({}, Settings.data.gearLoadout);
@@ -231,7 +258,7 @@ const game = {
     this._equipDetailDragging = false;
   },
   openEquipPicker(slotKey) {
-    this._equipPickerSlot = slotKey; this._equipDetailScrollY = 0; this._equipDetailDragging = false;
+    this._equipPickerSlot = slotKey; this._equipDetailScrollY = 0; this._equipDetailDragging = false; this._gearStoneMsg = "";
     this._equipDetailSelId = this.gearEquipped(slotKey) || (this.gearSlotInventory(slotKey)[0] || {}).id || null;
   },
   // GG:所有区块的位置都从这两个矩形派生,保证"画出来的"和"点得到的"永远对得上,也不会再有下方按钮/提示语重叠的问题
@@ -941,6 +968,7 @@ const game = {
     this.topScores = Leaderboard.submit(this.levelDef().id, r.final);
     Achievements.checkLevelClear({ hpRatio: r.hpRatio, bombsUsed: this._bombsUsedThisLevel, maxCombo: this.maxCombo });   // OO
     this.farming = false;
+    this.crystalsAward(this.crystalsForLevel(this.levelDef()));   // RG12:结算即发晶石,和机装掉落判定同一次结算里一起给
     // RG7:结算即按本关所在战区判定机装掉落——BOSS关卡可能精良/魂魄双出,rollGearDrop 返回数组(0~2件);
     //   advance(自动进下一关)场景没有结算画面停留,改用横幅在下一关开场展示。
     const drops = this.rollGearDrop(this.world).map(award => Object.assign({ key: award.instance.id, name: this.gearItemName(award.instance), isNew: true }, award));
@@ -1024,9 +1052,105 @@ const game = {
       const subSlot = this.pick(CONFIG.gearSlots).key;
       const subBase = (CONFIG.gearValues[subSlot] || {})[tierKey] || 0;
       const value = subBase * roll.subMult * (roll.subMin + this.rng() * (roll.subMax - roll.subMin));
-      subs.push({ stat: subSlot, value });
+      subs.push({ stat: subSlot, value, locked: false });   // RG12:locked 供词条刷新石用——锁定的副属性不会被刷新石改动
     }
     return { id: this.gearNewId(), slot: slotKey, tier: tierKey, main, subs };
+  },
+  // RG12:经济系统——晶石(唯一货币)/体力(真实时间懒回复)/词条刷新石(3种,库存计数)。
+  //   体力不用常驻计时器:staminaUpdatedAt 记"上次结算到的时间点",每次要读体力时才按经过的分钟数补发,
+  //   补发完把 staminaUpdatedAt 往前推(补发了几分钟就推几分钟,余数留到下次,不会因为频繁调用而丢进度)。
+  crystals() { return Settings.data.crystals || 0; },
+  crystalsAward(n) { if (n <= 0) return; Settings.set("crystals", this.crystals() + Math.round(n)); },
+  crystalsSpend(n) { if (this.crystals() < n) return false; Settings.set("crystals", this.crystals() - n); return true; },
+  crystalsForLevel(levelDef) {
+    const cfg = CONFIG.economy, base = cfg.crystalBase + (levelDef.world || 1) * cfg.crystalPerWorld;
+    return Math.round(this.levelIsBoss(levelDef) ? base * cfg.crystalBossMult : base);
+  },
+  levelIsBoss(levelDef) { return !!(levelDef && levelDef.script && levelDef.script.some(s => s.boss != null)); },
+  staminaMax() { return CONFIG.economy.staminaMax; },
+  staminaCurrent() {
+    const cfg = CONFIG.economy, now = Date.now();
+    let stamina = Settings.data.stamina != null ? Settings.data.stamina : cfg.staminaMax;
+    let at = Settings.data.staminaUpdatedAt || 0;
+    if (stamina >= cfg.staminaMax) { if (at !== now) Settings.set("staminaUpdatedAt", now); return cfg.staminaMax; }
+    if (!at) { Settings.set("staminaUpdatedAt", now); return stamina; }
+    const regenMs = cfg.staminaRegenMinutes * 60000;
+    const ticks = Math.floor((now - at) / regenMs);
+    if (ticks <= 0) return stamina;
+    stamina = Math.min(cfg.staminaMax, stamina + ticks);
+    Settings.data.stamina = stamina; Settings.data.staminaUpdatedAt = at + ticks * regenMs; Settings.save();
+    return stamina;
+  },
+  staminaSpend(n) {
+    if (this.staminaCurrent() < n) return false;
+    Settings.set("stamina", Settings.data.stamina - n);
+    return true;
+  },
+  staminaAward(n) { Settings.set("stamina", Math.min(this.staminaMax(), this.staminaCurrent() + n)); },
+  gearStoneCount(key) { return (Settings.data.gearStones && Settings.data.gearStones[key]) || 0; },
+  gearStoneAward(key, n = 1) {
+    const stones = Object.assign({}, Settings.data.gearStones);
+    stones[key] = (stones[key] || 0) + n;
+    Settings.set("gearStones", stones);
+  },
+  gearStoneConsume(key, n = 1) {
+    if (this.gearStoneCount(key) < n) return false;
+    const stones = Object.assign({}, Settings.data.gearStones);
+    stones[key] = stones[key] - n;
+    Settings.set("gearStones", stones);
+    return true;
+  },
+  // RG12:刷新石——重roll所有未锁定副属性的数值(类型不变,只是数值在原区间内重新抽);消耗1件,库存不够直接失败不扣。
+  gearApplyReroll(instanceId) {
+    const inst = this.gearInstanceById(instanceId); if (!inst) return false;
+    if (!this.gearStoneConsume("reroll", 1)) return false;
+    const roll = CONFIG.gearRoll;
+    inst.subs.forEach(s => {
+      if (s.locked) return;
+      const subBase = (CONFIG.gearValues[s.stat] || {})[inst.tier] || 0;
+      s.value = subBase * roll.subMult * (roll.subMin + this.rng() * (roll.subMax - roll.subMin));
+    });
+    Settings.save();
+    return true;
+  },
+  // RG12:增长石——3条副属性数值一律往区间上限推一截(不分锁没锁,纯正面效果不需要锁定语义介入),消耗1件。
+  gearApplyGrowth(instanceId) {
+    const inst = this.gearInstanceById(instanceId); if (!inst) return false;
+    if (!this.gearStoneConsume("growth", 1)) return false;
+    const roll = CONFIG.gearRoll, growStep = 0.12;   // 每次朝区间上限推进约12%的(max-min)跨度,不会一次顶满
+    inst.subs.forEach(s => {
+      const subBase = (CONFIG.gearValues[s.stat] || {})[inst.tier] || 0;
+      const min = subBase * roll.subMult * roll.subMin, max = subBase * roll.subMult * roll.subMax;
+      s.value = Math.min(max, s.value + (max - min) * growStep);
+    });
+    Settings.save();
+    return true;
+  },
+  // RG12:锁定石——切换某条副属性的锁定态(锁定后 gearApplyReroll 会跳过它),消耗1件不分锁定/解锁方向。
+  gearToggleSubLock(instanceId, subIdx) {
+    const inst = this.gearInstanceById(instanceId); if (!inst || !inst.subs[subIdx]) return false;
+    if (!this.gearStoneConsume("lock", 1)) return false;
+    inst.subs[subIdx].locked = !inst.subs[subIdx].locked;
+    Settings.save();
+    return true;
+  },
+  // RG12:购买商店货架里的一件——体力包直接回体力,石头类进对应库存,统一走 crystalsSpend 判定余额。
+  shopBuy(itemKey) {
+    const item = CONFIG.shopItems.find(i => i.key === itemKey); if (!item) return false;
+    if (!this.crystalsSpend(item.price)) return false;
+    if (item.kind === "stamina") this.staminaAward(item.amount);
+    else if (item.kind === "stone") this.gearStoneAward(item.stoneKey, 1);
+    return true;
+  },
+  // RG12:扫荡——只对已通关的普通关卡开放,按结算同款公式发晶石+机装掉率判定,不真的进战斗、不影响分数/排行榜。
+  sweepLevel(i) {
+    const levelDef = LEVELS[i]; if (!levelDef || levelDef.endless) return null;
+    if (!Progress.isCleared(levelDef.id)) return null;
+    if (!this.staminaSpend(CONFIG.economy.staminaCostSweep)) return null;
+    const crystals = this.crystalsForLevel(levelDef);
+    this.crystalsAward(crystals);
+    const drops = this.rollGearDrop(levelDef.world, this.levelIsBoss(levelDef));
+    return { crystals, drops };
   },
   gearEquipped(slotKey) { return (Settings.data.gearLoadout || {})[slotKey] || null; },
   gearEquippedInstance(slotKey) { return this.gearInstanceById(this.gearEquipped(slotKey)); },
@@ -1193,12 +1317,14 @@ const game = {
   // RG7:结算掉落判定——关卡所在战区(world)直接决定掉落哪个槽位(8战区对应8槽位);精良(t2)任何关卡结算都判定一次,
   //   魂能(t3)只有 BOSS 关卡才额外判定一次,两次判定互相独立,BOSS 关卡因此可能同一次结算精良/魂能双出。
   //   返回数组(可能 0/1/2 个 award 结果),不再是难度相关的单件掉落。
-  rollGearDrop(worldN) {
+  // RG12:isBoss 显式传参(默认取 this.isBossLevel())——扫荡场景没有"当前关卡"这个战斗中状态,
+  //   必须让调用方直接告诉这次判定按不按 BOSS 关卡走,不能偷偷复用可能是别的关卡的战斗内状态。
+  rollGearDrop(worldN, isBoss = this.isBossLevel()) {
     const slot = CONFIG.gearSlots[(worldN - 1 + CONFIG.gearSlots.length) % CONFIG.gearSlots.length];
     if (!slot) return [];
     const cfg = CONFIG.gearDrop, drops = [];
     if (Math.random() < cfg.fineChance) drops.push(this.gearAward(slot.key, "t2"));
-    if (this.isBossLevel() && Math.random() < cfg.soulChance) drops.push(this.gearAward(slot.key, "t3"));
+    if (isBoss && Math.random() < cfg.soulChance) drops.push(this.gearAward(slot.key, "t3"));
     return drops;
   },
   // RG8:新手礼包——每个用户首次启动免费拿一整套魂能(t3,顶档)装备,8槽位全配好。只发一次(存档标记)。
@@ -3000,6 +3126,7 @@ const game = {
     if (this.state === "codex") { this._drawFaded(ctx, () => this.drawCodex(ctx)); return; }
     if (this.state === "tutorial") { this._drawFaded(ctx, () => this.drawTutorial(ctx)); return; }
     if (this.state === "map") { this._drawFaded(ctx, () => this.drawMap(ctx)); return; }
+    if (this.state === "shop") { this._drawFaded(ctx, () => this.drawShop(ctx)); return; }
     this.drawLasers(ctx);   // Y:镭射(危险柱)画在敌人/玩家之下,让玩家能看清自己是否站在范围内
     this.drawGravityPulses(ctx);
     this.powerups.forEach(o => o.draw(ctx));
@@ -3382,6 +3509,9 @@ const game = {
   titleCodexHit(px, py) { const r = this.titleCodexRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
   titleHelpRect() { return { x: 16, y: 76, w: 92, h: 40 }; },
   titleHelpHit(px, py) { const r = this.titleHelpRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
+  // RG12:商店入口——和设置同一列,叠在设置正下方(和左侧图鉴/帮助的上下叠放对称)
+  titleShopRect() { return { x: CONFIG.WIDTH - 108, y: 76, w: 92, h: 40 }; },
+  titleShopHit(px, py) { const r = this.titleShopRect(); return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h; },
   // GG6:插图直接作为按钮主体——不再画玻璃卡片/边框,插图自带中英文字样,按统一宽度(titleButtonImgW)绘制,
   //   保证四张视觉大小一致(之前用各自的等比 contain 会让矮图形先撑满高度,视觉宽度就跟着各不相同)。
   //   悬停/按下时按 _titleBtnScale 缩放,阻尼缓动不做机械式瞬变(见 update() 里的追赶逻辑)。
@@ -3460,6 +3590,12 @@ const game = {
     this.drawTitleSmallButton(ctx, this.titleSettingsRect(), "settings", "⚙ 设置", "设置");
     this.drawTitleSmallButton(ctx, this.titleCodexRect(), "codex", "📖 图鉴", "图鉴");
     this.drawTitleSmallButton(ctx, this.titleHelpRect(), "help", "？帮助", "帮助");
+    this.drawTitleSmallButton(ctx, this.titleShopRect(), "shop", "🛒 商店", "商店");
+    // RG12:体力/晶石常驻小字——贴在商店入口下方,首页一眼看到手头资源
+    ctx.textAlign = "right"; ctx.font = "11px 'Segoe UI', sans-serif";
+    ctx.fillStyle = "#38d9a9"; ctx.fillText("体力 " + Math.floor(this.staminaCurrent()) + "/" + this.staminaMax(), CONFIG.WIDTH - 20, 130);
+    ctx.fillStyle = "#ffd43b"; ctx.fillText("晶石 " + this.crystals(), CONFIG.WIDTH - 20, 144);
+    ctx.textAlign = "center";
     // S:四个同尺寸大按钮 —— 开始 / 无尽 / 挑战码 / 机型选择(GG3:插图化,说明文字挪到卡片下方)
     const rMap = this.titleStartRect(), rEndless = this.titleEndlessRect(), rChallenge = this.titleChallengeRect(), rShip = this.titleShipRect();
     this.drawTitleImageButton(ctx, rMap, "map", { label: "关卡地图 MAP", color: "#38d9a9", active: true, font: 24, radius: 16 });
@@ -3794,8 +3930,26 @@ const game = {
       let y = pane.y + 76;
       ctx.fillStyle = "#868e96"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText("主属性", pane.x, y); y += 20;
       this.drawGearStatRow(ctx, pane.x, y, pane.w, rg.main, true); y += 30;
-      ctx.fillStyle = "#868e96"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText("副属性", pane.x, y); y += 20;
-      rg.subs.forEach(s => { this.drawGearStatRow(ctx, pane.x, y, pane.w, s, false); y += 30; });
+      ctx.fillStyle = "#868e96"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText("副属性(点左侧图标锁定/解锁)", pane.x, y); y += 20;
+      // RG12:每条副属性左侧一个小锁图标——点击消耗1件锁定石切换锁定态,锁定后刷新石不会碰它
+      rg.subs.forEach((s, si) => {
+        const lockRect = this.equipDetailSubLockRect(si), locked = !!selInst.subs[si].locked;
+        const lcx = lockRect.x + lockRect.w / 2, lcy = lockRect.y + lockRect.h / 2 + 2;
+        ctx.save();
+        ctx.strokeStyle = locked ? "#ffd43b" : "rgba(255,255,255,.4)"; ctx.lineWidth = 1.6;
+        ctx.fillStyle = locked ? UI.rgba("#ffd43b", .3) : "rgba(255,255,255,.06)";
+        UI.roundRect(ctx, lcx - 6, lcy - 5, 12, 9, 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(lcx, lcy - 5, 4, Math.PI, 0); ctx.stroke();
+        ctx.restore();
+        this.drawGearStatRow(ctx, pane.x + 22, y, pane.w - 22, s, false);
+        y += 30;
+      });
+      // RG12:刷新石/增长石操作按钮——库存为0时置灰但仍可点(点了会走"晶石不足"式的失败反馈,不做静默吞点击)
+      const rerollR = this.equipRerollButtonRect(), growthR = this.equipGrowthButtonRect();
+      UI.button(ctx, rerollR, { label: "刷新副条 ×" + this.gearStoneCount("reroll"), color: "#4dabf7", active: this.gearStoneCount("reroll") > 0, font: 12, radius: 8 });
+      UI.button(ctx, growthR, { label: "副条增长 ×" + this.gearStoneCount("growth"), color: "#51cf66", active: this.gearStoneCount("growth") > 0, font: 12, radius: 8 });
+      ctx.fillStyle = "#868e96"; ctx.font = "10px 'Segoe UI', sans-serif"; ctx.fillText("锁定石 ×" + this.gearStoneCount("lock"), pane.x, rerollR.y + rerollR.h + 16);
+      if (this._gearStoneMsg) { ctx.fillStyle = "#ffd43b"; ctx.fillText(this._gearStoneMsg, pane.x, rerollR.y + rerollR.h + 30); }
     }
     // RG11:装备此件/卸下按钮——整个弹窗底部居中(不再只在右侧栏内偏右居中)
     const action = this.equipDetailActionRect();
@@ -4181,6 +4335,9 @@ const game = {
   mapDiffRect(i) { return this.mapRowRect(i, 118, 3); },
   mapShipRect(i) { return this.mapRowRect(i, 192, CONFIG.shipOrder.length); },
   mapBackRect() { return { x: 20, y: 28, w: 90, h: 36 }; },
+  // RG12:扫荡模式切换——挪到标题贴图下方右侧(和返回按钮同一行放不下,会和"关卡地图"贴图挤在一起);
+  //   再往左让一截,不然会撞上联机浮标(贴右边缘的圆形收起态图标,默认停在页面顶部8%高度附近)
+  mapSweepToggleRect() { return { x: CONFIG.WIDTH - 150, y: 76, w: 100, h: 32 }; },
   // MM:节点滚动区域 —— top 以下、bottom 以上这段可以纵向拖动;世界数增多超出这段高度时 mapMaxScroll()>0 才会真的动起来
   mapViewportRect() { return { top: 296, bottom: CONFIG.HEIGHT - 6 }; },
   mapContentRange() {
@@ -4197,6 +4354,7 @@ const game = {
   mapPointerDown(px, py) {
     const inR = (r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
     if (inR(this.mapBackRect())) { this.toTitle(); return; }
+    if (inR(this.mapSweepToggleRect())) { this._mapSweepMode = !this._mapSweepMode; return; }
     const dk = ["easy", "normal", "hard"];
     for (let i = 0; i < 3; i++) if (inR(this.mapDiffRect(i))) { this.setDiff(dk[i]); return; }
     const sk = CONFIG.shipOrder;
@@ -4226,9 +4384,25 @@ const game = {
     }
   },
   // NN:从地图点击关卡节点进入对局,附带一个从点击处展开的聚焦过渡(替代直接瞬切)
+  // RG12:普通关卡进入要花体力(无尽挑战暂不接入体力门槛,单独一套难度选择/结算体系,先不动它);
+  //   扫荡模式下点已通关的关卡直接结算,不切场景、不消耗过渡动画。
   enterLevelFromMap(i, screenX, screenY) {
-    if (LEVELS[i].endless) this.startEndless({ lite: true, from: "map" });
-    else this.startLevel(i);
+    const levelDef = LEVELS[i];
+    if (levelDef.endless) {
+      this.startEndless({ lite: true, from: "map" });
+      this._levelTransX = screenX; this._levelTransY = screenY; this._levelTransT = 0.0001;
+      return;
+    }
+    if (this._mapSweepMode) {
+      if (!Progress.isCleared(levelDef.id)) { this.banner("尚未通关,无法扫荡", "先手动通关一次再来扫荡"); return; }
+      const result = this.sweepLevel(i);
+      if (!result) { this.banner("体力不足", "等待体力恢复或前往商店补充"); return; }
+      const names = result.drops.map(d => this.gearItemName(d.instance)).filter(Boolean).join(" · ");
+      this.banner("扫荡完成 +" + result.crystals + " 晶石", names ? "获得机装:" + names : "本次未掉落机装");
+      return;
+    }
+    if (!this.staminaSpend(CONFIG.economy.staminaCostLevel)) { this.banner("体力不足", "等待体力恢复或前往商店补充"); return; }
+    this.startLevel(i);
     this._levelTransX = screenX; this._levelTransY = screenY; this._levelTransT = 0.0001;
   },
   // MM:图鉴 BOSS 卡片点"出场关卡"跳过来时用 —— 定位/高亮/自动滚动到目标关卡
@@ -4297,6 +4471,12 @@ const game = {
     this.drawSectionTitle(ctx, "map", cx, 54, { w: 230, h: 70, fallback: "关卡地图", fallbackBaselineAdj: 6 });
     // 返回(现代按钮)
     UI.button(ctx, this.mapBackRect(), { label: "‹ 首页", color: "#adb5bd", font: 15, radius: 10 });
+    // RG12:体力/晶石 HUD 放返回按钮同一行右侧;扫荡模式切换挪到标题贴图下方右侧,避免和"关卡地图"贴图挤在一起
+    ctx.textAlign = "right"; ctx.font = "12px 'Segoe UI', sans-serif";
+    ctx.fillStyle = "#38d9a9"; ctx.fillText("体力 " + Math.floor(this.staminaCurrent()) + "/" + this.staminaMax(), CONFIG.WIDTH - 20, 40);
+    ctx.fillStyle = "#ffd43b"; ctx.fillText("晶石 " + this.crystals(), CONFIG.WIDTH - 20, 56);
+    UI.button(ctx, this.mapSweepToggleRect(), { label: this._mapSweepMode ? "扫荡中 ✓" : "扫荡模式", color: "#cc5de8", active: this._mapSweepMode, font: 12, radius: 10 });
+    ctx.textAlign = "center";
     // GG8:难度/机型选择优化——原来把说明文字塞进每个按钮下方(尤其机型 5 个选项挤在一排,11px 小字挤得很难认),
     //   现在按钮只留名字(更大更清楚),选中项的说明挪到区块标题同一行、单独用一行 wrapText 截断显示,不会撑爆按钮高度
     // 难度选择
@@ -4315,7 +4495,9 @@ const game = {
     ctx.fillText(UI.wrapText(ctx, this.ship.name + " · " + this.ship.desc, CONFIG.WIDTH - shipX0 - 50, 1)[0], shipX0 + 32, 182);
     ctx.textAlign = "center";
     for (let i = 0; i < sk.length; i++) { const sp = CONFIG.ships[sk[i]], sel = this.ship.key === sk[i]; UI.button(ctx, this.mapShipRect(i), { label: sp.name, color: sp.color, active: sel, font: 15 }); }
-    ctx.fillStyle = "#868e96"; ctx.font = "13px 'Segoe UI', sans-serif"; ctx.textAlign = "center"; ctx.fillText("选难度 + 机型 → 点亮关卡开始 · 通关解锁下一关", cx, 268);
+    ctx.font = "13px 'Segoe UI', sans-serif"; ctx.textAlign = "center";
+    ctx.fillStyle = this._mapSweepMode ? "#cc5de8" : "#868e96";
+    ctx.fillText(this._mapSweepMode ? "扫荡模式:点已通关的关卡直接结算,不进入战斗" : "选难度 + 机型 → 点亮关卡开始 · 通关解锁下一关", cx, 268);
 
     // MM:节点区域可纵向滚动(为世界数增多做准备)—— 裁剪到视口并按 _mapScrollY 平移,头部的标题/选难度/选机型不受影响
     const vp = this.mapViewportRect(), scrollY = this._mapScrollY, worldsCount = LEVELS.reduce((m, l) => l.endless ? m : Math.max(m, l.world), 1);
@@ -4415,6 +4597,64 @@ const game = {
       ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.fillRect(CONFIG.WIDTH - 8, thumbY, 4, thumbH);
     }
     ctx.textAlign = "left";
+  },
+
+  // ── RG12:商店——晶石购买体力包/三种词条刷新石,货架固定4件,简化几何图形当占位图标(不新增贴图) ──
+  shopBackRect() { return { x: 20, y: 28, w: 90, h: 36 }; },
+  shopRowRect(i) { const y0 = 130, rowH = 96, gap = 10; return { x: 20, y: y0 + i * (rowH + gap), w: CONFIG.WIDTH - 40, h: rowH }; },
+  shopBuyRect(i) { const r = this.shopRowRect(i); return { x: r.x + r.w - 104, y: r.y + r.h / 2 - 18, w: 88, h: 36 }; },
+  // RG12:占位图标——三种石头分别用菱形/锁形/向上箭头简笔画区分,体力包用一个闪电,和贴图上线前的"简化模型"要求一致
+  drawShopIcon(ctx, x, y, r, item) {
+    ctx.save(); ctx.translate(x, y); ctx.strokeStyle = item.color; ctx.fillStyle = UI.rgba(item.color, .25); ctx.lineWidth = 2.5;
+    if (item.kind === "stamina") {
+      ctx.beginPath(); ctx.moveTo(-r * 0.15, -r); ctx.lineTo(-r * 0.55, r * 0.15); ctx.lineTo(-r * 0.05, r * 0.15); ctx.lineTo(-r * 0.35, r); ctx.lineTo(r * 0.55, -r * 0.1); ctx.lineTo(r * 0.05, -r * 0.1); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+    } else if (item.stoneKey === "reroll") {
+      ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(r, 0); ctx.lineTo(0, r); ctx.lineTo(-r, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if (item.stoneKey === "lock") {
+      UI.roundRect(ctx, -r * 0.6, -r * 0.1, r * 1.2, r * 0.9, 4); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, -r * 0.25, r * 0.4, Math.PI, 0); ctx.stroke();
+    } else if (item.stoneKey === "growth") {
+      ctx.beginPath(); ctx.moveTo(0, r); ctx.lineTo(0, -r * 0.3); ctx.moveTo(-r * 0.5, -r * 0.1); ctx.lineTo(0, -r); ctx.lineTo(r * 0.5, -r * 0.1); ctx.stroke();
+    }
+    ctx.restore();
+  },
+  drawShop(ctx) {
+    const cx = CONFIG.WIDTH / 2;
+    ctx.fillStyle = "rgba(0,0,0,.62)"; ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
+    ctx.textAlign = "center"; ctx.fillStyle = "#fff"; ctx.font = "bold 26px 'Segoe UI', sans-serif"; ctx.fillText("商店", cx, 50);
+    ctx.textAlign = "left";
+    UI.button(ctx, this.shopBackRect(), { label: "‹ 首页", color: "#adb5bd", font: 15, radius: 10 });
+    ctx.textAlign = "right"; ctx.font = "13px 'Segoe UI', sans-serif";
+    ctx.fillStyle = "#38d9a9"; ctx.fillText("体力 " + Math.floor(this.staminaCurrent()) + "/" + this.staminaMax(), CONFIG.WIDTH - 20, 40);
+    ctx.fillStyle = "#ffd43b"; ctx.fillText("晶石 " + this.crystals(), CONFIG.WIDTH - 20, 58);
+    ctx.textAlign = "left";
+    CONFIG.shopItems.forEach((item, i) => {
+      const r = this.shopRowRect(i), iconCx = r.x + 50, iconCy = r.y + r.h / 2;
+      UI.panel(ctx, r.x, r.y, r.w, r.h, 12, { accent: item.color });
+      this.drawShopIcon(ctx, iconCx, iconCy, 22, item);
+      const tx = r.x + 96;
+      ctx.fillStyle = "#fff"; ctx.font = "bold 16px 'Segoe UI', sans-serif"; ctx.fillText(item.name, tx, r.y + 30);
+      ctx.fillStyle = "#adb5bd"; ctx.font = "12px 'Segoe UI', sans-serif";
+      UI.wrapText(ctx, item.desc, r.w - 96 - 120, 2).forEach((line, li) => ctx.fillText(line, tx, r.y + 50 + li * 16));
+      const stock = item.kind === "stone" ? this.gearStoneCount(item.stoneKey) : null;
+      if (stock != null) { ctx.fillStyle = item.color; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText("持有 ×" + stock, tx, r.y + r.h - 12); }
+      const canAfford = this.crystals() >= item.price;
+      UI.button(ctx, this.shopBuyRect(i), { label: item.price + " 晶石", color: item.color, active: canAfford, font: 13, radius: 10 });
+    });
+    if (this._shopMsg) { ctx.textAlign = "center"; ctx.fillStyle = "#ffd43b"; ctx.font = "14px 'Segoe UI', sans-serif"; ctx.fillText(this._shopMsg, cx, this.shopRowRect(CONFIG.shopItems.length).y + 20); }
+    ctx.textAlign = "left";
+  },
+  shopPointerDown(px, py) {
+    const inR = (r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+    if (inR(this.shopBackRect())) { this.toTitle(); return; }
+    CONFIG.shopItems.forEach((item, i) => {
+      if (inR(this.shopBuyRect(i))) {
+        const ok = this.shopBuy(item.key);
+        this._shopMsg = ok ? "购买成功:" + item.name : "晶石不足,无法购买";
+        if (ok) { Sound.powerup(); Haptics.powerup(); }
+      }
+    });
   },
 
   // ── 达标提示:结算 / 继续刷分 ──
