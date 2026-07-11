@@ -154,13 +154,16 @@ const game = {
   equipDetailListW() { return 156; },
   equipDetailRowH() { return 72; },
   equipDetailRowGap() { return 8; },
+  // RG11:装备此件按钮挪到弹窗底部居中后,列表/详情栏的可用高度要相应让出底部 48(按钮高)+14*2(上下间距)的空间,
+  //   不然长列表滚到底/详情栏文字会被按钮压住
+  equipDetailBottomReserve() { return 48 + 28; },
   equipDetailListRect() {
     const r = this.equipPickerRect(), w = this.equipDetailListW();
-    return { x: r.x + 14, y: r.y + 54, w, h: r.h - 54 - 14 };
+    return { x: r.x + 14, y: r.y + 54, w, h: r.h - 54 - 14 - this.equipDetailBottomReserve() };
   },
   equipDetailPaneRect() {
     const r = this.equipPickerRect(), list = this.equipDetailListRect();
-    return { x: list.x + list.w + 14, y: r.y + 54, w: r.x + r.w - 14 - (list.x + list.w + 14), h: r.h - 54 - 14 };
+    return { x: list.x + list.w + 14, y: r.y + 54, w: r.x + r.w - 14 - (list.x + list.w + 14), h: r.h - 54 - 14 - this.equipDetailBottomReserve() };
   },
   equipDetailListContentH(slotKey) {
     const n = this.equipPickerCells(slotKey).length, rowH = this.equipDetailRowH(), gap = this.equipDetailRowGap();
@@ -175,14 +178,21 @@ const game = {
     const list = this.equipDetailListRect(), rowH = this.equipDetailRowH(), gap = this.equipDetailRowGap();
     return { x: list.x, y: list.y + i * (rowH + gap), w: list.w, h: rowH };
   },
+  // RG11:装备此件/卸下按钮改到整个弹窗底部居中(不再只在右侧详情栏内居中,原来偏右显得不平衡);
+  //   左上角另开一个独立的关闭按钮,不用非得记得"点弹窗外面才能关"。
   equipDetailActionRect() {
-    const pane = this.equipDetailPaneRect();
-    return { x: pane.x, y: pane.y + pane.h - 46, w: pane.w, h: 46 };
+    const r = this.equipPickerRect(), w = 240, h = 48;
+    return { x: r.x + r.w / 2 - w / 2, y: r.y + r.h - h - 14, w, h };
+  },
+  equipCloseRect() {
+    const r = this.equipPickerRect();
+    return { x: r.x + 10, y: r.y + 10, w: 36, h: 30 };
   },
   equipPickerPointerDown(px, py) {
     const slotKey = this._equipPickerSlot, r = this.equipPickerRect();
     const inR = (rr) => px >= rr.x && px <= rr.x + rr.w && py >= rr.y && py <= rr.y + rr.h;
     if (!inR(r)) { this._equipPickerSlot = null; this._equipDetailSelId = undefined; return; }   // 点弹窗外面 = 取消,不改动装备
+    if (inR(this.equipCloseRect())) { this._equipPickerSlot = null; this._equipDetailSelId = undefined; return; }
     const actionRect = this.equipDetailActionRect();
     if (inR(actionRect)) {
       const loadout = Object.assign({}, Settings.data.gearLoadout);
@@ -1052,6 +1062,43 @@ const game = {
       return { stat: s.stat, value: s.value, min: subBase * roll.subMult * roll.subMin, max: subBase * roll.subMult * roll.subMax };
     });
     return { main, subs };
+  },
+  // RG11:评级——数值在 [min,max] 区间内的百分位,按 CONFIG.gearRatingTiers 从高到低找第一个达标的档位
+  gearStatRatingKey(s) {
+    const pct = s.max > s.min ? clamp((s.value - s.min) / (s.max - s.min), 0, 1) : 1;
+    const tiers = CONFIG.gearRatingTiers;
+    for (let i = tiers.length - 1; i >= 0; i--) if (pct >= tiers[i].min) return tiers[i].key;
+    return tiers[0].key;
+  },
+  gearRatingDef(key) { return CONFIG.gearRatingTiers.find(t => t.key === key) || CONFIG.gearRatingTiers[0]; },
+  // RG11:评级字体效果——档位越高越夸张:C~A 纯色加粗;SS 加轻微外发光;SSS 描边+更强脉动发光;
+  //   ACE 是彩虹渐变字(色相随 titleT 平移,永不定格在同一个配色)+ 最强脉动光晕 + 一颗随脉动缩放的小星标,
+  //   一眼就能从"这堆字里最花哨的那个"认出这是顶级词条,不需要额外看颜色对照表。
+  drawGearRatingBadge(ctx, rightX, midY, key) {
+    const def = this.gearRatingDef(key), t = this.titleT;
+    ctx.save(); ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    if (key === "ACE") {
+      const w = 52, pulse = 0.6 + Math.sin(t * 5) * 0.4;
+      const grad = ctx.createLinearGradient(rightX - w, midY, rightX, midY);
+      for (let i = 0; i <= 4; i++) grad.addColorStop(i / 4, "hsl(" + ((t * 110 + i * 70) % 360) + ",92%,64%)");
+      ctx.shadowColor = "#ffd43b"; ctx.shadowBlur = 8 + pulse * 8;
+      ctx.font = "italic 900 16px 'Segoe UI', sans-serif";
+      ctx.fillStyle = grad; ctx.fillText("ACE", rightX, midY);
+      ctx.shadowBlur = 0;
+      const sx = rightX - w - 8, ss = 4 + pulse * 2;
+      ctx.fillStyle = "#fff7d6"; ctx.beginPath();
+      for (let i = 0; i < 4; i++) { const a = (Math.PI / 2) * i + t * 2; ctx.lineTo(sx + Math.cos(a) * ss, midY + Math.sin(a) * ss); ctx.lineTo(sx + Math.cos(a + Math.PI / 4) * ss * 0.35, midY + Math.sin(a + Math.PI / 4) * ss * 0.35); }
+      ctx.closePath(); ctx.fill();
+    } else if (key === "SSS") {
+      ctx.shadowColor = def.color; ctx.shadowBlur = 6 + (0.5 + Math.sin(t * 4) * 0.5) * 6;
+      ctx.fillStyle = def.color; ctx.font = "italic 900 15px 'Segoe UI', sans-serif"; ctx.fillText(key, rightX, midY);
+    } else if (key === "SS") {
+      ctx.shadowColor = def.color; ctx.shadowBlur = 5;
+      ctx.fillStyle = def.color; ctx.font = "bold 14px 'Segoe UI', sans-serif"; ctx.fillText(key, rightX, midY);
+    } else {
+      ctx.fillStyle = def.color; ctx.font = "bold 13px 'Segoe UI', sans-serif"; ctx.fillText(key, rightX, midY);
+    }
+    ctx.restore();
   },
   // RG9:紧凑属性摘要——主属性用装备自己的槽位名,副属性各自标注抽到的槽位名,供仓库/重铸/掉落弹窗展示
   gearStatLines(inst) {
@@ -3683,6 +3730,8 @@ const game = {
     UI.panel(ctx, r.x, r.y, r.w, r.h, 18, { accent: slot.color });
     ctx.textAlign = "center"; ctx.fillStyle = slot.color; ctx.font = "bold 17px 'Segoe UI', sans-serif"; ctx.fillText(slot.name + " · 装备仓库", r.x + r.w / 2, r.y + 32);
     ctx.textAlign = "left";
+    // RG11:左上角关闭按钮——不用非得记住"点弹窗外面才能关",和右下角/中间操作按钮的触发方式互补
+    UI.button(ctx, this.equipCloseRect(), { label: "✕", color: "#adb5bd", font: 15, radius: 9 });
 
     const equippedKey = this.gearEquipped(slotKey);
     const cells = this.equipPickerCells(slotKey);
@@ -3718,7 +3767,7 @@ const game = {
       ctx.fillStyle = "rgba(255,255,255,.25)"; UI.roundRect(ctx, listR.x + listR.w - 3, thumbY, 3, thumbH, 2); ctx.fill();
     }
 
-    // 右侧详情面板:选中实例的主属性(当前值+区间)+ 3条副属性(各自当前值+区间)
+    // 右侧详情面板:选中实例的主属性(当前值+区间+评级)+ 3条副属性(同样各自当前值+区间+评级)
     const pane = this.equipDetailPaneRect();
     const selInst = this.gearInstanceById(this._equipDetailSelId);
     if (selInst) {
@@ -3727,27 +3776,31 @@ const game = {
       this.drawGearBadge(ctx, pane.x + 30, pane.y + 30, 24, slot, selInst.tier, true);
       ctx.fillStyle = "#fff"; ctx.font = "bold 15px 'Segoe UI', sans-serif"; ctx.fillText(this.gearItemName(selInst), pane.x + 62, pane.y + 24);
       ctx.fillStyle = tierDef.color; ctx.font = "12px 'Segoe UI', sans-serif"; ctx.fillText(tierDef.name + " 品阶", pane.x + 62, pane.y + 42);
-      let y = pane.y + 74;
-      ctx.fillStyle = "#868e96"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText("主属性", pane.x, y); y += 18;
-      this.drawGearStatRow(ctx, pane.x, y, pane.w, rg.main, true); y += 44;
-      ctx.fillStyle = "#868e96"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText("副属性", pane.x, y); y += 18;
-      rg.subs.forEach(s => { this.drawGearStatRow(ctx, pane.x, y, pane.w, s, false); y += 44; });
-      // 装备/卸下按钮
-      const action = this.equipDetailActionRect();
-      const isCur = this._equipDetailSelId === equippedKey;
-      UI.button(ctx, action, { label: this._equipDetailSelId ? (isCur ? "已装备" : "装备此件") : "卸下装备", color: this._equipDetailSelId ? "#38d9a9" : "#ff8787", active: !isCur, font: 16, radius: 12 });
+      let y = pane.y + 76;
+      ctx.fillStyle = "#868e96"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText("主属性", pane.x, y); y += 20;
+      this.drawGearStatRow(ctx, pane.x, y, pane.w, rg.main, true); y += 30;
+      ctx.fillStyle = "#868e96"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText("副属性", pane.x, y); y += 20;
+      rg.subs.forEach(s => { this.drawGearStatRow(ctx, pane.x, y, pane.w, s, false); y += 30; });
     }
-    ctx.textAlign = "center"; ctx.fillStyle = "rgba(255,255,255,.4)"; ctx.font = "11px 'Segoe UI', sans-serif"; ctx.fillText("点击弹窗外区域关闭", r.x + r.w / 2, r.y + r.h - 8);
+    // RG11:装备此件/卸下按钮——整个弹窗底部居中(不再只在右侧栏内偏右居中)
+    const action = this.equipDetailActionRect();
+    const isCur = selInst && this._equipDetailSelId === equippedKey;
+    UI.button(ctx, action, {
+      label: !selInst ? "选择一件装备" : (this._equipDetailSelId ? (isCur ? "已装备" : "装备此件") : "卸下装备"),
+      color: !selInst ? "#495057" : (this._equipDetailSelId ? "#38d9a9" : "#ff8787"),
+      active: !!selInst && !isCur, font: 16, radius: 14,
+    });
     ctx.textAlign = "left";
   },
-  // RG10:属性行——左侧类型名+当前数值,右侧灰字标出这个类型在该品阶下大致会落在的区间(min~max),
-  //   主属性行额外加粗/加大字号突出"这是这件装备的主要作用"
+  // RG11:属性行——单行"类型名 + 当前数值（区间）"+ 行末按百分位评级(C~ACE,评级字体见 drawGearRatingBadge),
+  //   区间从原来单独一行改到数值后面的括号里,一行看完不用来回扫两行
   drawGearStatRow(ctx, x, y, w, s, isMain) {
-    const sd = this.gearSlotDef(s.stat);
-    ctx.fillStyle = sd ? sd.color : "#868e96"; ctx.font = (isMain ? "bold 15px" : "13px") + " 'Segoe UI', sans-serif";
-    ctx.fillText((sd ? sd.name : "?") + "  " + this.gearStatPct(s.value), x, y);
-    ctx.fillStyle = "#5c6773"; ctx.font = "10px 'Segoe UI', sans-serif";
-    ctx.fillText("区间 " + this.gearStatPct(s.min) + " ~ " + this.gearStatPct(s.max), x, y + 16);
+    const sd = this.gearSlotDef(s.stat), rating = this.gearStatRatingKey(s);
+    ctx.textAlign = "left";
+    ctx.fillStyle = sd ? sd.color : "#868e96"; ctx.font = (isMain ? "bold 14px" : "12px") + " 'Segoe UI', sans-serif";
+    const label = (sd ? sd.name : "?") + " " + this.gearStatPct(s.value) + "（" + this.gearStatPct(s.min) + "~" + this.gearStatPct(s.max) + "）";
+    ctx.fillText(label, x, y);
+    this.drawGearRatingBadge(ctx, x + w, y - (isMain ? 1 : 0), rating);
   },
   // RG7:重铸页——整页展示全部库存(所有槽位×档位,数量>0的才列出),点格子选中/取消(逻辑见 reforgeTapCell),
   //   选满3件且品质一致才能点"重铸";结果用独立弹窗展示(drawReforgeResult),风格呼应结算掉落弹窗但用成功/失败双色调

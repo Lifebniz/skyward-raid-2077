@@ -484,6 +484,17 @@ const CONFIG = {
   //   装备品阶下的原表数值"的 subMult 左右,同样在 [subMin,subMax] 区间内浮动。三条副属性让"同槽位同品质"的两件装备
   //   也可能长得完全不一样,这也是为什么装备仓库要把每一件都单独摆出来,不能再按"槽位+品阶"合并计数。
   gearRoll: { mainMult: 0.6, mainMin: 0.85, mainMax: 1.15, subCount: 3, subMult: 0.20, subMin: 0.8, subMax: 1.2 },
+  // RG11:词条评级——按"这条属性的数值落在它理论区间([min,max])里的百分位"分档,越靠近区间上限评级越高。
+  //   7档从低到高:C/B/A/S/SS/SSS/ACE,min 是该档的百分位门槛(闭区间,>=min 即达标),按数组倒序找第一个满足的。
+  gearRatingTiers: [
+    { key: "C",   min: 0.00, color: "#9aa5b1" },
+    { key: "B",   min: 0.16, color: "#51cf66" },
+    { key: "A",   min: 0.34, color: "#4dabf7" },
+    { key: "S",   min: 0.54, color: "#cc5de8" },
+    { key: "SS",  min: 0.74, color: "#ff922b" },
+    { key: "SSS", min: 0.90, color: "#ff6b6b" },
+    { key: "ACE", min: 0.98, color: "#ffd43b" },
+  ],
 
   // 难度档:dmgMult 敌方伤害倍率 / fireMult 敌方射击间隔倍率(>1 更慢=更易)
   //          bossHpMult BOSS 血量倍率 / invuln 玩家受击无敌时长 / startBombs 初始炸弹
