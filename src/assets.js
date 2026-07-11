@@ -260,7 +260,7 @@ const ImageAssets = {
       this.manifest.player[shipKey] || this.manifest.player.balanced,
       this.manifest.wingman[shipKey] || this.manifest.wingman.balanced,
       "assets/images/ui/icons/icon-bomb.png",
-      "assets/images/ui/icons/icon-special-" + this.slug(ship && ship.specialType || "nuke") + ".png",
+      this.uiIconSrc("special-" + (ship && ship.specialType || "nuke")),
       "assets/images/ui/icons/icon-power-upgrade.png",
       "assets/images/ui/powerups/icon-powerup-power.png",
       "assets/images/ui/powerups/icon-powerup-heal.png",
@@ -321,7 +321,11 @@ const ImageAssets = {
   },
   effect(key) { return this.ready("assets/images/effects/effect-" + this.slug(key) + ".png"); },
   title(key) { return this.ready(this.manifest.title[this.slug(key)]); },
-  uiIcon(key) { return this.ready("assets/images/ui/icons/icon-" + this.slug(key) + ".png"); },
+  uiIconSrc(key) {
+    const slug = this.slug(key);
+    return this.preload.uiIcons.includes(slug) ? "assets/images/ui/icons/icon-" + slug + ".png" : "";
+  },
+  uiIcon(key) { const src = this.uiIconSrc(key); return src ? this.ready(src) : null; },
   uiPowerup(key) { return this.ready("assets/images/ui/powerups/icon-powerup-" + this.slug(key) + ".png"); },
   uiChip(key) { return this.ready(this.manifest.chip[this.slug(key)]); },
   uiBonus(key) { return this.ready(this.manifest.bonus[this.slug(key)]); },

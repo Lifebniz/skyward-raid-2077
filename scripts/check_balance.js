@@ -1013,6 +1013,8 @@ vm.runInContext(fs.readFileSync("src/assets.js", "utf8") + "\nglobalThis.ImageAs
 const advertisedAssets = Array.from(new Set(Array.from(assetSandbox.ImageAssets.commonSources()).concat(Array.from(assetSandbox.ImageAssets.longTailSources()))));
 const missingAssets = advertisedAssets.filter(src => !fs.existsSync(src));
 assert.deepStrictEqual(missingAssets, [], "preloaded asset paths should exist in the repository");
+assert.strictEqual(assetSandbox.ImageAssets.uiIconSrc("special-morph"), "", "unregistered optional icons should use the Canvas fallback without a request");
+assert(!assetSandbox.ImageAssets.criticalSources({ shipKey: "morph", world: 1 }).some(src => String(src).includes("special-morph")), "morph startup should not request a missing special icon");
 const indexHtml = fs.readFileSync("index.html", "utf8"), chineseHtml = fs.readFileSync("空中突袭.html", "utf8");
 assert.strictEqual(chineseHtml, indexHtml, "both HTML entry points should stay byte-identical");
 assert(indexHtml.includes('href="data:,"'), "entry points should suppress the implicit favicon request");
